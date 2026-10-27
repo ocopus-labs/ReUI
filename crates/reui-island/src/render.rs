@@ -127,6 +127,9 @@ pub struct Interaction<'a> {
     pub slider: Option<f32>,
     /// The bar under the pointer (or being dragged) shows its thumb.
     pub thumb: Option<Thumb>,
+    /// A lyric line just started: the line before it and how far (0..=1, eased) the column
+    /// has slid up from it.
+    pub lyric: Option<(usize, f32)>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -183,7 +186,8 @@ struct Fonts {
     icon_star: Font,
     icon_kind: Font,
     icon_pager: Font,
-    lyric: Font,
+    /// Wrapping, for lyric lines too long for one line.
+    lyric_wrap: Font,
     pager: Font,
 }
 
@@ -260,7 +264,7 @@ impl Renderer {
             icon_star: f(icons(icon::STAR), false)?,
             icon_kind: f(icons(component::card::KIND_ICON), false)?,
             icon_pager: f(icons(icon::PAGER), false)?,
-            lyric: f(typography::LYRIC, false)?,
+            lyric_wrap: f(typography::LYRIC, true)?,
             pager: f(typography::PAGER, true)?,
         };
         Ok(Self { graphics, factory, dwrite, wic, images: HashMap::new(), tabular, round, fonts, scale, width: Cell::new(island::expanded::WIDTH) })
@@ -577,7 +581,7 @@ impl Renderer {
                             let thumb = with.thumb == Some(Thumb::Slider);
                             y += self.slider(rt, leading, value, action, trailing.as_ref(), y, thumb, accent, &mut hits)?
                         }
-                        Row::Lyrics(lines) => y += self.lyrics(rt, lines, track_at, y)?,
+                        Row::Lyrics(lines) => y += self.lyrics(rt, lines, track_at, y, with.lyric)?,
                         Row::Progress { .. } | Row::Timeline { .. } => {}
                     },
                 }
@@ -713,26 +717,83 @@ impl Renderer {
         Ok(h)
     }
 
-    /// The line being sung (primary) and the next one (secondary), centred; an empty line
-    /// (an instrumental gap) shows nothing. Always the same height, so lines changing never
-    /// resize the card.
-    fn lyrics(&self, rt: &ID2D1RenderTarget, lines: &[LyricLine], position: Option<u64>, y: f32) -> Result<f32> {
-        let font = &self.fonts.lyric;
-        let line = font.style.line_height;
-        let count = component::lyrics::LINES.max(1.0) as usize;
+    /// The line being sung (primary) with what comes next under it (secondary), centred, as
+    /// a column: a long line wraps (up to the row's height) and pushes the next one down or
+    /// out. When a line starts, the column slides up from the previous one, which fades out
+    /// above while the new one brightens into place. An empty line (an instrumental gap)
+    /// shows nothing. Always the same height, so lines changing never resize the card.
+    fn lyrics(&self, rt: &ID2D1RenderTarget, lines: &[LyricLine], position: Option<u64>, y: f32, motion: Option<(usize, f32)>) -> Result<f32> {
+        let line = self.fonts.lyric_wrap.style.line_height;
+        let rows = component::lyrics::LINES.max(1.0) as u32;
+        let height = line * rows as f32;
         let inset = island::expanded::INSET;
         let width = self.width.get() - 2.0 * inset;
-        if let Some(position) = position {
-            let current = music::current_line(lines, position);
-            let next = current.map_or(0, |c| c + 1);
-            let shown = [current.map(|c| (c, color::label::PRIMARY)), Some((next, color::label::SECONDARY))];
-            for (k, (index, ink)) in shown.into_iter().flatten().take(count).enumerate() {
-                if let Some(text) = lines.get(index).map(|l| l.text.trim()).filter(|t| !t.is_empty()) {
-                    self.text(rt, text, font, inset, y + k as f32 * line, width, Align::Center, ink)?;
-                }
+        let Some(position) = position else { return Ok(height) };
+        let current = music::current_line(lines, position);
+        let first = current.unwrap_or(0);
+        let text = |i: usize| lines.get(i).map_or("", |l| l.text.trim());
+        unsafe { rt.PushAxisAlignedClip(&self.rect(inset, y, inset + width, y + height), D2D1_ANTIALIAS_MODE_ALIASED) };
+        let drawn = (|| -> Result<()> {
+            let mut top = y;
+            // Mid-change: start one (previous) block higher and slide up to the current one.
+            let leaving = motion.filter(|(prev, _)| current == Some(prev + 1));
+            if let Some((prev, t)) = leaving {
+                let h = self.lyric_height(text(prev), width, rows)?;
+                top = y - t * h;
+                self.lyric_block(rt, text(prev), inset, top, width, rows, color::label::PRIMARY.with_alpha(1.0 - t))?;
+                top += h;
             }
+            let mut index = first;
+            while top < y + height && index < lines.len() + 1 {
+                let ink = match (current == Some(index), leaving) {
+                    (true, Some((_, t))) => mix(color::label::SECONDARY, color::label::PRIMARY, t),
+                    (true, None) => color::label::PRIMARY,
+                    _ => color::label::SECONDARY,
+                };
+                top += self.lyric_block(rt, text(index), inset, top, width, rows, ink)?;
+                index += 1;
+            }
+            Ok(())
+        })();
+        unsafe { rt.PopAxisAlignedClip() };
+        drawn?;
+        Ok(height)
+    }
+
+    /// Height of a lyric line wrapped to `width`, at most `max_lines` lines (an empty line
+    /// still takes one line: the pause between verses).
+    fn lyric_height(&self, text: &str, width: f32, max_lines: u32) -> Result<f32> {
+        let line = self.fonts.lyric_wrap.style.line_height;
+        if text.is_empty() {
+            return Ok(line);
         }
-        Ok(line * count as f32)
+        let wide = utf16_prefix(text, 600);
+        let lines = unsafe {
+            let layout = self.dwrite.CreateTextLayout(&wide, &self.fonts.lyric_wrap.format, width * self.scale, f32::MAX)?;
+            let mut metrics = DWRITE_TEXT_METRICS::default();
+            layout.GetMetrics(&mut metrics)?;
+            metrics.lineCount
+        };
+        Ok(line * lines.clamp(1, max_lines.max(1)) as f32)
+    }
+
+    /// Draws one lyric line centred and wrapped (ellipsised past `max_lines`); returns its
+    /// height.
+    #[allow(clippy::too_many_arguments)]
+    fn lyric_block(&self, rt: &ID2D1RenderTarget, text: &str, left: f32, top: f32, width: f32, max_lines: u32, ink: Color) -> Result<f32> {
+        let h = self.lyric_height(text, width, max_lines)?;
+        if text.is_empty() || ink.a <= 0.0 {
+            return Ok(h);
+        }
+        let font = &self.fonts.lyric_wrap;
+        let wide = utf16_prefix(text, 600);
+        unsafe {
+            let layout = self.dwrite.CreateTextLayout(&wide, &font.format, width * self.scale, h * self.scale)?;
+            layout.SetTextAlignment(DWRITE_TEXT_ALIGNMENT_CENTER)?;
+            layout.SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM, font.style.line_height * self.scale, font.style.line_height * 0.8 * self.scale)?;
+            rt.DrawTextLayout(self.point(left, top), &layout, &self.brush(rt, ink)?, D2D1_DRAW_TEXT_OPTIONS_CLIP | D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+        }
+        Ok(h)
     }
 
     /// Do the times fit at the ends of a row of these glyph controls?
@@ -1616,4 +1677,10 @@ mod tests {
         assert_eq!(fit_svg(svg), r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><path width="5"/></svg>"#);
         assert_eq!(fit_svg("<svg viewBox=\"0 0 24 24\"/>"), "<svg viewBox=\"0 0 24 24\"/>");
     }
+}
+
+/// `a` blended towards `b` by `t` (0..=1), channel by channel.
+fn mix(a: Color, b: Color, t: f32) -> Color {
+    let l = |x: f32, y: f32| x + (y - x) * t.clamp(0.0, 1.0);
+    Color { r: l(a.r, b.r), g: l(a.g, b.g), b: l(a.b, b.b), a: l(a.a, b.a) }
 }

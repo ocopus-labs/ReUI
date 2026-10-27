@@ -49,6 +49,7 @@ pub const TIMER_SCROLL: usize = 8;
 pub const TIMER_SEARCH: usize = 9;
 pub const TIMER_AWAIT: usize = 10;
 pub const TIMER_HOLD: usize = 11;
+pub const TIMER_LYRIC: usize = 12;
 /// How often an open card with a playing timeline redraws its position.
 const TICK_MS: u32 = 1000;
 /// Typing is sent to the module once it pauses this long; the field shows it at once.
@@ -82,6 +83,10 @@ pub struct Pill {
     window: RECT,
     monitor: HMONITOR,
     reduced_motion: bool,
+    /// The lyric line last drawn, and the one before it with when it changed (while the
+    /// column slides up).
+    lyric_line: Option<usize>,
+    lyric_change: Option<(usize, Instant)>,
     compositor: Compositor,
     _target: DesktopWindowTarget,
     root: ContainerVisual,
@@ -305,6 +310,8 @@ impl Pill {
             window,
             monitor,
             reduced_motion,
+            lyric_line: None,
+            lyric_change: None,
             compositor,
             _target: target,
             root,
@@ -785,6 +792,7 @@ impl Pill {
             hold: self.seek_hold,
             slider,
             thumb,
+            lyric: self.lyric_change.map(|(prev, at)| (prev, music::lyric_ease(at.elapsed().as_secs_f32() * 1000.0 / motion::lyrics::DURATION as f32))),
         }
     }
 
@@ -1098,7 +1106,36 @@ impl Pill {
         }
     }
 
+    /// Notices a new lyric line and starts the slide (only for the next line in order: a
+    /// seek just jumps). The slide timer stops when it lands.
+    fn note_lyric(&mut self) {
+        let lyrics = self.front_view().and_then(|v| v.rows.iter().find_map(|r| if let Row::Lyrics(l) = r { Some(l.as_slice()) } else { None }));
+        let now = self.timeline_now().map(|(ms, ..)| ms);
+        let line = lyrics.zip(now).and_then(|(l, ms)| music::current_line(l, ms));
+        if line == self.lyric_line {
+            return;
+        }
+        let next_in_order = matches!((self.lyric_line, line), (Some(old), Some(new)) if new == old + 1);
+        if next_in_order && !self.reduced_motion && self.state == State::Expanded && self.shown {
+            self.lyric_change = Some((self.lyric_line.unwrap(), Instant::now()));
+            unsafe { SetTimer(Some(self.hwnd), TIMER_LYRIC, 1000 / motion::lyrics::FPS as u32, None) };
+        } else {
+            self.lyric_change = None;
+        }
+        self.lyric_line = line;
+    }
+
+    fn tick_lyric(&mut self) {
+        let done = self.lyric_change.is_none_or(|(_, at)| at.elapsed().as_millis() as u64 >= motion::lyrics::DURATION as u64);
+        if done {
+            self.lyric_change = None;
+            unsafe { _ = KillTimer(Some(self.hwnd), TIMER_LYRIC) };
+        }
+        self.redraw_expanded();
+    }
+
     fn redraw_expanded(&mut self) {
+        self.note_lyric();
         self.prune_hold();
         let front = self.snapshot.activities.first();
         let accent = front.and_then(|a| a.accent).map(render::rgb).unwrap_or(color::accent::DEFAULT);
@@ -1577,6 +1614,10 @@ impl Pill {
         }
         if id == TIMER_SCROLL {
             self.tick_scroll();
+            return;
+        }
+        if id == TIMER_LYRIC {
+            self.tick_lyric();
             return;
         }
         unsafe { _ = KillTimer(Some(self.hwnd), id) };

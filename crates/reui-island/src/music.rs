@@ -82,6 +82,11 @@ pub fn current_line(lines: &[LyricLine], position_ms: u64) -> Option<usize> {
     lines.partition_point(|l| l.at_ms <= position_ms).checked_sub(1)
 }
 
+/// Ease-out for the lyric slide: quick to start, settling softly (`t` 0..=1 of the duration).
+pub fn lyric_ease(t: f32) -> f32 {
+    1.0 - (1.0 - t.clamp(0.0, 1.0)).powi(3)
+}
+
 /// Milliseconds of track until the next line starts, if any does.
 pub fn next_line_in(lines: &[LyricLine], position_ms: u64) -> Option<u64> {
     lines.get(lines.partition_point(|l| l.at_ms <= position_ms)).map(|l| l.at_ms - position_ms)
@@ -170,6 +175,14 @@ mod tests {
         assert!(throttle.ready(t + Duration::from_millis(50)));
         assert!(!throttle.ready(t + Duration::from_millis(99)));
         assert!(throttle.ready(t + Duration::from_millis(100)));
+    }
+
+    #[test]
+    fn the_lyric_slide_eases_out_and_lands() {
+        assert_eq!(lyric_ease(0.0), 0.0);
+        assert_eq!(lyric_ease(1.0), 1.0);
+        assert_eq!(lyric_ease(2.0), 1.0);
+        assert!(lyric_ease(0.5) > 0.5, "quick to start, soft to settle");
     }
 
     #[test]
