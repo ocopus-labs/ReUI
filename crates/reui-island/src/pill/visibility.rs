@@ -153,8 +153,13 @@ impl Pill {
     }
 
     fn wants_shown(&self) -> bool {
-        if self.hidden || self.paused {
+        if self.hidden {
             return false;
+        }
+        // A pause quiets everything except questions only the user can answer (an agent
+        // asking for permission); those still come through.
+        if self.paused {
+            return self.snapshot.activities.iter().any(|a| a.priority == reui_protocol::Priority::Decision);
         }
         self.revealed || self.visibility.shows(&self.snapshot.activities)
     }

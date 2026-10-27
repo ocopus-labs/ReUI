@@ -38,7 +38,7 @@ pub fn build(state: &State) -> Vec<Block> {
     let left = state.files.paused_until().and_then(|until| until.checked_sub(reui_protocol::unix_ms())).filter(|&ms| ms > 0);
     let pause = match left {
         Some(ms) => Row::new("pause", "Paused").detail(format!("Resumes in {}", system::time_left(ms))).tone(Tone::Warning).part(button("Resume", Role::Primary)),
-        None => Row::new("pause", "Pause ReUI").detail("Hides the island and stops recording the clipboard for an hour").part(button("Pause for 1 hour", Role::Secondary)),
+        None => Row::new("pause", "Pause ReUI").detail("Quiets the island and stops recording the clipboard for an hour; permission requests still show").part(button("Pause for 1 hour", Role::Secondary)),
     };
     blocks.push(group("", vec![pause.enabled(doc_ok)]));
     blocks
