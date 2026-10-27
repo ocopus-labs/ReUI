@@ -766,7 +766,9 @@ impl State {
     /// Prefetches lyrics when the track changes, if they're wanted and could be synced.
     fn ask_lyrics(&mut self, card: &Card) {
         let Some(length_ms) = card.timeline.map(|t| t.length_ms).filter(|&l| l > 0) else { return };
-        if !self.settings.lyrics || card.ad || card.video || self.lyrics_asked.as_deref() == Some(card.track.as_str()) {
+        // Video sources too: music is often played as YouTube videos, and LRCLIB only answers
+        // when title, artist and length match a real song (other videos simply find nothing).
+        if !self.settings.lyrics || card.ad || self.lyrics_asked.as_deref() == Some(card.track.as_str()) {
             return;
         }
         let Some(query) = lyrics::Query::new(&card.title, &card.artist, &card.album, length_ms, sessions::is_browser(&card.app)) else { return };
@@ -993,7 +995,7 @@ fn decorate(card: &mut Card, settings: &Settings, audio: Option<&AudioInfo>, lyr
         let (value, muted) = a.level()?;
         Some(Volume { value, muted, outputs: a.outputs.clone(), can_switch: a.can_switch })
     });
-    let wanted = settings.lyrics && !card.ad && !card.video;
+    let wanted = settings.lyrics && !card.ad;
     card.lyrics = lyrics.filter(|(track, _)| wanted && *track == card.track).and_then(|(_, lines)| lines.clone()).unwrap_or_default();
     card.pager = pager;
 }

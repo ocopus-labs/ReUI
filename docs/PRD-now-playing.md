@@ -129,7 +129,7 @@ All sessions are subscribed (`PlaybackInfoChanged` on each), so "B started playi
 - **Display:**
   - Synced lyrics show the current line in the card, cross-fading at line changes. Plain lyrics show nothing; there's nothing to sync.
   - The compact pill can show the line instead of bars (setting).
-  - Hidden when there's no timeline, or for video sources.
+  - Hidden when there's no timeline, and for ads. *Video sources get lyrics too (Oct 28): music is often played as YouTube videos, and LRCLIB only matches real songs.*
 - **Privacy:** every track title goes to lrclib.net, so this is **off by default**, with one toggle that says exactly that.
 
 ### 5.6 Input
