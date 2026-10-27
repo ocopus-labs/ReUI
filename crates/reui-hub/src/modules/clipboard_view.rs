@@ -10,13 +10,10 @@ use reui_protocol::{ImageId, Preview, Rgb};
 use serde::{Deserialize, Serialize};
 
 use super::clipboard::{classify, prefix};
-use super::clipboard_os::Target;
 use super::clipboard_store::{Kind, Page, Query, Saved};
 
 /// Text sent for a card (E-X1); the full text comes with `preview`.
 pub const ITEM_CHARS: usize = 2000;
-/// Text sent for the preview pane.
-pub const PREVIEW_BYTES: usize = 200 * 1024;
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Default)]
 pub struct View {
@@ -244,53 +241,6 @@ pub fn age(ms: i64) -> String {
     }
 }
 
-/// `{"type":"open","target":…,"view":…}`.
-#[allow(dead_code)] // the separate window is parked; the clipboard lives in the notch
-pub fn open_message(target: &Target, view: &View) -> String {
-    let caret = target.caret.map(|c| serde_json::json!(c));
-    serde_json::json!({ "type": "open", "target": { "hwnd": target.hwnd, "focus": target.focus, "caret": caret }, "view": view }).to_string()
-}
-
-#[allow(dead_code)] // the separate window is parked; the clipboard lives in the notch
-pub fn state_message(view: &View) -> String {
-    serde_json::json!({ "type": "state", "view": view }).to_string()
-}
-
-pub fn preview_message(id: i64, text: Option<&str>, image: Option<String>) -> String {
-    serde_json::json!({ "type": "preview", "id": id, "text": text, "image": image }).to_string()
-}
-
-#[allow(dead_code)] // the separate window is parked; the clipboard lives in the notch
-pub fn close_message() -> String {
-    serde_json::json!({ "type": "close" }).to_string()
-}
-
-/// The drag-out payload: `text`, `png` (an image id) or `files`, whichever the item has.
-pub fn export_message(id: i64, text: Option<&str>, png: Option<String>, files: Option<&[String]>) -> String {
-    let mut message = serde_json::json!({ "type": "export", "id": id });
-    if let Some(text) = text {
-        message["text"] = text.into();
-    }
-    if let Some(png) = png {
-        message["png"] = png.into();
-    }
-    if let Some(files) = files {
-        message["files"] = files.into();
-    }
-    message.to_string()
-}
-
-/// The start of `text`, at most `bytes` long, cut on a character boundary.
-pub fn cap_bytes(text: &str, bytes: usize) -> &str {
-    if text.len() <= bytes {
-        return text;
-    }
-    let mut end = bytes;
-    while !text.is_char_boundary(end) {
-        end -= 1;
-    }
-    &text[..end]
-}
 
 #[cfg(test)]
 mod tests {
@@ -383,9 +333,8 @@ mod tests {
     fn contract_shape() {
         let ui = Ui { query: Query { text: "fig".into(), scope: Scope::Collection(7), kind: Some(Kind::Text), app: None }, layout: "grid".into(), paused: false, undo: true, stack: Stack { active: true, remaining: 2 } };
         let v = view(&page(), &ui, 120_000, &mut Images::new(&fake));
-        let json: Value = serde_json::from_str(&state_message(&v)).unwrap();
-        assert_eq!(json["type"], "state");
-        let view = &json["view"];
+        let json = serde_json::to_value(&v).unwrap();
+        let view = &json;
         let keys = |v: &Value| {
             let mut k: Vec<String> = v.as_object().unwrap().keys().cloned().collect();
             k.sort();
@@ -411,21 +360,4 @@ mod tests {
         assert_eq!(back, v);
     }
 
-    #[test]
-    fn messages() {
-        let target = Target { hwnd: 1234, focus: 5678, caret: Some([10, 20, 11, 38]) };
-        let open: Value = serde_json::from_str(&open_message(&target, &View::default())).unwrap();
-        assert_eq!(open["type"], "open");
-        assert_eq!(open["target"], serde_json::json!({ "hwnd": 1234, "focus": 5678, "caret": [10, 20, 11, 38] }));
-        assert!(open["view"].is_object());
-        let open: Value = serde_json::from_str(&open_message(&Target { caret: None, ..target }, &View::default())).unwrap();
-        assert_eq!(open["target"]["caret"], Value::Null);
-        assert_eq!(serde_json::from_str::<Value>(&preview_message(12, Some("x"), None)).unwrap(), serde_json::json!({ "type": "preview", "id": 12, "text": "x", "image": null }));
-        assert_eq!(close_message(), r#"{"type":"close"}"#);
-        let files = vec!["C:\\a.txt".to_string()];
-        assert_eq!(serde_json::from_str::<Value>(&export_message(3, None, None, Some(&files))).unwrap(), serde_json::json!({ "type": "export", "id": 3, "files": ["C:\\a.txt"] }));
-        assert_eq!(serde_json::from_str::<Value>(&export_message(3, Some("t"), Some("9".into()), None)).unwrap(), serde_json::json!({ "type": "export", "id": 3, "text": "t", "png": "9" }));
-        assert_eq!(cap_bytes("héllo", 2), "h");
-        assert_eq!(cap_bytes("hi", 10), "hi");
-    }
 }

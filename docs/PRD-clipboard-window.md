@@ -1,6 +1,6 @@
 # PRD: Clipboard window (clipboard v2)
 
-Status: decisions D1–D7 accepted Oct 28; W0–W4 built Oct 28 (hands-on checks pending) · Owner: Rohit · Oct 28, 2026 · Extends [PRD-clipboard.md](PRD-clipboard.md) (v1)
+Status: **superseded Oct 28, 2026.** The separate window was built and then rejected: the clipboard stays in the notch. Its feature list (collections, search with OCR, paste-as, recent paste, paste stack) lives on in the notch panel; the window code was deleted.
 
 ## Why v2
 

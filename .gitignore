@@ -7,5 +7,3 @@
 *.reui-backup
 *.reui-tmp
 
-# Throwaway screenshots from the clipboard web UI dev harness
-/crates/reui-island/web/clipboard/dev/shots/*.png

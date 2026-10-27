@@ -45,16 +45,6 @@ pub enum ModuleInput {
     /// The bridge waiting on this hook call went away (the agent was answered in its own
     /// UI, timed out, or was closed); drop whatever was shown for it.
     HookGone(u64),
-    /// A message from the module's own window (JSON in the window's vocabulary).
-    Window(String),
-}
-
-/// A message for a module's window: surface name, JSON, images it refers to.
-#[derive(Debug, Clone)]
-pub struct WindowMessage {
-    pub surface: String,
-    pub message: String,
-    pub images: Vec<ImageId>,
 }
 
 struct Entry {
@@ -90,15 +80,13 @@ pub struct Hub {
     snapshots: Arc<watch::Sender<Arc<Snapshot>>>,
     /// "Open this activity" requests for surfaces.
     focus: broadcast::Sender<ActivityId>,
-    windows: broadcast::Sender<WindowMessage>,
 }
 
 impl Hub {
     pub fn new() -> Self {
         let (snapshots, _) = watch::channel(Arc::new(Snapshot::default()));
         let (focus, _) = broadcast::channel(8);
-        let (windows, _) = broadcast::channel(64);
-        Self { state: Arc::default(), snapshots: Arc::new(snapshots), focus, windows }
+        Self { state: Arc::default(), snapshots: Arc::new(snapshots), focus }
     }
 
     /// Latest snapshot plus change notifications. `watch` keeps only the newest value,
@@ -107,9 +95,6 @@ impl Hub {
         self.focus.subscribe()
     }
 
-    pub fn subscribe_windows(&self) -> broadcast::Receiver<WindowMessage> {
-        self.windows.subscribe()
-    }
 
     pub fn subscribe(&self) -> watch::Receiver<Arc<Snapshot>> {
         self.snapshots.subscribe()
@@ -148,13 +133,6 @@ impl Hub {
     }
 
     /// A module-level command (no activity needed); arrives as an action with an empty key.
-    /// A message from a module's window.
-    pub fn route_window(&self, module: &str, message: String) {
-        if let Some(route) = self.state.lock().unwrap().routes.get(module) {
-            _ = route.send(ModuleInput::Window(message));
-        }
-    }
-
     pub fn route_command(&self, module: &str, action: String) {
         if let Some(route) = self.state.lock().unwrap().routes.get(module) {
             _ = route.send(ModuleInput::Action(ModuleAction { key: String::new(), action }));
@@ -272,12 +250,6 @@ impl ModuleContext {
     }
 
     /// Asks surfaces to bring this (published) activity to the front and open it.
-    /// Sends a message to this module's window (the surface shows the window when the
-    /// message says so). `images` must already be in the store (`self.image(..)`).
-    pub fn window(&self, message: String, images: Vec<ImageId>) {
-        _ = self.hub.windows.send(WindowMessage { surface: self.module.to_string(), message, images });
-    }
-
     #[allow(dead_code)] // the v1 island panel used it; kept for future hotkey-summoned cards
     pub fn focus(&self, key: &str) {
         _ = self.hub.focus.send(ActivityId { module: self.module.to_string(), key: key.to_string() });

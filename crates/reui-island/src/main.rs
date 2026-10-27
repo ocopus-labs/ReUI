@@ -6,8 +6,6 @@
 #![windows_subsystem = "windows"]
 
 mod audio;
-mod clipwin;
-mod dragout;
 mod images;
 mod ipc;
 mod keys;
@@ -127,11 +125,7 @@ unsafe extern "system" fn foreground_hook(_: HWINEVENTHOOK, _: u32, hwnd: HWND, 
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     match msg {
         ipc::WM_HUB => {
-            // Window messages go out after the pill's borrow ends: the clipboard window's
-            // host pumps messages (focus restore, drag-out) that land back in here.
-            let mut inbound = Vec::new();
-            with_pill(|pill| inbound = pill.drain_hub());
-            clipwin::deliver(inbound);
+            with_pill(|pill| pill.drain_hub());
             LRESULT(0)
         }
         WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
@@ -259,7 +253,6 @@ fn main() -> Result<()> {
     };
 
     let link = ipc::spawn(hwnd);
-    clipwin::init(link.to_hub.clone())?;
     let settings = Settings::load();
     let mut pill = Pill::new(hwnd, scale, window, monitor, !animations_enabled(), settings.visibility, link.to_hub, link.events)?;
     pill.refresh_visibility();
@@ -291,7 +284,6 @@ fn main() -> Result<()> {
         _ = UnhookWindowsHookEx(mouse);
         _ = UnhookWinEvent(foreground);
     }
-    clipwin::shutdown();
     PILL.with(|cell| cell.borrow_mut().take());
     Ok(())
 }

@@ -206,7 +206,6 @@ async fn run(ctx: ModuleContext, link_previews: bool) {
                         }
                     }
                 }
-                Some(ModuleInput::Window(message)) => app.on_window(&message).await,
                 Some(_) => {}
                 None => break,
             },
@@ -486,21 +485,6 @@ impl App {
                 }
                 self.send_state().await;
             }
-            "preview" => {
-                let Some(id) = m["id"].as_i64() else { return };
-                let content = self.db.call(move |s| s.content(id)).await.flatten();
-                let message = match content {
-                    Some(Content::Text { text, .. }) => cv::preview_message(id, Some(cv::cap_bytes(&text, cv::PREVIEW_BYTES)), None),
-                    Some(Content::Files { paths, .. }) => cv::preview_message(id, Some(&paths.join("\n")), None),
-                    Some(Content::Image { png, .. }) => {
-                        let image = self.ctx.image(png);
-                        self.ctx.window(cv::preview_message(id, None, Some(image.0.to_string())), vec![image]);
-                        return;
-                    }
-                    None => cv::preview_message(id, None, None),
-                };
-                self.ctx.window(message, Vec::new());
-            }
             "ocr" => {
                 let Some(id) = m["id"].as_i64() else { return };
                 let mut text = self.db.call(move |s| s.ocr_text(id)).await.flatten();
@@ -519,21 +503,7 @@ impl App {
             }
             "pause" => self.set_paused(true).await,
             "resume" => self.set_paused(false).await,
-            "export" => {
-                let Some(id) = m["id"].as_i64() else { return };
-                let content = self.db.call(move |s| s.content(id)).await.flatten();
-                let (message, images) = match content {
-                    Some(Content::Text { text, .. }) => (cv::export_message(id, Some(&text), None, None), Vec::new()),
-                    Some(Content::Image { png, .. }) => {
-                        let image = self.ctx.image(png);
-                        (cv::export_message(id, None, Some(image.0.to_string()), None), vec![image])
-                    }
-                    Some(Content::Files { paths, .. }) => (cv::export_message(id, None, None, Some(&paths)), Vec::new()),
-                    None => (cv::export_message(id, None, None, None), Vec::new()),
-                };
-                self.ctx.window(message, images);
-            }
-            other => eprintln!("clipboard: unknown window message \"{other}\""),
+            other => eprintln!("clipboard: unknown panel message \"{other}\""),
         }
     }
 

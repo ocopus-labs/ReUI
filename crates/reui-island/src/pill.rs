@@ -35,7 +35,6 @@ use crate::ipc::Event;
 use crate::music::{self, SeekHold, Swipe, Throttle};
 use crate::panel::{self, Key, Panel};
 use crate::settings::{Settings, Visibility};
-use crate::clipwin::Inbound;
 use crate::{images, keys, order};
 use crate::render::{self, Hit, Interaction, Renderer, Thumb, BARS, BAR_LEVELS_LIVE, BAR_LEVEL_IDLE, COMPACT_SURFACE, EXPANDED_SURFACE, MINIMAL_SURFACE};
 
@@ -374,22 +373,15 @@ impl Pill {
 
     /// Apply everything the hub link queued; only the newest snapshot matters. Messages for
     /// module windows are returned, in order, for the caller to deliver outside this borrow.
-    pub fn drain_hub(&mut self) -> Vec<Inbound> {
+    pub fn drain_hub(&mut self) {
         let mut latest = None;
         let mut focus = None;
-        let mut inbound = Vec::new();
         while let Ok(event) = self.events.try_recv() {
             match event {
                 Event::Connected => eprintln!("island: connected to hub"),
                 Event::Focus(id) => focus = Some(id),
-                // Kept encoded; the pill decodes what a snapshot shows (below), the
-                // clipboard window serves the bytes as they are.
+                // Kept encoded; the pill decodes what a snapshot shows (below).
                 Event::Image(id, bytes) => images::put(id, bytes),
-                Event::Window { surface, message, images: ids } => {
-                    let message = Inbound::message(surface, &message);
-                    images::window_message(message.kind(), &ids);
-                    inbound.push(message);
-                }
                 // Evict in stream order, exactly where the hub does, so images that arrived
                 // for a later snapshot survive.
                 Event::Snapshot(snapshot) => {
@@ -412,7 +404,6 @@ impl Pill {
                     images::clear();
                     self.renderer.retain_images(&HashSet::new());
                     latest = Some(Snapshot::default());
-                    inbound.push(Inbound::Disconnected);
                 }
             }
         }
@@ -424,7 +415,6 @@ impl Pill {
         if let Some(id) = focus {
             self.focus(id);
         }
-        inbound
     }
 
     /// The hub asked to open this activity (the user pressed its hotkey): bring it forward

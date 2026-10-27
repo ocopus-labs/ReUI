@@ -24,8 +24,6 @@ pub enum Event {
     Image(ImageId, Vec<u8>),
     Snapshot(Snapshot),
     Focus(ActivityId),
-    /// A message for a module's window, with the images it refers to (already sent).
-    Window { surface: String, message: String, images: Vec<ImageId> },
     Disconnected,
 }
 
@@ -100,7 +98,6 @@ async fn read_loop(reader: &mut ReadHalf<NamedPipeClient>, notifier: &Notifier) 
             HubMsg::Snapshot(snapshot) => notifier.send(Event::Snapshot(snapshot)),
             HubMsg::Image { id, bytes } => notifier.send(Event::Image(id, bytes)),
             HubMsg::Focus { id } => notifier.send(Event::Focus(id)),
-            HubMsg::Window { surface, message, images } => notifier.send(Event::Window { surface, message, images }),
             _ => {}
         }
     }

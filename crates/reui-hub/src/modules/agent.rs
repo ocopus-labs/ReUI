@@ -209,7 +209,6 @@ async fn run(profile: &'static Profile, mut ctx: ModuleContext) {
                     let next = if allowed { Phase::Tool(short_tool_name(&p.tool)) } else { Phase::Thinking };
                     resume(&ctx, &me, &mut sessions, &p.session, next);
                 }
-                Some(ModuleInput::Window(_)) => {}
                 None => break,
             },
             _ = async { scan.as_mut().unwrap().await }, if scan.is_some() => {

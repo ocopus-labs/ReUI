@@ -12,7 +12,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-pub const PROTOCOL_VERSION: u32 = 13;
+pub const PROTOCOL_VERSION: u32 = 14;
 const MAX_FRAME: usize = 16 * 1024 * 1024;
 
 /// Per-user pipe name; the hub also restricts the pipe's ACL to the current user.
@@ -345,9 +345,6 @@ pub enum ClientMsg {
     /// A command for a module whether or not it has an activity showing (tray menu:
     /// "Pause clipboard history"). The module gets it as an action with an empty key.
     Command { module: String, action: String },
-    /// A message from a module's own window back to the module (JSON, the window's own
-    /// vocabulary). `surface` names the module ("clipboard").
-    Window { surface: String, message: String },
     /// A coding agent's hook event, forwarded verbatim. `agent` names the module that
     /// handles it ("claude"); `payload` is the hook's stdin JSON. When `wants_reply` is set
     /// the bridge waits for a [`HubMsg::HookReply`].
@@ -367,10 +364,6 @@ pub enum HubMsg {
     /// Bring this activity to the front and open it (e.g. a hotkey asked for it). Sent after
     /// the snapshot that contains it.
     Focus { id: ActivityId },
-    /// A message for a module's own window (the clipboard window), as JSON the window
-    /// understands; the surface passes it through. `images` are sent ahead of it (as
-    /// [`HubMsg::Image`]) and stay available while this is the surface's latest message.
-    Window { surface: String, message: String, images: Vec<ImageId> },
 }
 
 impl Element {
