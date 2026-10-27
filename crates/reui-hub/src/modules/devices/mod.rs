@@ -330,6 +330,11 @@ impl State {
                 self.open_overview(ctx);
                 return;
             }
+            // The Settings window wrote devices.json.
+            if a == "reload" {
+                self.reload_settings();
+                return;
+            }
             let mut settings = self.settings.clone();
             if settings.apply(a) {
                 let saved = settings.clone();

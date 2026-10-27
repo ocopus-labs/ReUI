@@ -1,6 +1,6 @@
 # PRD: Product shell (install, first run, settings, trust)
 
-Status: draft for review · Owner: Rohit · Oct 28, 2026 · Before feature #7
+Status: decisions accepted Oct 28 with D1 changed: **distribution from GitHub releases** (per-user setup exe + zip, built by GitHub Actions; unsigned at first), not the Store · Owner: Rohit · Oct 28, 2026 · Before feature #7
 
 **Persona:** knows what a dynamic island is (iPhone, or Mac notch apps like NotchNook, Alcove, boring.notch) but has never heard of ReUI. They find it, install it, and decide within a minute whether to keep it.
 
@@ -80,7 +80,7 @@ Each offer appears **once** and is remembered. *Not now* means the feature waits
 ### 5.1 Packaging, start and stop (*D1*, *D2*)
 
 - **Distribution:**
-  - **Microsoft Store (MSIX)** as the main channel: no SmartScreen, free signing, background updates, clean uninstall.
+  - ~~Microsoft Store (MSIX)~~ **GitHub releases** (decided Oct 28) as the main channel: a per-user `ReUI-Setup.exe` and a zip: no SmartScreen, free signing, background updates, clean uninstall.
   - **winget** for enthusiasts.
   - A **signed** installer on GitHub releases.
   - No "trust this certificate" steps, ever (the FluentFlyout/ModernFlyouts sideload pattern scares people).
@@ -167,8 +167,8 @@ Each offer appears **once** and is remembered. *Not now* means the feature waits
 
 | M | Scope | Exit |
 |---|---|---|
-| **P0: Package & start** | MSIX packaging (Store-ready manifest, startupTask), signed GitHub build, single instance, Start entry → Settings, short tray menu, quit/pause | A friend installs from a link without warnings and it starts at login |
-| **P1: Settings window** | General + feature pages + Privacy + About (idle cost, logs, report bug); modules reload on change; tray toggles removed | Every JSON setting reachable; nothing requires editing files |
+| **P0: Package & start** (*built Oct 28: per-user `ReUI-Setup.exe` + zip via GitHub Actions, HKCU Run, Start entry, Apps & features uninstall, single instance → Settings*) | MSIX packaging (Store-ready manifest, startupTask), signed GitHub build, single instance, Start entry → Settings, short tray menu, quit/pause | A friend installs from a link without warnings and it starts at login |
+| **P1: Settings window** (*built Oct 28: custom native window in the island's design language, not Fluent; live reload; short tray*) | General + feature pages + Privacy + About (idle cost, logs, report bug); modules reload on change; tray toggles removed | Every JSON setting reachable; nothing requires editing files |
 | **P2: First run** | 5-s demo, welcome (3 steps, once), one-time in-island tips, contextual offers (flyout, lyrics, agents) | A first-time tester understands hover, the clipboard hotkey and agents without the README |
 | **P3: Agents in the GUI** | Connect/Disconnect per agent, file diff preview, status, test event | Claude Code connected with two clicks |
 | **P4: Updates, uninstall, help** | "What's new", clean uninstall (hooks, startup, flyout, data), online guide, replay tour | Uninstall leaves nothing behind |
@@ -180,7 +180,7 @@ Each offer appears **once** and is remembered. *Not now* means the feature waits
 |---|---|---|
 | D1 | Main distribution | **Microsoft Store (MSIX)** first (free signing, no SmartScreen, updates), plus winget and a signed GitHub build. Note: Store policy 10.2.8 restricts "undocumented APIs" that change the Windows experience, so the Windows-pop-up replacement stays opt-in with explicit consent and may need to be left out of the Store build |
 | D2 | Signing for the non-Store build | Azure Artifact Signing is limited to US/Canada individuals; otherwise an OV code-signing certificate (yearly cost). Until then, Store + winget only |
-| D3 | How to build the Settings window | **WebView2 window styled with Microsoft's Fluent UI web components**: fast to build to a native look, opened on demand, closed when done (the earlier rejection was about the *clipboard* leaving the notch, not WebView). Alternatives: a C# WinUI 3 settings app (most native, adds .NET), or hand-drawn Direct2D (slow to build) |
+| D3 | How to build the Settings window | ~~WebView2 + Fluent~~ **Decided Oct 28: a custom native window drawn like the island** (Rohit: "use custom UI for settings and should match with how the bar looks"): fast to build to a native look, opened on demand, closed when done (the earlier rejection was about the *clipboard* leaving the notch, not WebView). Alternatives: a C# WinUI 3 settings app (most native, adds .NET), or hand-drawn Direct2D (slow to build) |
 | D4 | Default visibility for new users | **When active** (shown while something is happening, hidden otherwise), with the first-run demo so it never looks broken |
 | D5 | Coding agents in the welcome | Not in the welcome; offered when an agent is first seen running |
 | D6 | One-time tips inside the island | Yes, at most once each, never permanent |

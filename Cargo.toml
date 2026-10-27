@@ -1,6 +1,6 @@
 [workspace]
 resolver = "2"
-members = ["crates/reui-design", "crates/reui-protocol", "crates/reui-hub", "crates/reui-island", "crates/reui-bridge"]
+members = ["crates/reui-design", "crates/reui-protocol", "crates/reui-hub", "crates/reui-island", "crates/reui-bridge", "crates/reui-setup", "crates/reui-settings"]
 exclude = ["spikes"]
 
 [workspace.package]

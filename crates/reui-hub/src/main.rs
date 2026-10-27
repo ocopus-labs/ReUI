@@ -4,13 +4,21 @@
 //! `--no-devices` disable the coding agent (Claude Code, Codex, OpenCode) / Now Playing /
 //! system OSD / Devices modules, `--no-link-previews` keeps
 //! clipboard links offline, `--no-island` doesn't launch the island
-//! (run `reui-island` yourself, e.g. under a debugger).
+//! (run `reui-island` yourself, e.g. under a debugger). `--restore-flyout` only puts back
+//! Windows' volume flyout if a crashed run left it hidden, then exits (the uninstaller).
+//!
+//! One hub per user: launching it again (the Start menu entry) opens Settings and exits.
+
+// Release builds start from the Start menu / at login: no console window. Dev builds keep
+// theirs for the logs.
+#![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 
 mod bridge_sync;
 mod hub;
 mod ipc;
 mod island;
 mod modules;
+mod single_instance;
 
 use anyhow::Result;
 
@@ -23,6 +31,15 @@ async fn main() -> Result<()> {
     log_panics();
     let args: Vec<String> = std::env::args().skip(1).collect();
     let has = |flag: &str| args.iter().any(|a| a == flag);
+
+    if has("--restore-flyout") {
+        modules::osd::recover_flyout();
+        return Ok(());
+    }
+    let Some(_instance) = single_instance::acquire() else {
+        single_instance::open_settings(&std::env::current_exe()?);
+        return Ok(());
+    };
 
     // WinRT (media sessions) and WIC (artwork) need COM on this thread; the runtime is
     // single-threaded, so every module runs here.

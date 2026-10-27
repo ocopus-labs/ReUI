@@ -12,7 +12,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-pub const PROTOCOL_VERSION: u32 = 15;
+pub const PROTOCOL_VERSION: u32 = 16;
 const MAX_FRAME: usize = 16 * 1024 * 1024;
 
 /// Per-user pipe name; the hub also restricts the pipe's ACL to the current user.
@@ -340,6 +340,10 @@ pub enum SurfaceKind {
     /// A short-lived agent hook bridge (`reui-bridge`): sends one [`ClientMsg::Hook`],
     /// gets at most one [`HubMsg::HookReply`], and never receives snapshots.
     Bridge,
+    /// The Settings window (`reui-settings`): sends [`ClientMsg::Command`]s (a module's
+    /// `reload` after it wrote that module's settings file, `clear`, ...) and never
+    /// receives snapshots.
+    Settings,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]

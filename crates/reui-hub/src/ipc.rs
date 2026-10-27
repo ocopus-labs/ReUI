@@ -82,8 +82,10 @@ async fn serve(pipe: NamedPipeServer, hub: Hub) -> Result<()> {
         other => bail!("expected Hello, got {other:?}"),
     };
     write_frame(&mut writer, &HubMsg::Welcome { version: PROTOCOL_VERSION }).await?;
-    if surface == SurfaceKind::Bridge {
-        return serve_bridge(reader, writer, hub).await;
+    match surface {
+        SurfaceKind::Bridge => return serve_bridge(reader, writer, hub).await,
+        SurfaceKind::Settings => return serve_commands(reader, hub).await,
+        SurfaceKind::Island => {}
     }
     println!("ipc: {surface:?} connected");
 
@@ -165,6 +167,20 @@ fn images_to_send(sent: &mut HashSet<ImageId>, snapshot: &Snapshot) -> Vec<Image
         }
     }
     missing
+}
+
+/// The Settings window: module commands only, until it disconnects. It gets no snapshots,
+/// so it never counts as a surface that shows anything.
+async fn serve_commands(mut reader: ReadHalf<NamedPipeServer>, hub: Hub) -> Result<()> {
+    loop {
+        match read_frame::<_, ClientMsg>(&mut reader).await {
+            Ok(ClientMsg::Command { module, action }) => hub.route_command(&module, action),
+            Ok(_) => {}
+            // The window sends its commands and hangs up: that's the normal end.
+            Err(e) if e.kind() == std::io::ErrorKind::UnexpectedEof || e.kind() == std::io::ErrorKind::BrokenPipe => return Ok(()),
+            Err(e) => return Err(e.into()),
+        }
+    }
 }
 
 /// One hook call. If the agent waits for an answer, hold the connection until the module

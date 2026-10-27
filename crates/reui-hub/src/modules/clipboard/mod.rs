@@ -17,7 +17,7 @@
 //! and older ones a few at a time while the window is open.
 //!
 //! Island actions on the toast: `open` (or `expanded`) opens the window; tray commands:
-//! `open`, `pause`, `resume`, `clear`.
+//! `open`, `pause`, `resume`, `clear`; from the Settings window: `reload`.
 //!
 //! Files: `os/` (the Windows side), `store/` (the history), `window.rs` (the window's
 //! messages), `view.rs` and `panel.rs` (what it shows), `toast.rs` (the island), `stack.rs`
@@ -100,6 +100,9 @@ enum Action {
     Pause,
     Resume,
     Clear,
+    /// The Settings window wrote clipboard.json. The hotkey is registered at start, so a
+    /// new one takes effect when the hub restarts.
+    Reload,
 }
 
 impl Action {
@@ -109,6 +112,7 @@ impl Action {
             "pause" => Action::Pause,
             "resume" => Action::Resume,
             "clear" => Action::Clear,
+            "reload" => Action::Reload,
             _ => return None,
         })
     }
@@ -314,6 +318,7 @@ impl App {
             }
             Action::Pause => self.set_paused(true).await,
             Action::Resume => self.set_paused(false).await,
+            Action::Reload => self.settings = Settings::load(),
             Action::Clear => {
                 self.finish_undo().await;
                 self.db.call(|s| s.clear()).await;

@@ -1,4 +1,5 @@
-//! Devices settings, in `%APPDATA%\ReUI\devices.json` until a settings window exists. Same
+//! Devices settings, in `%APPDATA%\ReUI\devices.json`, written by the Settings window
+//! too (which then sends the module `reload`). Same
 //! rules as the OSD's: created with the defaults when missing, a missing or mistyped field
 //! falls back to its default, keys this version doesn't know are kept, and a file that isn't
 //! JSON is never overwritten.

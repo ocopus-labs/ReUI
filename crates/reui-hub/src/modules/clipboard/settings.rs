@@ -1,4 +1,5 @@
-//! Clipboard settings, in `%APPDATA%\ReUI\clipboard.json` until a settings window exists.
+//! Clipboard settings, in `%APPDATA%\ReUI\clipboard.json`, written by the Settings window
+//! too (which then sends the module `reload`).
 //! Created with the defaults when missing; read at start and again on every hotkey open,
 //! so edits apply without a restart. A field that's missing or the wrong type falls back
 //! to its default; a file that isn't JSON is left alone (never overwritten) and ignored.

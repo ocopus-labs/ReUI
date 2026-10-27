@@ -1,67 +1,26 @@
-//! Tray icon and the island's menu (the same menu opens from the tray and from a
-//! right-click on the pill). The tray matters because a hidden island can't be right-clicked.
+//! Tray icon and the island's menu (the same menu opens from a right-click on the tray icon
+//! and on the pill). Short, per PRD 5.3: every setting lives in the Settings window, which a
+//! left-click on the icon opens. The tray matters because a hidden island can't be clicked.
 
 use windows::core::{w, PCWSTR};
 use windows::Win32::Foundation::{HWND, LPARAM, POINT, WPARAM};
 use windows::Win32::UI::Shell::{Shell_NotifyIconW, NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NOTIFYICONDATAW};
 use windows::Win32::UI::WindowsAndMessaging::*;
 
-use crate::settings::Visibility;
-
 /// Tray icon callback message.
 pub const WM_TRAY: u32 = WM_APP + 2;
 const ICON_ID: u32 = 1;
-const CMD_QUIT: usize = 100;
-const CMD_VISIBILITY: usize = 200;
-const CMD_CLIPBOARD: usize = 300;
+const CMD_SETTINGS: usize = 100;
+const CMD_PAUSE: usize = 101;
+const CMD_CLIPBOARD: usize = 102;
+const CMD_DEVICES: usize = 103;
+const CMD_QUIT: usize = 104;
 const CMD_ITEM: usize = 400;
-const CMD_MUSIC: usize = 500;
-const CMD_OSD: usize = 600;
-const CMD_DEVICES: usize = 700;
-
-/// Module commands in the menu: (module, action, label). Sent whether or not the module
-/// has anything showing; clearing keeps pins, so it asks nothing.
-const CLIPBOARD: [(&str, &str, &str); 3] = [
-    ("clipboard", "pause", "Pause clipboard for 1 hour"),
-    ("clipboard", "resume", "Resume clipboard"),
-    ("clipboard", "clear", "Clear clipboard history"),
-];
-
-/// Music settings, kept by the media module (lyrics go to lrclib.net, so they're opt-in).
-const MUSIC: [(&str, &str, &str); 5] = [
-    ("media", "lyrics:on", "Lyrics on"),
-    ("media", "lyrics:off", "Lyrics off"),
-    ("media", "visualizer:real", "Visualizer: real"),
-    ("media", "visualizer:simple", "Visualizer: simple"),
-    ("media", "visualizer:off", "Visualizer: off"),
-];
-
-/// On-screen display settings, kept by the OSD module (the island doesn't know their state,
-/// so they're plain on/off entries like the music ones).
-const OSD: [(&str, &str, &str); 6] = [
-    ("osd", "flyout:on", "Replace Windows volume flyout: on"),
-    ("osd", "flyout:off", "Replace Windows volume flyout: off"),
-    ("osd", "lock-keys:on", "Show lock keys: on"),
-    ("osd", "lock-keys:off", "Show lock keys: off"),
-    ("osd", "battery-saver:on", "Show battery saver: on"),
-    ("osd", "battery-saver:off", "Show battery saver: off"),
-];
-
-/// Devices: the overview card and the device moments' switches (kept by the devices module).
-const DEVICES: [(&str, &str, &str); 9] = [
-    ("devices", "overview", "Show devices"),
-    ("devices", "connect:on", "Connect cards: on"),
-    ("devices", "connect:off", "Connect cards: off"),
-    ("devices", "low-battery:on", "Low battery alerts: on"),
-    ("devices", "low-battery:off", "Low battery alerts: off"),
-    ("devices", "drives:on", "Drives: on"),
-    ("devices", "drives:off", "Drives: off"),
-    ("devices", "airpods:on", "AirPods detail (nearby scan): on"),
-    ("devices", "airpods:off", "AirPods detail (nearby scan): off"),
-];
 
 pub enum Command {
-    Visibility(Visibility),
+    Settings,
+    /// Pause ReUI for an hour, or resume it when paused.
+    TogglePause,
     /// (module, action)
     Module(&'static str, &'static str),
     Quit,
@@ -97,46 +56,45 @@ pub fn taskbar_created() -> u32 {
     unsafe { RegisterWindowMessageW(w!("TaskbarCreated")) }
 }
 
-/// Does the tray callback mean "open the menu"?
-pub fn wants_menu(lparam: LPARAM) -> bool {
-    matches!(lparam.0 as u32, WM_LBUTTONUP | WM_RBUTTONUP)
+/// What a tray callback asks for.
+pub enum Click {
+    /// Left click: the Settings window.
+    Open,
+    Menu,
 }
 
-/// Shows the menu at the pointer and returns what was picked.
-pub fn menu(hwnd: HWND, current: Visibility) -> Option<Command> {
+pub fn click(lparam: LPARAM) -> Option<Click> {
+    match lparam.0 as u32 {
+        WM_LBUTTONUP => Some(Click::Open),
+        WM_RBUTTONUP => Some(Click::Menu),
+        _ => None,
+    }
+}
+
+/// Opens `reui-settings.exe` from next to the island. It is single-instance: a second
+/// launch brings the open window to the front, which it may do because we let it.
+pub fn open_settings() {
+    let Some(exe) = std::env::current_exe().ok().map(|exe| exe.with_file_name("reui-settings.exe")) else { return };
+    unsafe { _ = AllowSetForegroundWindow(ASFW_ANY) };
+    if let Err(e) = std::process::Command::new(&exe).spawn() {
+        eprintln!("island: can't start {}: {e}", exe.display());
+    }
+}
+
+/// Shows the menu at the pointer and returns what was picked. `paused`: ReUI is paused, so
+/// the pause entry resumes.
+pub fn menu(hwnd: HWND, paused: bool) -> Option<Command> {
     unsafe {
         let menu = CreatePopupMenu().ok()?;
-        _ = AppendMenuW(menu, MF_STRING | MF_DISABLED | MF_GRAYED, 0, w!("Show the island"));
-        for (i, (visibility, label)) in Visibility::ALL.iter().enumerate() {
-            let checked = if *visibility == current { MF_CHECKED } else { MF_UNCHECKED };
-            let label: Vec<u16> = format!("    {label}").encode_utf16().chain([0]).collect();
-            _ = AppendMenuW(menu, MF_STRING | checked, CMD_VISIBILITY + i, PCWSTR(label.as_ptr()));
-        }
+        _ = AppendMenuW(menu, MF_STRING, CMD_SETTINGS, w!("Settings"));
+        let pause = if paused { w!("Resume ReUI") } else { w!("Pause ReUI for 1 hour") };
+        _ = AppendMenuW(menu, MF_STRING, CMD_PAUSE, pause);
         _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
-        for (i, (_, _, label)) in CLIPBOARD.iter().enumerate() {
-            let label: Vec<u16> = label.encode_utf16().chain([0]).collect();
-            _ = AppendMenuW(menu, MF_STRING, CMD_CLIPBOARD + i, PCWSTR(label.as_ptr()));
-        }
-        _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
-        _ = AppendMenuW(menu, MF_STRING | MF_DISABLED | MF_GRAYED, 0, w!("Music"));
-        for (i, (_, _, label)) in MUSIC.iter().enumerate() {
-            let label: Vec<u16> = format!("    {label}").encode_utf16().chain([0]).collect();
-            _ = AppendMenuW(menu, MF_STRING, CMD_MUSIC + i, PCWSTR(label.as_ptr()));
-        }
-        _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
-        _ = AppendMenuW(menu, MF_STRING | MF_DISABLED | MF_GRAYED, 0, w!("On-screen display"));
-        for (i, (_, _, label)) in OSD.iter().enumerate() {
-            let label: Vec<u16> = format!("    {label}").encode_utf16().chain([0]).collect();
-            _ = AppendMenuW(menu, MF_STRING, CMD_OSD + i, PCWSTR(label.as_ptr()));
-        }
-        _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
-        _ = AppendMenuW(menu, MF_STRING | MF_DISABLED | MF_GRAYED, 0, w!("Devices"));
-        for (i, (_, _, label)) in DEVICES.iter().enumerate() {
-            let label: Vec<u16> = format!("    {label}").encode_utf16().chain([0]).collect();
-            _ = AppendMenuW(menu, MF_STRING, CMD_DEVICES + i, PCWSTR(label.as_ptr()));
-        }
+        _ = AppendMenuW(menu, MF_STRING, CMD_CLIPBOARD, w!("Clipboard history"));
+        _ = AppendMenuW(menu, MF_STRING, CMD_DEVICES, w!("Devices"));
         _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
         _ = AppendMenuW(menu, MF_STRING, CMD_QUIT, w!("Quit ReUI"));
+        _ = SetMenuDefaultItem(menu, CMD_SETTINGS as u32, 0);
 
         let mut pt = POINT::default();
         _ = GetCursorPos(&mut pt);
@@ -146,24 +104,11 @@ pub fn menu(hwnd: HWND, current: Visibility) -> Option<Command> {
         _ = PostMessageW(Some(hwnd), WM_NULL, WPARAM(0), LPARAM(0));
         _ = DestroyMenu(menu);
         match picked {
+            CMD_SETTINGS => Some(Command::Settings),
+            CMD_PAUSE => Some(Command::TogglePause),
+            CMD_CLIPBOARD => Some(Command::Module("clipboard", "open")),
+            CMD_DEVICES => Some(Command::Module("devices", "overview")),
             CMD_QUIT => Some(Command::Quit),
-            n if (CMD_VISIBILITY..CMD_VISIBILITY + Visibility::ALL.len()).contains(&n) => Some(Command::Visibility(Visibility::ALL[n - CMD_VISIBILITY].0)),
-            n if (CMD_CLIPBOARD..CMD_CLIPBOARD + CLIPBOARD.len()).contains(&n) => {
-                let (module, action, _) = CLIPBOARD[n - CMD_CLIPBOARD];
-                Some(Command::Module(module, action))
-            }
-            n if (CMD_MUSIC..CMD_MUSIC + MUSIC.len()).contains(&n) => {
-                let (module, action, _) = MUSIC[n - CMD_MUSIC];
-                Some(Command::Module(module, action))
-            }
-            n if (CMD_OSD..CMD_OSD + OSD.len()).contains(&n) => {
-                let (module, action, _) = OSD[n - CMD_OSD];
-                Some(Command::Module(module, action))
-            }
-            n if (CMD_DEVICES..CMD_DEVICES + DEVICES.len()).contains(&n) => {
-                let (module, action, _) = DEVICES[n - CMD_DEVICES];
-                Some(Command::Module(module, action))
-            }
             _ => None,
         }
     }

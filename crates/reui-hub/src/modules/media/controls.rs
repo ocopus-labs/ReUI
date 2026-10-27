@@ -21,6 +21,11 @@ impl State {
     pub(super) async fn act(&mut self, ctx: &ModuleContext, action: ModuleAction) {
         // Tray commands come without an activity.
         if action.key.is_empty() {
+            // The Settings window wrote media.json.
+            if action.action == "reload" {
+                self.reload_settings();
+                return;
+            }
             let mut settings = self.settings.clone();
             if settings.apply(&action.action) {
                 self.settings = settings.clone();

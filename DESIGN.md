@@ -76,14 +76,14 @@ Layout templates fall out of the content, so modules don't pick them:
 | Click on compact | Expand |
 | Pointer leaves expanded | Collapse after `motion.delay.collapse` |
 | Fullscreen app in front | Hide entirely |
-| Right-click the pill, or the tray icon | Menu: visibility mode, Quit |
+| Right-click the pill, or the tray icon | Short menu: Settings, Pause ReUI for 1 hour / Resume, Clipboard history, Devices, Quit. A left-click on the tray icon opens Settings |
 | Click the minimal bubble | Swaps that activity into the pill |
 | A brief confirmation (copied) while something else is in the pill | Shows in the minimal bubble for its moment (copy icon), never takes the pill; alone, it takes the pill with a glimpse of what was copied |
 | Mouse wheel over the island | Cycles through all activities; over an open card with a row of cards it scrolls the row instead (horizontal wheel too) |
 
 **Choosing what's in front.** The hub orders activities by priority. The activity you bring forward (bubble or wheel) stays in front until something more urgent arrives (anything above both it and *ongoing*, such as a permission request or a done alert); when that's gone, your choice comes back. The minimal bubble shows a **different kind** of activity from the pill when there is one (Claude in the pill → music in the bubble, and the other way round), so several sessions of one kind never hide another kind; the rest are a wheel away. This lives in the island only (`crates/reui-island/src/order.rs`, unit-tested); the hub's order is unchanged.
 
-**Visibility modes** (menu; saved in `%APPDATA%\ReUI\settings.json`):
+**Visibility modes** (Settings → General; saved in `%APPDATA%\ReUI\settings.json`, which the island watches):
 
 | Mode | Shows |
 | --- | --- |
@@ -117,6 +117,7 @@ In the hidden modes, pushing the pointer against the top edge above the island r
 | `motion.logo` | Brand-logo working animation (ticks: `interval`, `turn`); built but unused, logos are static for now |
 | `motion.crossfade` | When compact content fades out and expanded content fades and scales in, as fractions of the morph |
 | `motion.bars` | `fps` the island moves live level bars at |
+| `settings` | The Settings window: window and caption, nav, page, row wells (outer and inner radii, 2 gap), controls (capsules, toggle, key caps, focus ring), menu, scrollbar, its colours, motion and type |
 
 Format notes: dimensions are DIPs and durations are ms (plain numbers, or `{ "value", "unit" }`); colours are `"#RRGGBB"` or `{ "hex", "alpha" }`; `{group.token}` aliases resolve at build time; `$type` is inherited from the group. `spring` is a ReUI extension type: `{ "dampingRatio", "period" }`.
 
@@ -168,6 +169,10 @@ Buttons, by role:
 | `Plain` | Bare text | Bare glyph (media previous / next) |
 
 Text buttons are 44 high capsules; inline glyph buttons are 40 circles; transport glyph buttons are 44 circles, 28 apart.
+
+## Settings window
+
+`reui-settings` uses the island's material and type on a normal window (tokens under `settings`). Black edge to edge with our own caption (minimise and close are circles, filled only on hover); a quiet text nav whose selected page sits on a soft capsule like the clipboard tabs. Each page reads hero (28 title) → one secondary paragraph → groups: a small eyebrow, then rows in one well whose outer corners are round and inner ones tight, separated by 2-DIP gaps of black instead of lines. A row is a title, one quiet line, and its controls at the right: toggles (accent track, white knob concentric with the end), segmented capsules, sliders like the volume row, capsule buttons by role (a destructive one asks a second time), key caps for shortcuts, dropdown capsules with an opaque menu, a text field with the steady caret. Keyboard focus is an accent ring just outside the control, following its radius. No filler: every line is a fact about the setting.
 
 ## Motion
 

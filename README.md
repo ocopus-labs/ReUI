@@ -11,15 +11,32 @@ A unified dynamic island for Windows, and later our own Windows shell. See `PLAN
 | `crates/reui-protocol` | Wire protocol between the hub and surfaces: a semantic view model after Apple's Live Activity presentations (compact, minimal, expanded), postcard frames |
 | `crates/reui-hub` | Background process. Owns every module's state, decides which activity is in front, serves surfaces over a per-user named pipe, supervises the island |
 | `crates/reui-island` | The pill, rendered natively with Windows.UI.Composition; renders whatever the hub puts in front and sends actions back |
+| `crates/reui-setup` | Per-user installer and uninstaller (`ReUI-Setup-<version>.exe`), with the programs embedded at build time |
 | `crates/reui-bridge` | The program coding agents run as a hook; forwards events to the hub, answers permission requests, and installs/uninstalls the hooks |
 | `spikes/composition-pill` | Phase 0a renderer spike and its measurements |
 
-## Run
+## Install
+
+1. Download `ReUI-Setup-<version>.exe` from the repository's **Releases** page.
+2. Run it. It installs for your user only (no admin) into `%LOCALAPPDATA%\Programs\ReUI`, adds ReUI to the Start menu, starts it with Windows, and launches it.
+3. Releases aren't code-signed yet, so Windows SmartScreen may say "Windows protected your PC". Choose **More info → Run anyway**.
+
+Running the setup again, or a newer one, upgrades in place; your settings and clipboard history (`%APPDATA%\ReUI`) are kept. Launching ReUI from the Start menu while it's running opens Settings. Prefer no installer? `ReUI-<version>-x64.zip` holds the same programs: unzip and run `reui-setup.exe` (it installs the files next to it), or run `reui-hub.exe` in place.
+
+Setup options: `--no-autostart` (don't start with Windows), `--no-launch`, `--quiet` (no message boxes).
+
+## Uninstall
+
+**Settings → Apps → Installed apps → ReUI → Uninstall**, or run `%LOCALAPPDATA%\Programs\ReUI\reui-setup.exe --uninstall`. It stops ReUI, puts back Windows' volume pop-up if ReUI was replacing it, removes the coding-agent hooks it installed, start with Windows and the Start menu entry, then asks whether to delete your data too (clipboard history, settings, caches). `--quiet` uninstalls without asking and keeps your data.
+
+## Build from source
 
 ```
 cargo build --release
 target\release\reui-hub.exe --demo
 ```
+
+Release builds of the hub have no console window; debug builds (`cargo build`) keep one for the logs. `pwsh scripts/package.ps1 -OutDir dist` builds the release assets (the setup and the zip) the way `.github/workflows/release.yml` does on a `v*` tag.
 
 The hub starts the island plus the coding-agent and Now Playing modules (`--no-agents`, `--no-media` to skip them). `--demo` enables a module that shows now-playing, a 5-minute timer and, every 25 s, an agent permission request that takes over the pill (it times out and fails open after 20 s). Hover to peek, click to expand, right-click the pill to quit ReUI. `--no-island` runs the hub alone so you can start `reui-island.exe` yourself.
 

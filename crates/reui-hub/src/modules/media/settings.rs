@@ -1,4 +1,5 @@
-//! Now Playing settings, in `%APPDATA%\ReUI\media.json` until a settings window exists.
+//! Now Playing settings, in `%APPDATA%\ReUI\media.json`, written by the Settings window
+//! too (which then sends the module `reload`).
 //! Created with the defaults when missing and read again whenever the card opens, so edits
 //! apply without a restart. A missing or mistyped field falls back to its default; a file
 //! that isn't JSON is left alone (never overwritten, not even by the tray) and ignored.

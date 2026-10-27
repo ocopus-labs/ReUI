@@ -12,7 +12,7 @@ use windows::Win32::UI::Shell::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 use windows_numerics::{Vector2, Vector3};
 
-use crate::settings::{Settings, Visibility};
+use crate::settings::{self, Settings};
 
 use super::{Pill, State};
 use super::timers::*;
@@ -117,18 +117,43 @@ impl Pill {
         Some((left, top, left + size, top + size))
     }
 
-    pub fn visibility(&self) -> Visibility {
-        self.visibility
+    pub fn paused(&self) -> bool {
+        self.paused
     }
 
-    pub fn set_visibility(&mut self, visibility: Visibility) {
-        self.visibility = visibility;
-        Settings { visibility }.save();
+    /// Applies settings.json as it is now (at start, when the Settings window or the tray
+    /// changed it, and when a pause runs out). Pausing also pauses clipboard recording, so
+    /// nothing is captured while ReUI is out of the way.
+    pub fn apply_settings(&mut self, settings: Settings) {
+        let left = settings.pause_left(settings::now_ms());
+        if left.is_some() != self.paused {
+            self.paused = left.is_some();
+            eprintln!("island: {}", if self.paused { "paused" } else { "resumed" });
+            self.command("clipboard", if self.paused { "pause" } else { "resume" });
+        }
+        unsafe {
+            match left {
+                Some(ms) => _ = SetTimer(Some(self.hwnd), TIMER_PAUSE, ms.min(u64::from(u32::MAX)) as u32, None),
+                None => _ = KillTimer(Some(self.hwnd), TIMER_PAUSE),
+            }
+        }
+        if self.visibility != settings.visibility {
+            eprintln!("island: showing {:?}", settings.visibility);
+        }
+        self.visibility = settings.visibility;
         self.refresh_visibility();
     }
 
+    /// Pause ReUI for an hour (the tray), or resume it.
+    pub fn set_paused(&mut self, paused: bool) {
+        let mut settings = Settings::load();
+        settings.paused_until = paused.then(|| settings::now_ms() + settings::PAUSE_MS);
+        settings.save();
+        self.apply_settings(settings);
+    }
+
     fn wants_shown(&self) -> bool {
-        if self.hidden {
+        if self.hidden || self.paused {
             return false;
         }
         self.revealed || self.visibility.shows(&self.snapshot.activities)

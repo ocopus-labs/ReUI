@@ -198,6 +198,7 @@ impl Pill {
             hovered: false,
             hidden: false,
             visibility,
+            paused: false,
             revealed: false,
             shown: true,
             clickthrough: true,

@@ -1,4 +1,5 @@
-//! System OSD settings, in `%APPDATA%\ReUI\osd.json` until a settings window exists. Same
+//! System OSD settings, in `%APPDATA%\ReUI\osd.json`, written by the Settings window
+//! too (which then sends the module `reload`). Same
 //! rules as the media settings: created with the defaults when missing, read again whenever
 //! a HUD opens, a missing or mistyped field falls back to its default, keys this version
 //! doesn't know are kept, and a file that isn't JSON is never overwritten.

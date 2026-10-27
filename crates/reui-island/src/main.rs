@@ -1,7 +1,7 @@
 //! ReUI island: the dynamic-island surface. Renders whatever the hub says is in front and
 //! sends the user's actions back. Normally launched by `reui-hub`; it reconnects on its
 //! own if the hub restarts. Rest the pointer on it to peek, click to expand; right-click it
-//! (or the tray icon) for visibility settings and Quit.
+//! (or the tray icon) for the short menu; a left-click on the tray icon opens Settings.
 
 #![windows_subsystem = "windows"]
 
@@ -30,11 +30,15 @@ use reui_design::tokens::island;
 
 use crate::features::clipboard_keys;
 use crate::pill::{MenuEntry, Pill};
-use crate::settings::{Settings, Visibility};
+use crate::settings::Settings;
 use crate::render::{COMPACT_MAX_WIDTH, EXPANDED_SURFACE};
 
 /// Slack around the island inside the (click-through) window.
 const MARGIN: f32 = 24.0;
+/// Re-reads settings.json this long after the folder last changed. Outside the pill's
+/// timer ids (which start at 1).
+const TIMER_SETTINGS: usize = 100;
+const SETTINGS_SETTLE_MS: u32 = 150;
 
 /// Windows' "Animation effects" setting; when off, every morph uses the reduced spring.
 fn animations_enabled() -> bool {
@@ -51,10 +55,11 @@ thread_local! {
 }
 
 fn open_menu(hwnd: HWND) {
-    let mut current = Visibility::default();
-    with_pill(|pill| current = pill.visibility());
-    match tray::menu(hwnd, current) {
-        Some(tray::Command::Visibility(v)) => with_pill(|pill| pill.set_visibility(v)),
+    let mut paused = false;
+    with_pill(|pill| paused = pill.paused());
+    match tray::menu(hwnd, paused) {
+        Some(tray::Command::Settings) => tray::open_settings(),
+        Some(tray::Command::TogglePause) => with_pill(|pill| pill.set_paused(!paused)),
         Some(tray::Command::Module(module, action)) => with_pill(|pill| pill.command(module, action)),
         Some(tray::Command::Quit) => unsafe { _ = DestroyWindow(hwnd) },
         None => {}
@@ -178,9 +183,22 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             LRESULT(0)
         }
         tray::WM_TRAY => {
-            if tray::wants_menu(lparam) {
-                open_menu(hwnd);
+            match tray::click(lparam) {
+                Some(tray::Click::Open) => tray::open_settings(),
+                Some(tray::Click::Menu) => open_menu(hwnd),
+                None => {}
             }
+            LRESULT(0)
+        }
+        // Coalesced: one folder change often arrives as several notifications.
+        settings::WM_SETTINGS_CHANGED => {
+            SetTimer(Some(hwnd), TIMER_SETTINGS, SETTINGS_SETTLE_MS, None);
+            LRESULT(0)
+        }
+        WM_TIMER if wparam.0 == TIMER_SETTINGS => {
+            _ = KillTimer(Some(hwnd), TIMER_SETTINGS);
+            let settings = Settings::load();
+            with_pill(|pill| pill.apply_settings(settings));
             LRESULT(0)
         }
         WM_TIMER => {
@@ -253,7 +271,8 @@ fn main() -> Result<()> {
     let link = ipc::spawn(hwnd);
     let settings = Settings::load();
     let mut pill = Pill::new(hwnd, scale, window, monitor, !animations_enabled(), settings.visibility, link.to_hub, link.events)?;
-    pill.refresh_visibility();
+    pill.apply_settings(settings);
+    settings::watch(hwnd);
     PILL.with(|cell| *cell.borrow_mut() = Some(pill));
     unsafe { _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE) };
     TASKBAR_CREATED.set(tray::taskbar_created());

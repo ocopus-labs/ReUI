@@ -140,6 +140,8 @@ pub struct Pill {
     /// A fullscreen app is in front.
     hidden: bool,
     visibility: Visibility,
+    /// "Pause ReUI" is on (settings.json): hidden whatever happens until it ends.
+    paused: bool,
     /// Pushed to the top edge in a hidden mode: shown until the pointer has been away a while.
     revealed: bool,
     /// What the island currently shows (faded in), after visibility mode, reveal and fullscreen.

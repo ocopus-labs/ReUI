@@ -12,6 +12,7 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 use crate::features::level;
 use crate::features::music;
 use crate::render;
+use crate::settings::Settings;
 
 use super::{Pill, State};
 
@@ -40,6 +41,8 @@ pub(super) const TIMER_HOLD: usize = 11;
 pub(super) const TIMER_LYRIC: usize = 12;
 
 pub(super) const TIMER_LEVEL: usize = 13;
+/// "Pause ReUI" ends (one-shot, set for the time left).
+pub(super) const TIMER_PAUSE: usize = 14;
 
 /// How often an open card with a playing timeline redraws its position.
 const TICK_MS: u32 = 1000;
@@ -66,6 +69,7 @@ impl Pill {
         unsafe { _ = KillTimer(Some(self.hwnd), id) };
         match id {
             TIMER_HOVER => self.on_hover_intent(),
+            TIMER_PAUSE => self.apply_settings(Settings::load()),
             TIMER_HOLD if self.state == State::Expanded => {
                 self.redraw_expanded();
                 self.update_tick();

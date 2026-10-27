@@ -361,6 +361,11 @@ impl Osd {
                 }
                 return;
             }
+            // The Settings window wrote osd.json.
+            if a == "reload" {
+                self.reload_settings();
+                return;
+            }
             let mut settings = self.settings.clone();
             if settings.apply(a) {
                 let saved = settings.clone();
