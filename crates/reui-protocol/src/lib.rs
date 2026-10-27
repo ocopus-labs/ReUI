@@ -12,7 +12,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-pub const PROTOCOL_VERSION: u32 = 14;
+pub const PROTOCOL_VERSION: u32 = 15;
 const MAX_FRAME: usize = 16 * 1024 * 1024;
 
 /// Per-user pipe name; the hub also restricts the pipe's ACL to the current user.
@@ -95,6 +95,10 @@ pub enum Element {
     Bars { live: bool },
     /// Small status dot in the accent colour.
     Dot,
+    /// A horizontal level (volume, brightness), 0..=1: an accent fill on a track. `dim`
+    /// draws it muted (the level is kept but not in effect). The surface eases between
+    /// values, so a level that keeps changing reads as one movement.
+    Level { value: f32, dim: bool },
 }
 
 /// Compact presentation: two sides around the island's centre.

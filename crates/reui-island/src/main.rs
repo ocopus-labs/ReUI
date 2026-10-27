@@ -9,6 +9,7 @@ mod audio;
 mod images;
 mod ipc;
 mod keys;
+mod level;
 mod music;
 mod order;
 mod panel;

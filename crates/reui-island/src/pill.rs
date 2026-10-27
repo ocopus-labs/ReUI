@@ -35,6 +35,7 @@ use crate::ipc::Event;
 use crate::music::{self, SeekHold, Swipe, Throttle};
 use crate::panel::{self, Key, Panel};
 use crate::settings::{Settings, Visibility};
+use crate::level::{self, Levels};
 use crate::{images, keys, order};
 use crate::render::{self, Hit, Interaction, Renderer, Thumb, BARS, BAR_LEVELS_LIVE, BAR_LEVEL_IDLE, COMPACT_SURFACE, EXPANDED_SURFACE, MINIMAL_SURFACE};
 
@@ -50,6 +51,7 @@ pub const TIMER_SEARCH: usize = 9;
 pub const TIMER_AWAIT: usize = 10;
 pub const TIMER_HOLD: usize = 11;
 pub const TIMER_LYRIC: usize = 12;
+pub const TIMER_LEVEL: usize = 13;
 /// How often an open card with a playing timeline redraws its position.
 const TICK_MS: u32 = 1000;
 /// Typing is sent to the module once it pauses this long; the field shows it at once.
@@ -87,6 +89,10 @@ pub struct Pill {
     /// column slides up).
     lyric_line: Option<usize>,
     lyric_change: Option<(usize, Instant)>,
+    /// Levels (volume, brightness) as drawn, easing to new values on `TIMER_LEVEL`, which
+    /// runs only while one is moving.
+    levels: Levels,
+    level_ticking: bool,
     compositor: Compositor,
     _target: DesktopWindowTarget,
     root: ContainerVisual,
@@ -173,8 +179,8 @@ pub struct Pill {
     drag_drawn: Option<Instant>,
     /// A seek shown until the player confirms it (E-T6).
     seek_hold: Option<SeekHold>,
-    /// A slider value set here, shown until the next snapshot.
-    slider_hold: Option<f32>,
+    /// A slider value set here (its action, the value), shown until the next snapshot.
+    slider_hold: Option<(String, f32)>,
     /// The bar under the pointer shows its thumb.
     thumb: Option<Thumb>,
     swipe: Swipe,
@@ -312,6 +318,8 @@ impl Pill {
             reduced_motion,
             lyric_line: None,
             lyric_change: None,
+            levels: Levels::default(),
+            level_ticking: false,
             compositor,
             _target: target,
             root,
@@ -488,6 +496,8 @@ impl Pill {
         if self.drag.is_none() {
             self.slider_hold = None;
         }
+        self.levels.sync(&self.raw.activities, Instant::now(), !self.reduced_motion && self.shown);
+        self.update_levels();
         let ordered = self.ordered();
         self.render(ordered)
     }
@@ -566,16 +576,21 @@ impl Pill {
 
     /// Wheel over a slider: 5 % a notch, shown at once.
     fn wheel_slider(&mut self, delta: i32, action: String) {
-        let Some(current) = self.slider_hold.or_else(|| self.slider_value()) else { return };
+        let held = self.slider_hold.as_ref().filter(|(a, _)| *a == action).map(|(_, v)| *v);
+        let Some(current) = held.or_else(|| self.slider_value(&action)) else { return };
         let value = music::wheel_value(current, delta);
-        self.slider_hold = Some(value);
         self.send_action(music::slider_action(&action, value));
+        self.slider_hold = Some((action, value));
         self.redraw_expanded();
     }
 
-    /// The module's slider value in the open card.
-    fn slider_value(&self) -> Option<f32> {
-        self.front_view()?.rows.iter().find_map(|r| if let Row::Slider { value, .. } = r { Some(*value) } else { None })
+    /// The module's value of the slider with `action` in the open card (a card may have
+    /// several, one per display).
+    fn slider_value(&self, action: &str) -> Option<f32> {
+        self.front_view()?.rows.iter().find_map(|r| match r {
+            Row::Slider { value, action: a, .. } if a == action => Some(*value),
+            _ => None,
+        })
     }
 
     /// The open card's timeline as (position now, length, playing, rate), a held seek
@@ -684,7 +699,7 @@ impl Pill {
             }
             Some(Drag::Slider { action, value, .. }) => {
                 self.send_action(music::slider_action(&action, value));
-                self.slider_hold = Some(value);
+                self.slider_hold = Some((action, value));
             }
             None => return,
         }
@@ -727,11 +742,13 @@ impl Pill {
         let front = self.snapshot.activities.first();
         let second = self.snapshot.activities.get(1);
 
+        let now = Instant::now();
+        let level = |a: Option<&Activity>| a.and_then(|a| self.levels.value(&a.id, now));
         let front_accent = accent(front);
-        let compact = self.renderer.draw_compact(&self.compact_surface, front.map(|a| &a.compact), front_accent)?;
+        let compact = self.renderer.draw_compact(&self.compact_surface, front.map(|a| &a.compact), front_accent, level(front))?;
         let card = self.renderer.draw_expanded(&self.expanded_surface, front.and_then(|a| a.expanded.as_ref()), front_accent, &self.interaction())?;
         let second_accent = accent(second);
-        let minimal_bars = self.renderer.draw_minimal(&self.minimal_surface, second.map(|a| &a.minimal), second_accent)?;
+        let minimal_bars = self.renderer.draw_minimal(&self.minimal_surface, second.map(|a| &a.minimal), second_accent, level(second))?;
         let has_second = second.is_some();
         let front = front.map(|a| (a.id.clone(), a.priority, a.expanded.is_some()));
 
@@ -778,10 +795,11 @@ impl Pill {
 
     /// What the user is doing with the open panel, for the renderer.
     fn interaction(&self) -> Interaction<'_> {
+        let held = self.slider_hold.as_ref().map(|(action, value)| (action.as_str(), *value, false));
         let (scrub, slider, thumb) = match &self.drag {
-            Some(Drag::Seek { ms, .. }) => (Some(*ms), self.slider_hold, Some(Thumb::Seek)),
-            Some(Drag::Slider { value, .. }) => (None, Some(*value), Some(Thumb::Slider)),
-            None => (None, self.slider_hold, self.thumb),
+            Some(Drag::Seek { ms, .. }) => (Some(*ms), held, Some(Thumb::Seek)),
+            Some(Drag::Slider { action, value, .. }) => (None, Some((action.as_str(), *value, true)), Some(Thumb::Slider)),
+            None => (None, held, self.thumb),
         };
         Interaction {
             query: self.panel.query.as_deref(),
@@ -793,6 +811,7 @@ impl Pill {
             slider,
             thumb,
             lyric: self.lyric_change.map(|(prev, at)| (prev, music::lyric_ease(at.elapsed().as_secs_f32() * 1000.0 / motion::lyrics::DURATION as f32))),
+            level: self.front().and_then(|a| self.levels.value(&a.id, Instant::now())),
         }
     }
 
@@ -851,9 +870,7 @@ impl Pill {
         }
         if self.scroll_clock.is_none() {
             self.scroll_clock = Some(Instant::now());
-            let frame = 1000.0 / motion::scroll::FPS;
-            let interval = ((frame / 15.625).floor().max(1.0) * 15.625) as u32;
-            unsafe { SetTimer(Some(self.hwnd), TIMER_SCROLL, interval, None) };
+            unsafe { SetTimer(Some(self.hwnd), TIMER_SCROLL, frame_interval(motion::scroll::FPS), None) };
         }
     }
 
@@ -1134,6 +1151,43 @@ impl Pill {
         self.redraw_expanded();
     }
 
+    /// Starts the level frame timer when a level begins to ease; it stops itself once
+    /// every level has landed.
+    fn update_levels(&mut self) {
+        if self.levels.moving() && !self.level_ticking {
+            self.level_ticking = true;
+            unsafe { SetTimer(Some(self.hwnd), TIMER_LEVEL, frame_interval(motion::level::FPS), None) };
+        }
+    }
+
+    /// One easing frame: redraws only the surfaces that show a level (the pill, the bubble,
+    /// an open card's header). Their size doesn't depend on the value, so nothing re-springs.
+    fn tick_level(&mut self) {
+        let now = Instant::now();
+        let moving = self.levels.settle(now);
+        let accent = |a: &Activity| a.accent.map(render::rgb).unwrap_or(color::accent::DEFAULT);
+        let front = self.snapshot.activities.first();
+        if let Some(a) = front.filter(|a| level::is_level(&a.compact.leading) || level::is_level(&a.compact.trailing)) {
+            if let Err(e) = self.renderer.draw_compact(&self.compact_surface, Some(&a.compact), accent(a), self.levels.value(&a.id, now)) {
+                eprintln!("island: redraw failed: {e}");
+            }
+        }
+        let second = self.snapshot.activities.get(1);
+        if let Some((a, value)) = second.and_then(|a| Some((a, self.levels.value(&a.id, now)?))) {
+            if let Err(e) = self.renderer.draw_minimal(&self.minimal_surface, Some(&a.minimal), accent(a), Some(value)) {
+                eprintln!("island: redraw failed: {e}");
+            }
+        }
+        let in_card = self.front_view().is_some_and(|v| level::is_level(&v.leading) || level::is_level(&v.trailing));
+        if in_card && self.state == State::Expanded {
+            self.redraw_expanded();
+        }
+        if !moving {
+            self.level_ticking = false;
+            unsafe { _ = KillTimer(Some(self.hwnd), TIMER_LEVEL) };
+        }
+    }
+
     fn redraw_expanded(&mut self) {
         self.note_lyric();
         self.prune_hold();
@@ -1262,11 +1316,8 @@ impl Pill {
         self.bars_moving = want;
         unsafe {
             if want {
-                // A fixed frame rate, rounded to the system timer's 15.625 ms grain so it
-                // doesn't land on the next tick and drop to ~21 fps.
-                let frame = 1000.0 / motion::bars::FPS;
-                let interval = ((frame / 15.625).floor().max(1.0) * 15.625) as u32;
-                SetTimer(Some(self.hwnd), TIMER_BARS, interval, None);
+                // A fixed frame rate (see `frame_interval`; 30 fps lands on 31.25 ms).
+                SetTimer(Some(self.hwnd), TIMER_BARS, frame_interval(motion::bars::FPS), None);
             } else {
                 _ = KillTimer(Some(self.hwnd), TIMER_BARS);
                 self.rest_bars();
@@ -1421,13 +1472,7 @@ impl Pill {
         if self.hidden {
             return false;
         }
-        let activities = &self.snapshot.activities;
-        self.revealed
-            || match self.visibility {
-                Visibility::Always => true,
-                Visibility::WhenActive => !activities.is_empty(),
-                Visibility::WhenNeeded => activities.iter().any(|a| a.priority >= Priority::Alert),
-            }
+        self.revealed || self.visibility.shows(&self.snapshot.activities)
     }
 
     /// Fades the island in or out to match the visibility mode, reveal and fullscreen.
@@ -1620,6 +1665,10 @@ impl Pill {
             self.tick_lyric();
             return;
         }
+        if id == TIMER_LEVEL {
+            self.tick_level();
+            return;
+        }
         unsafe { _ = KillTimer(Some(self.hwnd), id) };
         match id {
             TIMER_HOVER => self.on_hover_intent(),
@@ -1749,6 +1798,12 @@ fn is_fullscreen(fg: HWND, monitor: HMONITOR) -> bool {
             && rect.right >= info.rcMonitor.right
             && rect.bottom >= info.rcMonitor.bottom
     }
+}
+
+/// A frame timer's interval for `fps`, rounded down to the system timer's 15.625 ms grain
+/// so it doesn't land on the next tick and drop to a lower rate.
+fn frame_interval(fps: f32) -> u32 {
+    ((1000.0 / fps / 15.625).floor().max(1.0) * 15.625) as u32
 }
 
 /// Milliseconds until just after the next whole second of a position.

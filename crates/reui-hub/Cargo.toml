@@ -60,4 +60,11 @@ features = [
     "Win32_System_Power",
     "Graphics_Imaging",
     "Media_Ocr",
+    # System OSD: brightness (WMI, DDC/CI, display names), power settings, brightness keys,
+    # the Windows build for logs
+    "Win32_Devices_Display",
+    "Win32_System_Wmi",
+    "Win32_System_SystemServices",
+    "Win32_System_Registry",
+    "Win32_UI_Input",
 ]

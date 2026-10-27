@@ -1,6 +1,6 @@
 # PRD: System OSD (volume, brightness and system states)
 
-Status: draft for review · Owner: Rohit · Feature #5 in [PLAN.md](../PLAN.md) · Oct 28, 2026
+Status: decisions D1–D6 accepted Oct 28; M0–M4 built Oct 28 (volume HUD verified live; brightness, flyout hiding and optional states untested on real hardware) · Owner: Rohit · Feature #5 in [PLAN.md](../PLAN.md) · Oct 28, 2026
 
 **References:**
 - **macOS notch apps** replacing Apple's HUDs:
@@ -158,11 +158,11 @@ Pressing the volume keys (or the brightness keys on a laptop) shows Windows' own
 
 | M | Scope | Exit |
 |---|---|---|
-| **M0: Volume HUD** | Typed audio events (level, mute, ours), shared watcher, `Element::Level` (protocol), `osd.rs` with the Brief volume activity, glyph tiers, linger, minimal ring, fullscreen skip, "When needed" exception | S1–S3, S8 |
-| **M1: Interact** | Expanded slider (drag, wheel, mute, output menu), no-echo, device-switch moment, O-1–O-4, O-13 | S5, S6 |
-| **M2: Brightness** | Internal panel (power-setting event + WMI set), external DDC/CI (set only), per-monitor island, O-6–O-9 | S4, S10 |
-| **M3: Replace Windows flyout** | Opt-in hide/restore, TaskbarCreated, crash restore, fallbacks | S9; flyout always back after quit or crash |
-| **M4: Optional states** | Caps/Num Lock, battery saver, charging, mic mute (behind settings) | S7 |
+| **M0: Volume HUD** (*built*) | Typed audio events (level, mute, ours), shared watcher, `Element::Level` (protocol), `osd.rs` with the Brief volume activity, glyph tiers, linger, minimal ring, fullscreen skip, "When needed" exception | S1–S3, S8 |
+| **M1: Interact** (*built*) | Expanded slider (drag, wheel, mute, output menu), no-echo, device-switch moment, O-1–O-4, O-13 | S5, S6 |
+| **M2: Brightness** (*built*) | Internal panel (power-setting event + WMI set), external DDC/CI (set only), per-monitor island, O-6–O-9 | S4, S10 |
+| **M3: Replace Windows flyout** (*built*) | Opt-in hide/restore, TaskbarCreated, crash restore, fallbacks | S9; flyout always back after quit or crash |
+| **M4: Optional states** (*built*) | Caps/Num Lock, battery saver, charging, mic mute (behind settings) | S7 |
 
 ## 12. Acceptance test plan
 

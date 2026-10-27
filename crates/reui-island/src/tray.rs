@@ -16,6 +16,7 @@ const CMD_VISIBILITY: usize = 200;
 const CMD_CLIPBOARD: usize = 300;
 const CMD_ITEM: usize = 400;
 const CMD_MUSIC: usize = 500;
+const CMD_OSD: usize = 600;
 
 /// Module commands in the menu: (module, action, label). Sent whether or not the module
 /// has anything showing; clearing keeps pins, so it asks nothing.
@@ -32,6 +33,17 @@ const MUSIC: [(&str, &str, &str); 5] = [
     ("media", "visualizer:real", "Visualizer: real"),
     ("media", "visualizer:simple", "Visualizer: simple"),
     ("media", "visualizer:off", "Visualizer: off"),
+];
+
+/// On-screen display settings, kept by the OSD module (the island doesn't know their state,
+/// so they're plain on/off entries like the music ones).
+const OSD: [(&str, &str, &str); 6] = [
+    ("osd", "flyout:on", "Replace Windows volume flyout: on"),
+    ("osd", "flyout:off", "Replace Windows volume flyout: off"),
+    ("osd", "lock-keys:on", "Show lock keys: on"),
+    ("osd", "lock-keys:off", "Show lock keys: off"),
+    ("osd", "battery-saver:on", "Show battery saver: on"),
+    ("osd", "battery-saver:off", "Show battery saver: off"),
 ];
 
 pub enum Command {
@@ -98,6 +110,12 @@ pub fn menu(hwnd: HWND, current: Visibility) -> Option<Command> {
             _ = AppendMenuW(menu, MF_STRING, CMD_MUSIC + i, PCWSTR(label.as_ptr()));
         }
         _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
+        _ = AppendMenuW(menu, MF_STRING | MF_DISABLED | MF_GRAYED, 0, w!("On-screen display"));
+        for (i, (_, _, label)) in OSD.iter().enumerate() {
+            let label: Vec<u16> = format!("    {label}").encode_utf16().chain([0]).collect();
+            _ = AppendMenuW(menu, MF_STRING, CMD_OSD + i, PCWSTR(label.as_ptr()));
+        }
+        _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
         _ = AppendMenuW(menu, MF_STRING, CMD_QUIT, w!("Quit ReUI"));
 
         let mut pt = POINT::default();
@@ -116,6 +134,10 @@ pub fn menu(hwnd: HWND, current: Visibility) -> Option<Command> {
             }
             n if (CMD_MUSIC..CMD_MUSIC + MUSIC.len()).contains(&n) => {
                 let (module, action, _) = MUSIC[n - CMD_MUSIC];
+                Some(Command::Module(module, action))
+            }
+            n if (CMD_OSD..CMD_OSD + OSD.len()).contains(&n) => {
+                let (module, action, _) = OSD[n - CMD_OSD];
                 Some(Command::Module(module, action))
             }
             _ => None,

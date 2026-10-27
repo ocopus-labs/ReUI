@@ -3,6 +3,7 @@
 
 use std::path::PathBuf;
 
+use reui_protocol::{Activity, Priority};
 use serde::{Deserialize, Serialize};
 
 /// When the island shows at all.
@@ -14,7 +15,8 @@ pub enum Visibility {
     Always,
     /// Hidden while nothing is happening.
     WhenActive,
-    /// Hidden unless something needs you: a decision, a question, a finished or failed task.
+    /// Hidden unless something needs you: a decision, a question, a finished or failed task,
+    /// or a brief confirmation of something you just did (a volume key, a copy).
     WhenNeeded,
 }
 
@@ -24,6 +26,17 @@ impl Visibility {
         (Visibility::WhenActive, "When something is happening"),
         (Visibility::WhenNeeded, "Only when it needs me"),
     ];
+
+    /// Whether the island shows for these activities (before reveal and fullscreen, which
+    /// the pill applies). A Brief counts as needed: a change the user just made, like the
+    /// volume, should answer them even here (PRD D5).
+    pub fn shows(self, activities: &[Activity]) -> bool {
+        match self {
+            Visibility::Always => true,
+            Visibility::WhenActive => !activities.is_empty(),
+            Visibility::WhenNeeded => activities.iter().any(|a| a.priority >= Priority::Alert || a.priority == Priority::Brief),
+        }
+    }
 }
 
 #[derive(Serialize, Deserialize, Default, Debug, PartialEq)]
@@ -64,5 +77,32 @@ mod tests {
         assert_eq!(serde_json::from_str::<Settings>(&text).unwrap().visibility, Visibility::WhenNeeded);
         // Missing or extra fields fall back to defaults instead of failing.
         assert_eq!(serde_json::from_str::<Settings>(r#"{"other":1}"#).unwrap(), Settings::default());
+    }
+
+    #[test]
+    fn when_needed_shows_for_alerts_decisions_and_briefs() {
+        let with = |priorities: &[Priority]| -> Vec<Activity> {
+            priorities
+                .iter()
+                .map(|&priority| Activity {
+                    id: reui_protocol::ActivityId { module: "m".into(), key: format!("{priority:?}") },
+                    priority,
+                    accent: None,
+                    compact: Default::default(),
+                    minimal: reui_protocol::Element::Empty,
+                    audio: None,
+                    expanded: None,
+                })
+                .collect()
+        };
+        let needed = |p: &[Priority]| Visibility::WhenNeeded.shows(&with(p));
+        assert!(!needed(&[]));
+        assert!(!needed(&[Priority::Passive, Priority::Ongoing]));
+        assert!(needed(&[Priority::Ongoing, Priority::Brief]));
+        assert!(needed(&[Priority::Alert]));
+        assert!(needed(&[Priority::Decision]));
+        assert!(Visibility::WhenActive.shows(&with(&[Priority::Passive])));
+        assert!(!Visibility::WhenActive.shows(&[]));
+        assert!(Visibility::Always.shows(&[]));
     }
 }

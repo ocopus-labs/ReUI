@@ -60,6 +60,11 @@ pub fn wheel_value(value: f32, delta: i32) -> f32 {
     (value + SLIDER_WHEEL_STEP * delta as f32 / WHEEL_NOTCH as f32).clamp(0.0, 1.0)
 }
 
+/// A slider's value as the percentage shown while it's dragged ("47%"), whole numbers only.
+pub fn percent(value: f32) -> String {
+    format!("{}%", (value.clamp(0.0, 1.0) * 100.0).round() as u32)
+}
+
 /// Limits a drag's updates to [`SLIDER_SEND_MS`] apart.
 #[derive(Default, Debug)]
 pub struct Throttle {
@@ -131,6 +136,16 @@ impl Swipe {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn percentages_are_whole_and_clamped() {
+        assert_eq!(percent(0.0), "0%");
+        assert_eq!(percent(0.474), "47%");
+        assert_eq!(percent(0.476), "48%");
+        assert_eq!(percent(1.0), "100%");
+        assert_eq!(percent(1.3), "100%");
+        assert_eq!(percent(-0.2), "0%");
+    }
 
     #[test]
     fn scrubbing_maps_the_pointer_onto_the_track_and_clamps() {

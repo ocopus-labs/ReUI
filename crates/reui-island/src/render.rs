@@ -10,6 +10,7 @@
 //!
 //! Layout is in DIPs; `scale` converts to pixels at draw time.
 
+use std::borrow::Cow;
 use std::cell::Cell;
 use std::collections::{HashMap, HashSet};
 
@@ -123,13 +124,16 @@ pub struct Interaction<'a> {
     pub scrub: Option<u64>,
     /// A seek shown before the player confirmed it (the pill drops it once it has).
     pub hold: Option<SeekHold>,
-    /// Slider value shown instead of the module's (dragging, or just set).
-    pub slider: Option<f32>,
+    /// A slider shown at a value other than the module's (dragging, or just set): its
+    /// action, the value, and whether it's being dragged (it then shows its percentage).
+    pub slider: Option<(&'a str, f32, bool)>,
     /// The bar under the pointer (or being dragged) shows its thumb.
     pub thumb: Option<Thumb>,
     /// A lyric line just started: the line before it and how far (0..=1, eased) the column
     /// has slid up from it.
     pub lyric: Option<(usize, f32)>,
+    /// The front activity's level as shown right now (eased), over the view's own.
+    pub level: Option<f32>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -313,12 +317,14 @@ impl Renderer {
 
     /// Draws the compact presentation centred in its surface. Both sides get the same
     /// width (the wider one's, margins included), as in Apple's compact layout.
-    pub fn draw_compact(&self, surface: &CompositionDrawingSurface, view: Option<&CompactView>, accent: Color) -> Result<CompactLayout> {
+    /// `level` is the activity's level as shown right now (eased), over the view's own.
+    pub fn draw_compact(&self, surface: &CompositionDrawingSurface, view: Option<&CompactView>, accent: Color, level: Option<f32>) -> Result<CompactLayout> {
         let mut layout = CompactLayout { width: island::idle::WIDTH, bars: None, logo: None };
         self.paint(surface, |rt| {
             let Some(view) = view else { return Ok(()) };
-            let (lw, _) = self.measure(&view.leading, Slot::Compact)?;
-            let (tw, _) = self.measure(&view.trailing, Slot::Compact)?;
+            let (leading, trailing) = (shown_level(&view.leading, level), shown_level(&view.trailing, level));
+            let (lw, _) = self.measure(&leading, Slot::Compact)?;
+            let (tw, _) = self.measure(&trailing, Slot::Compact)?;
             let (lm, tm) = (compact_margin(&view.leading), compact_margin(&view.trailing));
             let side = (lw + lm).max(tw + tm);
             let width = island::compact::CENTER_GAP + 2.0 * side;
@@ -326,8 +332,8 @@ impl Renderer {
             let mid = COMPACT_SURFACE.1 / 2.0;
             let leading_x = left + lm;
             let trailing_x = left + width - tm;
-            self.element(rt, &view.leading, Slot::Compact, leading_x, mid, Align::Start, accent)?;
-            self.element(rt, &view.trailing, Slot::Compact, trailing_x, mid, Align::End, accent)?;
+            self.element(rt, &leading, Slot::Compact, leading_x, mid, Align::Start, accent)?;
+            self.element(rt, &trailing, Slot::Compact, trailing_x, mid, Align::End, accent)?;
             layout.width = width;
             layout.bars = match (&view.leading, &view.trailing) {
                 (Element::Bars { live }, _) => Some((leading_x, mid, *live)),
@@ -354,11 +360,14 @@ impl Renderer {
     }
 
     /// Draws the minimal bubble's element; returns where live bars go (left, centre, live).
-    pub fn draw_minimal(&self, surface: &CompositionDrawingSurface, element: Option<&Element>, accent: Color) -> Result<Option<(f32, f32, bool)>> {
+    /// `level` is the activity's level as shown right now (eased); a ring there is that
+    /// level in the bubble (the hub sends a ring for minimal), so it eases too.
+    pub fn draw_minimal(&self, surface: &CompositionDrawingSurface, element: Option<&Element>, accent: Color, level: Option<f32>) -> Result<Option<(f32, f32, bool)>> {
         let (cx, cy) = (MINIMAL_SURFACE.0 / 2.0, MINIMAL_SURFACE.1 / 2.0);
-        self.paint(surface, |rt| match element {
-            Some(e) => self.element(rt, e, Slot::Minimal, cx, cy, Align::Center, accent),
-            None => Ok(()),
+        self.paint(surface, |rt| match (element, level) {
+            (Some(Element::Ring(_)), Some(level)) => self.element(rt, &Element::Ring(level), Slot::Minimal, cx, cy, Align::Center, accent),
+            (Some(e), _) => self.element(rt, &shown_level(e, level), Slot::Minimal, cx, cy, Align::Center, accent),
+            (None, _) => Ok(()),
         })?;
         Ok(match element {
             Some(Element::Bars { live }) => Some((cx - bars_width() / 2.0, cy, *live)),
@@ -398,10 +407,11 @@ impl Renderer {
             };
             let rows: &[Row] = if inline.is_some() { &[] } else { &view.rows };
 
-            let (lw, lh) = self.measure(&view.leading, Slot::Leading)?;
+            let (leading, trailing) = (shown_level(&view.leading, with.level), shown_level(&view.trailing, with.level));
+            let (lw, lh) = self.measure(&leading, Slot::Leading)?;
             let (tw, th) = match inline {
                 Some(b) => (inline_width(b.len()), component::button::INLINE),
-                None => self.measure(&view.trailing, Slot::Trailing)?,
+                None => self.measure(&trailing, Slot::Trailing)?,
             };
             let text_left = inset + if lw > 0.0 { lw + gap } else { 0.0 };
             let text_right = w - inset - if tw > 0.0 { tw + gap } else { 0.0 };
@@ -436,7 +446,7 @@ impl Renderer {
                 (mid, mid - text_h / 2.0)
             };
 
-            self.element(rt, &view.leading, Slot::Leading, inset, mid, Align::Start, accent)?;
+            self.element(rt, &leading, Slot::Leading, inset, mid, Align::Start, accent)?;
             if let Some(open) = view.open.as_deref().filter(|_| lw > 0.0) {
                 hits.push(Hit::new(inset, mid - lh / 2.0, inset + lw, mid + lh / 2.0, open));
             }
@@ -454,7 +464,7 @@ impl Renderer {
                         x += size + component::button::INLINE_GAP;
                     }
                 }
-                None => self.element(rt, &view.trailing, Slot::Trailing, w - inset, mid, Align::End, accent)?,
+                None => self.element(rt, &trailing, Slot::Trailing, w - inset, mid, Align::End, accent)?,
             }
 
             // The source switcher sits at the top right, on the first line of text, which
@@ -577,9 +587,11 @@ impl Renderer {
                             y += self.note(rt, text, y, if searchable { component::card::HEIGHT } else { self.fonts.note.style.line_height })?
                         }
                         Row::Slider { leading, value, action, trailing } => {
-                            let value = with.slider.unwrap_or(*value);
+                            let set = with.slider.filter(|(a, ..)| a == action);
+                            let value = set.map_or(*value, |(_, v, _)| v);
+                            let dragging = set.is_some_and(|(.., dragging)| dragging);
                             let thumb = with.thumb == Some(Thumb::Slider);
-                            y += self.slider(rt, leading, value, action, trailing.as_ref(), y, thumb, accent, &mut hits)?
+                            y += self.slider(rt, leading, value, action, trailing.as_ref(), y, thumb, dragging, accent, &mut hits)?
                         }
                         Row::Lyrics(lines) => y += self.lyrics(rt, lines, track_at, y, with.lyric)?,
                         Row::Progress { .. } | Row::Timeline { .. } => {}
@@ -684,9 +696,10 @@ impl Renderer {
     }
 
     /// Volume and the like: the leading toggle (mute), the bar, and the trailing menu button
-    /// (output device). Returns the row's height.
+    /// (output device). While `dragging`, the value shows as a percentage over the thumb, in
+    /// the gap above the row, so nothing in the row moves. Returns the row's height.
     #[allow(clippy::too_many_arguments)]
-    fn slider(&self, rt: &ID2D1RenderTarget, leading: &Button, value: f32, action: &str, trailing: Option<&Menu>, y: f32, thumb: bool, accent: Color, hits: &mut Vec<Hit>) -> Result<f32> {
+    fn slider(&self, rt: &ID2D1RenderTarget, leading: &Button, value: f32, action: &str, trailing: Option<&Menu>, y: f32, thumb: bool, dragging: bool, accent: Color, hits: &mut Vec<Hit>) -> Result<f32> {
         let h = component::slider::HEIGHT;
         let gap = component::slider::GAP;
         let inset = island::expanded::INSET;
@@ -710,6 +723,15 @@ impl Renderer {
         }
         if thumb {
             self.thumb(rt, end, y + h / 2.0)?;
+        }
+        if dragging {
+            let text = music::percent(value);
+            let font = &self.fonts.caption;
+            let tw = self.text_width(&text, font)?;
+            let reach = component::thumb::SIZE / 2.0;
+            let x = (end - tw / 2.0).min(r + reach - tw).max(l - reach);
+            let bottom = y + (h - component::thumb::SIZE) / 2.0 - space::XXS;
+            self.text(rt, &text, font, x, bottom - font.style.line_height, tw + 1.0, Align::Start, color::label::SECONDARY)?;
         }
         // The whole row height, and a little past the ends so the extremes are easy to hit.
         let reach = component::thumb::SIZE / 2.0;
@@ -896,6 +918,12 @@ impl Renderer {
             }
             Element::Bars { .. } => (bars_width(), component::bars::HEIGHT),
             Element::Dot => (component::dot::SIZE, component::dot::SIZE),
+            // The bubble has no room for a bar: a level there is a ring.
+            Element::Level { .. } if slot == Slot::Minimal => {
+                let s = ring_size(slot).0;
+                (s, s)
+            }
+            Element::Level { .. } => (component::level::WIDTH, component::level::HEIGHT),
         })
     }
 
@@ -922,6 +950,30 @@ impl Renderer {
                 let ellipse = D2D1_ELLIPSE { point: self.point(left + r, mid), radiusX: r * self.scale, radiusY: r * self.scale };
                 rt.FillEllipse(&ellipse, &self.brush(rt, accent)?);
             },
+            Element::Level { value, dim } => {
+                let fill = if *dim { accent.with_alpha(accent.a * opacity::LEVEL_DIM) } else { accent };
+                match slot {
+                    Slot::Minimal => self.ring(rt, *value, slot, left + w / 2.0, mid, fill)?,
+                    _ => self.level(rt, *value, left, top, w, h, fill)?,
+                }
+            }
+        }
+        Ok(())
+    }
+
+    /// A level bar: the track, and the fill from the left. Anything above zero shows at
+    /// least a round dot, so "on but quiet" never reads as off.
+    #[allow(clippy::too_many_arguments)]
+    fn level(&self, rt: &ID2D1RenderTarget, value: f32, left: f32, top: f32, w: f32, h: f32, fill: Color) -> Result<()> {
+        let value = value.clamp(0.0, 1.0);
+        // On whole pixels, so a thin bar's edges stay crisp.
+        let s = self.scale;
+        let (left, top, h) = ((left * s).round() / s, (top * s).round() / s, (h * s).round() / s);
+        unsafe {
+            self.round_rect(rt, left, top, left + w, top + h, h / 2.0, color::fill::TRACK)?;
+            if value > 0.0 {
+                self.round_rect(rt, left, top, left + (w * value).max(h), top + h, h / 2.0, fill)?;
+            }
         }
         Ok(())
     }
@@ -1545,7 +1597,16 @@ fn inline_width(n: usize) -> f32 {
     n * component::button::INLINE + (n - 1.0) * component::button::INLINE_GAP
 }
 
-/// Round content sits concentric in the capsule's end; text keeps clear of the curve.
+/// `element` with a level's value replaced by `level` (its eased value), if both are there.
+fn shown_level(element: &Element, level: Option<f32>) -> Cow<'_, Element> {
+    match (element, level) {
+        (Element::Level { dim, .. }, Some(value)) => Cow::Owned(Element::Level { value, dim: *dim }),
+        _ => Cow::Borrowed(element),
+    }
+}
+
+/// Round content sits concentric in the capsule's end; text and level bars keep clear of
+/// the curve.
 fn compact_margin(element: &Element) -> f32 {
     match element {
         Element::Art(_) | Element::Ring(_) => island::compact::SIDE_MARGIN,

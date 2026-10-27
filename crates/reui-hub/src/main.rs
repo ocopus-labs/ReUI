@@ -1,7 +1,7 @@
 //! ReUI hub: owns all module state, decides what's in front, and serves it to surfaces.
 //!
-//! Flags: `--demo` enables the demo module, `--no-agents` / `--no-media` disable the coding
-//! agent (Claude Code, Codex, OpenCode) / Now Playing modules, `--no-link-previews` keeps
+//! Flags: `--demo` enables the demo module, `--no-agents` / `--no-media` / `--no-osd` disable
+//! the coding agent (Claude Code, Codex, OpenCode) / Now Playing / system OSD modules, `--no-link-previews` keeps
 //! clipboard links offline, `--no-island` doesn't launch the island
 //! (run `reui-island` yourself, e.g. under a debugger).
 
@@ -41,6 +41,12 @@ async fn main() -> Result<()> {
     }
     if !has("--no-media") {
         enabled.push(Box::new(modules::media::NowPlaying));
+    }
+    if has("--no-osd") {
+        // Still put back Windows' flyout if an earlier run died with it hidden.
+        tokio::task::spawn_blocking(modules::osd::recover_flyout);
+    } else {
+        enabled.push(Box::new(modules::osd::SystemOsd));
     }
     if has("--demo") {
         enabled.push(Box::new(modules::demo::Demo));
