@@ -10,6 +10,7 @@ use reui_protocol::{
 use windows::Win32::Foundation::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
+use crate::drag_guard;
 use crate::features::clipboard_keys;
 use crate::features::music::{self, SeekHold, Throttle};
 use crate::render::{self, Thumb, EXPANDED_SURFACE};
@@ -18,16 +19,44 @@ use crate::settings::Visibility;
 use super::{Drag, MenuEntry, Pill, State};
 use super::timers::*;
 
+/// The module whose first-run hint is told about hover intent (no other module gets it).
+const ONBOARDING: &str = "onboarding";
+const ACTION_HOVERED: &str = "hovered";
+
+/// Whether any mouse button is down now, as drag-guard bits (which one doesn't matter).
+fn held_buttons() -> u8 {
+    use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, VK_LBUTTON, VK_MBUTTON, VK_RBUTTON};
+    let down = [VK_LBUTTON, VK_RBUTTON, VK_MBUTTON].iter().any(|&vk| unsafe { GetAsyncKeyState(vk.0 as i32) } as u16 & 0x8000 != 0);
+    if down {
+        drag_guard::LEFT | drag_guard::RIGHT | drag_guard::MIDDLE
+    } else {
+        0
+    }
+}
+
 impl Pill {
-    /// A button went down anywhere: outside a summoned card, that dismisses it.
-    pub fn on_mouse_down(&mut self, pt: POINT) {
+    /// A button (`drag_guard::LEFT`...) went down anywhere: outside a summoned card, that
+    /// dismisses it; away from the island, it may be the start of a drag (see `DragGuard`).
+    pub fn on_mouse_down(&mut self, pt: POINT, button: u8) {
+        let (x, y) = (pt.x as f32, pt.y as f32);
+        let within = |(l, t, r, b): (f32, f32, f32, f32)| x >= l && x < r && y >= t && y < b;
+        let interactive = self.shown && self.state != State::Idle;
+        let on_island = interactive && (within(self.shape_rect()) || self.bubble_rect().is_some_and(within));
+        self.drag_guard.press(button, on_island || self.menu_open);
         if self.menu_open {
             return;
         }
-        let (x, y) = (pt.x as f32, pt.y as f32);
-        let (l, t, r, b) = self.shape_rect();
-        if !(x >= l && x < r && y >= t && y < b) {
+        if !within(self.shape_rect()) {
             self.dismiss_summoned();
+        }
+    }
+
+    /// A button came up: a drag from elsewhere is over, so resting on the island counts again.
+    pub fn on_mouse_up(&mut self, pt: POINT, button: u8) {
+        let blocked = self.drag_guard.blocks();
+        self.drag_guard.release(button);
+        if blocked && !self.drag_guard.blocks() && self.drag.is_none() {
+            self.on_mouse_move(pt);
         }
     }
 
@@ -36,14 +65,19 @@ impl Pill {
             // The card stays as it is (no leave, no collapse) until the button comes up.
             return self.on_drag(pt);
         }
+        if self.drag_guard.blocks() {
+            self.drag_guard.sync(held_buttons());
+        }
+        // Dragging something across the screen: the island neither opens nor takes clicks.
+        let dragging = self.drag_guard.blocks();
         // In a hidden mode, pushing the pointer against the top edge above the island reveals it.
         let at_edge = pt.y <= self.window.top + 1 && pt.x >= self.window.left && pt.x < self.window.right;
-        if at_edge && !self.hidden && self.visibility != Visibility::Always && !self.shown {
+        if at_edge && !dragging && !self.hidden && self.visibility != Visibility::Always && !self.shown {
             self.revealed = true;
             self.refresh_visibility();
             unsafe { SetTimer(Some(self.hwnd), TIMER_REVEAL, motion::delay::REVEAL_HOLD, None) };
         }
-        let interactive = self.shown && self.state != State::Idle;
+        let interactive = self.shown && self.state != State::Idle && !dragging;
         let (x, y) = (pt.x as f32, pt.y as f32);
         let within = |(l, t, r, b): (f32, f32, f32, f32)| x >= l && x < r && y >= t && y < b;
         let on_bubble = interactive && self.bubble_rect().is_some_and(within);
@@ -83,10 +117,14 @@ impl Pill {
     }
 
     pub(super) fn on_hover_intent(&mut self) {
-        if !self.inside || !self.shown || self.state == State::Idle {
+        if !self.inside || !self.shown || self.state == State::Idle || self.drag_guard.blocks() {
             return;
         }
         self.hovered = true;
+        // The first-run "Hover me" hint waits for exactly this.
+        if let Some(front) = self.front().filter(|a| a.id.module == ONBOARDING) {
+            _ = self.to_hub.send(ClientMsg::Action { id: front.id.clone(), action: ACTION_HOVERED.into() });
+        }
         unsafe { _ = KillTimer(Some(self.hwnd), TIMER_COLLAPSE) };
         self.set_clickthrough(false);
         // Resting on the bubble makes it clickable without growing the pill.

@@ -75,7 +75,8 @@ Layout templates fall out of the content, so modules don't pick them:
 | Pointer rests on the pill for `motion.delay.hover-intent` | Becomes clickable and peeks. Until then it's click-through, so quick moves and clicks reach what's underneath (browser tabs) |
 | Click on compact | Expand |
 | Pointer leaves expanded | Collapse after `motion.delay.collapse` |
-| Fullscreen app in front | Hide entirely |
+| Fullscreen app in front (game, video, browser video, presentation) | Hide entirely (`hide_in_fullscreen`, on by default) |
+| Something dragged over it (a tab, a file, a selection) | Nothing: no peek, no clicks, until the button is up and the pointer rests |
 | Right-click the pill, or the tray icon | Short menu: Settings, Pause ReUI for 1 hour / Resume, Clipboard history, Devices, Quit. A left-click on the tray icon opens Settings |
 | Click the minimal bubble | Swaps that activity into the pill |
 | A brief confirmation (copied) while something else is in the pill | Shows in the minimal bubble for its moment (copy icon), never takes the pill; alone, it takes the pill with a glimpse of what was copied |
@@ -87,7 +88,7 @@ Layout templates fall out of the content, so modules don't pick them:
 
 | Mode | Shows |
 | --- | --- |
-| Always (default) | The resting pill is always there |
+| Always | The resting pill is always there (the default when settings.json has no `visibility`; a brand-new user's first run writes "When something is happening") |
 | When something is happening | Only while there's at least one activity |
 | Only when it needs me | Only for decisions and alerts (permission requests, questions, done, failed) |
 

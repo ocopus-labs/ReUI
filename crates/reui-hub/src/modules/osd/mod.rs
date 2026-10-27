@@ -65,6 +65,11 @@ impl Module for SystemOsd {
     }
 }
 
+/// Whether osd.json asks to hide Windows' volume pop-up (for onboarding's offer).
+pub fn replaces_windows_flyout() -> bool {
+    Settings::load().replace_windows_flyout
+}
+
 /// For `--no-osd`: still put back a flyout an earlier run left hidden.
 pub fn recover_flyout() {
     flyout::recover();

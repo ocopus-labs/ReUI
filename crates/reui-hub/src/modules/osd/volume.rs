@@ -28,6 +28,7 @@ impl Osd {
                     return;
                 }
                 if view::volume_shows(ours, now, self.switched_at) {
+                    crate::modules::onboarding::note(crate::modules::onboarding::Moment::Volume { replaced: self.settings.replace_windows_flyout });
                     self.device_until = None;
                     self.show_volume(ctx, now);
                 } else {

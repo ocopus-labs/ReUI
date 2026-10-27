@@ -8,8 +8,10 @@ pub mod clipboard;
 pub mod demo;
 pub mod devices;
 pub mod media;
+pub mod onboarding;
 pub mod osd;
 mod system_events;
+pub mod updates;
 
 use std::future::Future;
 use std::pin::Pin;

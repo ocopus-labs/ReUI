@@ -13,7 +13,12 @@
 //!
 //! Status text is quiet (secondary); colour is kept for the logo and for "your turn".
 //!
-//! Files: `view.rs` (how sessions and requests look), `usage.rs` (token usage).
+//! Each hook event is also noted (throttled) in `agents.json` for Settings' status line,
+//! and `reui-bridge test <agent>` (Settings' "Send test event") gets a short "connected"
+//! confirmation instead of a session.
+//!
+//! Files: `view.rs` (how sessions and requests look), `usage.rs` (token usage),
+//! `status.rs` (`agents.json`, the test event).
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -27,11 +32,13 @@ use serde_json::{json, Value};
 use tokio::sync::oneshot;
 use tokio::time::{sleep_until, Instant};
 
+mod status;
 mod usage;
 mod view;
 
+use self::status::Throttle;
 use self::usage::Ledger;
-use self::view::{publish_request, publish_session, short_tool_name, GLYPH_TERMINAL};
+use self::view::{publish_request, publish_session, publish_test, short_tool_name, GLYPH_TERMINAL, TEST_KEY};
 use super::Module;
 use crate::hub::{HookCall, ModuleContext, ModuleInput};
 
@@ -102,6 +109,8 @@ const FAILED_SHOW: Duration = Duration::from_secs(15);
 /// before `SessionEnd`). Tools report before and after running, so this rarely bites.
 const STALE_AFTER: Duration = Duration::from_secs(15 * 60);
 const PROMPT_CHARS: usize = 120;
+/// The test event's confirmation stays this long.
+const TEST_SHOW: Duration = Duration::from_secs(4);
 
 pub struct Agent(pub &'static Profile);
 
@@ -159,6 +168,8 @@ struct Agentry {
     profile: &'static Profile,
     mark: Element,
     ledger: Arc<Mutex<Ledger>>,
+    /// `agents.json` writes.
+    status: Mutex<Throttle>,
 }
 
 async fn run(profile: &'static Profile, mut ctx: ModuleContext) {
@@ -166,7 +177,7 @@ async fn run(profile: &'static Profile, mut ctx: ModuleContext) {
         Some(svg) => Element::Art(Art::Logo { image: ctx.image(svg.to_vec()), animated: false }),
         None => Element::Art(Art::Glyph(profile.glyph)),
     };
-    let me = Agentry { profile, mark, ledger: Arc::new(Mutex::new(Ledger::default())) };
+    let me = Agentry { profile, mark, ledger: Arc::new(Mutex::new(Ledger::default())), status: Mutex::new(Throttle::default()) };
     // Claude's usage needs today's transcripts read once; taken out of the loop when done,
     // so a finished scan can't wake the loop again.
     let mut scan = (profile.usage == UsageSource::ClaudeTranscripts)
@@ -179,16 +190,25 @@ async fn run(profile: &'static Profile, mut ctx: ModuleContext) {
 
     let mut sessions: HashMap<String, Session> = HashMap::new();
     let mut pending: HashMap<u64, Pending> = HashMap::new();
+    let mut test_until: Option<Instant> = None;
 
     loop {
         let next_deadline = pending
             .values()
             .map(|p| p.deadline)
             .chain(sessions.values().flat_map(|s| [s.retract_at, Some(s.last_event + STALE_AFTER)].into_iter().flatten()))
+            .chain(test_until)
             .min();
         tokio::select! {
             input = ctx.next() => match input {
-                Some(ModuleInput::Hook(call)) => on_hook(&ctx, &me, call, &mut sessions, &mut pending).await,
+                Some(ModuleInput::Hook(call)) if status::is_test(&call.payload) => {
+                    publish_test(&ctx, &me);
+                    test_until = Some(Instant::now() + TEST_SHOW);
+                }
+                Some(ModuleInput::Hook(call)) => {
+                    status::note_event(&me.status, profile.name);
+                    on_hook(&ctx, &me, call, &mut sessions, &mut pending).await
+                }
                 Some(ModuleInput::HookGone(id)) => {
                     if let Some(p) = pending.remove(&id) {
                         ctx.retract(&permission_key(id));
@@ -216,6 +236,10 @@ async fn run(profile: &'static Profile, mut ctx: ModuleContext) {
             }
             _ = async { sleep_until(next_deadline.unwrap()).await }, if next_deadline.is_some() => {
                 let now = Instant::now();
+                if test_until.is_some_and(|t| t <= now) {
+                    test_until = None;
+                    ctx.retract(TEST_KEY);
+                }
                 let mut timed_out = Vec::new();
                 pending.retain(|id, p| {
                     let expired = p.deadline <= now;

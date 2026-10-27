@@ -15,10 +15,13 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 pub const PROTOCOL_VERSION: u32 = 16;
 const MAX_FRAME: usize = 16 * 1024 * 1024;
 
-/// Per-user pipe name; the hub also restricts the pipe's ACL to the current user.
+/// Per-user pipe name; the hub also restricts the pipe's ACL to the current user. A test
+/// hub (`REUI_CONFIG_DIR` set: its own files) gets its own pipe, so it runs beside the
+/// real ReUI without either seeing the other's surfaces.
 pub fn pipe_name() -> String {
     let user = std::env::var("USERNAME").unwrap_or_else(|_| "default".into());
-    format!(r"\\.\pipe\reui-hub-{user}")
+    let sandbox = std::env::var_os("REUI_CONFIG_DIR").is_some_and(|v| !v.is_empty());
+    format!(r"\\.\pipe\reui-hub-{user}{}", if sandbox { "-sandbox" } else { "" })
 }
 
 /// What decides which activity is in front. Higher wins; ties go to the newest.

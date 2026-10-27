@@ -73,11 +73,13 @@ pub struct Row {
     pub parts: Vec<Part>,
     /// Off: drawn quieter and skipped by the keyboard.
     pub enabled: bool,
+    /// No well: just its controls (the welcome's Next / Done).
+    pub bare: bool,
 }
 
 impl Row {
     pub fn new(id: &str, title: &str) -> Self {
-        Self { id: id.into(), title: title.into(), detail: None, tone: Tone::Secondary, mono: false, parts: Vec::new(), enabled: true }
+        Self { id: id.into(), title: title.into(), detail: None, tone: Tone::Secondary, mono: false, parts: Vec::new(), enabled: true, bare: false }
     }
 
     pub fn detail(mut self, detail: impl Into<String>) -> Self {
@@ -100,6 +102,11 @@ impl Row {
         self
     }
 
+    pub fn bare(mut self) -> Self {
+        self.bare = true;
+        self
+    }
+
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
         self
@@ -108,12 +115,16 @@ impl Row {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Block {
-    /// The page's title (the hero) and its one paragraph.
-    Intro { title: String, body: Option<String> },
+    /// The page's title (the hero) and its one paragraph, with an optional eyebrow above
+    /// ("Step 1 of 3").
+    Intro { eyebrow: Option<String>, title: String, body: Option<String> },
     /// Rows in one well, with an optional eyebrow above.
     Group { label: Option<String>, rows: Vec<Row> },
     /// Big tabular figures with a caption each (About's idle cost), in a well.
     Figures { label: Option<String>, items: Vec<(String, String)> },
+    /// A title and wrapped plain text in a well (release notes, What's new); `accent`
+    /// draws the well tinted, for something new.
+    Text { label: Option<String>, title: String, body: String, accent: bool },
 }
 
 pub fn group(label: &str, rows: Vec<Row>) -> Block {

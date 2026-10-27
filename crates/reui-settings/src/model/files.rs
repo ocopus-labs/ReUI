@@ -58,9 +58,10 @@ impl File {
 
     fn defaults(self) -> Value {
         match self {
-            File::Island => json!({ "visibility": "always" }),
-            File::Media => json!({ "visualizer": "real", "lyrics": false, "retract_after_pause_min": 10, "swipe_to_skip": true, "show_video": true }),
+            File::Island => json!({ "visibility": "always", "hide_in_fullscreen": true, "monitor": "primary", "check_updates": true, "whats_new": true }),
+            File::Media => json!({ "enabled": true, "visualizer": "real", "lyrics": false, "retract_after_pause_min": 10, "swipe_to_skip": true, "show_video": true }),
             File::Clipboard => json!({
+                "enabled": true,
                 "hotkey": "Win+Alt+V",
                 "retention_days": 30,
                 "ignored_apps": ["keepass.exe", "keepassxc.exe", "bitwarden.exe", "1password.exe", "dashlane.exe", "keeper.exe", "enpass.exe", "lastpass.exe"],
@@ -78,13 +79,16 @@ impl File {
                 "mic_mute": false,
                 "scroll_step": 0.02,
             }),
-            File::Devices => json!({ "connect_cards": true, "low_battery": true, "charging": true, "drives": true, "airpods": true, "phones": true, "slow_charger": false }),
+            File::Devices => json!({ "enabled": true, "connect_cards": true, "low_battery": true, "charging": true, "drives": true, "airpods": true, "phones": true, "slow_charger": false }),
         }
     }
 }
 
 pub const VISIBILITY: [&str; 3] = ["always", "when-active", "when-needed"];
 pub const VISUALIZER: [&str; 3] = ["real", "simple", "off"];
+/// `monitor` values besides a display's device name (`\\.\DISPLAY2`).
+pub const MONITOR_PRIMARY: &str = "primary";
+pub const MONITOR_CURSOR: &str = "cursor";
 
 pub struct Files {
     docs: Vec<Doc>,
@@ -111,6 +115,12 @@ impl Files {
     pub fn visibility(&self) -> usize {
         let doc = self.doc(File::Island);
         doc.str("visibility").and_then(|v| VISIBILITY.iter().position(|x| *x == v)).unwrap_or(0)
+    }
+
+    /// Which monitor the island is on: "primary", "cursor" or a display's device name.
+    pub fn monitor(&self) -> String {
+        let doc = self.doc(File::Island);
+        doc.str("monitor").map(str::trim).filter(|s| !s.is_empty()).unwrap_or(MONITOR_PRIMARY).to_string()
     }
 
     pub fn paused_until(&self) -> Option<u64> {
@@ -184,6 +194,10 @@ mod tests {
         let dir = temp_dir("files-defaults");
         let f = files(&dir);
         assert_eq!((f.visibility(), f.paused_until(), f.visualizer(), f.retract_min()), (0, None, 0, 10));
+        assert_eq!(f.monitor(), "primary");
+        let island = f.doc(File::Island);
+        assert!(island.bool("hide_in_fullscreen") && island.bool("check_updates") && island.bool("whats_new"));
+        assert!(f.doc(File::Media).bool("enabled") && f.doc(File::Clipboard).bool("enabled") && f.doc(File::Devices).bool("enabled"));
         assert_eq!((f.hotkey().as_str(), f.retention_days(), f.scroll_step()), ("Win+Alt+V", 30, 0.02));
         assert_eq!(f.ignored_apps().len(), 8);
         assert!(f.doc(File::Osd).bool("volume") && !f.doc(File::Osd).bool("lock_keys"));

@@ -41,7 +41,9 @@ pub struct Instance(#[cfg_attr(not(test), allow(dead_code))] HANDLE);
 /// `Some` if this is the only hub for the user; `None` if one is already running.
 pub fn acquire() -> Option<Instance> {
     let user = user_sid().or_else(|| std::env::var("USERNAME").ok()).unwrap_or_else(|| "default".into());
-    acquire_named(&mutex_name(&user))
+    // A test hub (`REUI_CONFIG_DIR`) runs beside the real one.
+    let suffix = if crate::paths::sandbox().is_some() { "-sandbox" } else { "" };
+    acquire_named(&format!("{}{suffix}", mutex_name(&user)))
 }
 
 fn acquire_named(name: &str) -> Option<Instance> {

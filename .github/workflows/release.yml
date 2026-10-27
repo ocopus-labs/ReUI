@@ -1,6 +1,8 @@
 # Builds ReUI's release assets on a version tag (v0.1.0) or by hand, and attaches them to a
 # GitHub release: ReUI-Setup-<version>.exe (single-file per-user installer) and
 # ReUI-<version>-x64.zip. Packaging is scripts/package.ps1, so it can be run locally too.
+# Also sha256sums.txt (Settings' Install verifies the downloaded setup against it) and the
+# release notes: the version's CHANGELOG.md entry, which Settings shows as "What's new".
 name: Release
 
 on:
@@ -35,6 +37,21 @@ jobs:
         shell: pwsh
         run: ./scripts/package.ps1 -OutDir dist
 
+      - name: Checksums and release notes
+        shell: pwsh
+        run: |
+          $version = ((cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).packages | Where-Object name -eq "reui-hub").version
+          Push-Location dist
+          $sums = Get-ChildItem "ReUI-Setup-*.exe", "ReUI-*-x64.zip" | Sort-Object Name | ForEach-Object { "{0}  {1}" -f (Get-FileHash $_.Name -Algorithm SHA256).Hash.ToLowerInvariant(), $_.Name }
+          [IO.File]::WriteAllText("$PWD/sha256sums.txt", ($sums -join "`n") + "`n")
+          Pop-Location
+          # This version's CHANGELOG entry: from "## <version>" to the next "## ".
+          $lines = Get-Content CHANGELOG.md
+          $start = ($lines | Select-String -Pattern "^## v?$([regex]::Escape($version))(\s|$)" | Select-Object -First 1).LineNumber
+          if (-not $start) { throw "CHANGELOG.md has no entry for $version" }
+          $entry = $lines[$start..($lines.Count - 1)] | ForEach-Object -Begin { $done = $false } -Process { if ($_ -match "^## ") { $done = $true }; if (-not $done) { $_ } }
+          [IO.File]::WriteAllText("$PWD/dist/release-notes.md", (($entry -join "`n").Trim()) + "`n")
+
       - name: Attach to the release
         if: startsWith(github.ref, 'refs/tags/v')
         uses: softprops/action-gh-release@v2
@@ -42,7 +59,8 @@ jobs:
           files: |
             dist/ReUI-Setup-*.exe
             dist/ReUI-*-x64.zip
-          generate_release_notes: true
+            dist/sha256sums.txt
+          body_path: dist/release-notes.md
 
       - name: Keep the build (manual runs)
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}
@@ -52,3 +70,5 @@ jobs:
           path: |
             dist/ReUI-Setup-*.exe
             dist/ReUI-*-x64.zip
+            dist/sha256sums.txt
+            dist/release-notes.md

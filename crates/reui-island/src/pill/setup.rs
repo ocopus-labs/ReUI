@@ -21,6 +21,8 @@ use crate::features::level::Levels;
 use crate::features::music::Swipe;
 use crate::features::visualizer::Visualizer;
 use crate::ipc::Event;
+use crate::drag_guard::DragGuard;
+use crate::place::MonitorChoice;
 use crate::render::{Renderer, COMPACT_SURFACE, EXPANDED_SURFACE, MINIMAL_SURFACE};
 use crate::settings::Visibility;
 
@@ -197,6 +199,9 @@ impl Pill {
             inside: false,
             hovered: false,
             hidden: false,
+            hide_in_fullscreen: true,
+            monitor_choice: MonitorChoice::default(),
+            drag_guard: DragGuard::default(),
             visibility,
             paused: false,
             revealed: false,

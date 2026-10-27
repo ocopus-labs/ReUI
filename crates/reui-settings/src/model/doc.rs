@@ -56,6 +56,11 @@ impl Doc {
         }
     }
 
+    /// Whether the file itself has `key` (not just its default).
+    pub fn has(&self, key: &str) -> bool {
+        matches!(&self.contents, Contents::Valid(map) if map.contains_key(key))
+    }
+
     pub fn default(&self, key: &str) -> Option<&Value> {
         self.defaults.get(key)
     }

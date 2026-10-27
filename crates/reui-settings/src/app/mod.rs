@@ -10,7 +10,8 @@ use std::time::Instant;
 use reui_design::tokens::settings as s;
 use windows::Win32::Foundation::HWND;
 use windows::Win32::Graphics::Gdi::InvalidateRect;
-use windows::Win32::UI::WindowsAndMessaging::{KillTimer, SetTimer};
+use windows::Win32::Foundation::{LPARAM, WPARAM};
+use windows::Win32::UI::WindowsAndMessaging::{KillTimer, PostMessageW, SetTimer, WM_CLOSE};
 
 use crate::keys;
 use crate::pages::{self, Effect, Page};
@@ -18,6 +19,7 @@ use crate::render::{self, Renderer, View};
 use crate::state::State;
 use crate::ui::layout::{self, Layout, Measure};
 use crate::ui::{Act, Block, Focus, Hover, Menu, Part, Role, Target};
+use crate::updates::{self, Phase};
 
 pub const TIMER_ANIM: usize = 1;
 pub const TIMER_STATS: usize = 2;
@@ -58,6 +60,10 @@ pub struct App {
     knobs: HashMap<String, (f32, f32, Instant)>,
     last_frame: Instant,
     reduced_motion: bool,
+    /// The welcome is open and not finished yet: closing the window finishes it (P-1).
+    welcoming: bool,
+    /// The welcome was replayed from About: Done goes back to Settings, not away.
+    replaying: bool,
 }
 
 impl App {
@@ -84,6 +90,8 @@ impl App {
             knobs: HashMap::new(),
             last_frame: Instant::now(),
             reduced_motion,
+            welcoming: false,
+            replaying: false,
         };
         app.set_page(page);
         Ok(app)
@@ -139,6 +147,11 @@ impl App {
                 None => _ = KillTimer(Some(self.hwnd), id),
             }
         };
+        if page.is_welcome() && !self.welcoming {
+            self.welcoming = true;
+            self.replaying = !self.blocks.is_empty() && !self.page.is_welcome();
+            pages::start_welcome(&mut self.state);
+        }
         self.page = page;
         self.scroll = 0.0;
         self.scroll_target = 0.0;
@@ -152,11 +165,15 @@ impl App {
             self.state.stats.reset();
             self.state.stats.sample();
         }
+        if page == Page::About {
+            self.state.whats_new_seen();
+        }
         if page == Page::Privacy {
             self.state.refresh_sizes();
         }
         timer(TIMER_STATS, (page == Page::About).then_some(s::motion::STATS));
-        timer(TIMER_CLOCK, (page == Page::General).then_some(CLOCK_MS));
+        // Times that move on their own: the pause's, the agents' last events.
+        timer(TIMER_CLOCK, matches!(page, Page::General | Page::Agents).then_some(CLOCK_MS));
         self.rebuild();
     }
 
@@ -176,7 +193,7 @@ impl App {
         let (width, height) = self.dips();
         let now = Instant::now();
         let knobs: HashMap<String, f32> = self.knobs.iter().map(|(id, &(from, to, start))| (id.clone(), knob_at(from, to, start, now))).collect();
-        let titles: Vec<&'static str> = Page::ALL.iter().map(|p| p.title()).collect();
+        let titles: Vec<&'static str> = self.page.nav().iter().map(|p| p.title()).collect();
         let typing = match (&self.focus, &self.menu) {
             (Some(Focus::Part(t)), None) if matches!(self.part(t), Some(Part::Field { .. })) => Some(t.clone()),
             _ => None,
@@ -299,8 +316,53 @@ impl App {
                 self.state.hotkey_note = None;
                 keys::start(self.hwnd);
             }
+            Effect::Finish { open_settings } => {
+                self.finish_welcome();
+                if open_settings || std::mem::take(&mut self.replaying) {
+                    self.set_page(Page::General);
+                } else {
+                    unsafe { _ = PostMessageW(Some(self.hwnd), WM_CLOSE, WPARAM(0), LPARAM(0)) };
+                }
+                return;
+            }
+            Effect::CheckUpdates => self.state.updates.check(&self.state.paths, self.hwnd),
+            Effect::Download => self.state.updates.download(self.hwnd),
         }
         self.rebuild();
+    }
+
+    fn finish_welcome(&mut self) {
+        if std::mem::take(&mut self.welcoming) {
+            pages::finish_welcome(&self.state);
+        }
+    }
+
+    /// The window is going away: an open welcome counts as done.
+    pub fn closing(&mut self) {
+        self.finish_welcome();
+    }
+
+    /// The update worker moved on.
+    pub fn on_updates(&mut self) {
+        if let Phase::Ready(path) = self.state.updates.phase() {
+            if self.state.paths.sandbox {
+                // Tests never install anything.
+                self.state.updates.reset(&self.state.paths);
+                self.state.write_error = Some(format!("Downloaded and verified {}; the sandbox doesn't install it", path.display()));
+            } else {
+                match updates::run_installer(&path) {
+                    // The installer stops ReUI and this window, then starts ReUI again.
+                    Ok(()) => unsafe { _ = PostMessageW(Some(self.hwnd), WM_CLOSE, WPARAM(0), LPARAM(0)) },
+                    Err(e) => {
+                        self.state.updates.reset(&self.state.paths);
+                        self.state.write_error = Some(e);
+                    }
+                }
+            }
+        }
+        if self.page == Page::About {
+            self.rebuild();
+        }
     }
 
     fn open_menu(&mut self, target: &Target) {

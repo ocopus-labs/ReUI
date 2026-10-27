@@ -304,6 +304,7 @@ impl App {
             self.send_state().await;
         } else {
             self.toast().await;
+            crate::modules::onboarding::note(crate::modules::onboarding::Moment::Copy { hotkey: (!self.hotkey_taken).then(|| self.settings.hotkey.clone()) });
         }
     }
 

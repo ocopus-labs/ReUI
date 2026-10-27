@@ -1,5 +1,6 @@
-//! The pages: General, one per feature, Privacy & data, About. Each builds its blocks from
-//! the [`State`] and handles what its controls do. Rows bound straight to a settings key
+//! The pages: General, one per feature, Privacy & data, About, and the welcome's three
+//! steps (`--welcome`). Each builds its blocks from the [`State`] and handles what its
+//! controls do. Rows bound straight to a settings key
 //! have the id `file:key` ("media:lyrics"), and their toggles are handled here for all.
 
 mod about;
@@ -10,8 +11,11 @@ mod general;
 mod now_playing;
 mod osd;
 mod privacy;
+mod welcome;
 
+pub use self::about::VERSION;
 pub use self::clipboard::chord as clipboard_chord;
+pub use self::welcome::{finish as finish_welcome, start as start_welcome};
 
 use serde_json::Value;
 
@@ -30,10 +34,17 @@ pub enum Page {
     Agents,
     Privacy,
     About,
+    /// The welcome's steps: what ReUI shows, the clipboard shortcut, start with Windows.
+    WelcomeFeatures,
+    WelcomeShortcut,
+    WelcomeStartup,
 }
 
 impl Page {
+    /// The Settings window's pages, in the nav.
     pub const ALL: [Page; 8] = [Page::General, Page::NowPlaying, Page::Clipboard, Page::Osd, Page::Devices, Page::Agents, Page::Privacy, Page::About];
+    /// The welcome's steps, in its nav.
+    pub const WELCOME: [Page; 3] = [Page::WelcomeFeatures, Page::WelcomeShortcut, Page::WelcomeStartup];
 
     pub fn title(self) -> &'static str {
         match self {
@@ -45,11 +56,28 @@ impl Page {
             Page::Agents => "Coding agents",
             Page::Privacy => "Privacy & data",
             Page::About => "About",
+            Page::WelcomeFeatures => "What ReUI shows",
+            Page::WelcomeShortcut => "Clipboard shortcut",
+            Page::WelcomeStartup => "Start with Windows",
         }
     }
 
+    /// The pages in the same nav as this one.
+    pub fn nav(self) -> &'static [Page] {
+        if self.is_welcome() {
+            &Page::WELCOME
+        } else {
+            &Page::ALL
+        }
+    }
+
+    pub fn is_welcome(self) -> bool {
+        Page::WELCOME.contains(&self)
+    }
+
+    /// Place in its nav.
     pub fn index(self) -> usize {
-        Page::ALL.iter().position(|p| *p == self).unwrap_or(0)
+        self.nav().iter().position(|p| *p == self).unwrap_or(0)
     }
 
     /// `--page clipboard`, for opening on a page.
@@ -66,6 +94,12 @@ pub enum Effect {
     Navigate(Page),
     /// Start listening for a hotkey.
     Record,
+    /// The welcome is done: close, or carry on into Settings.
+    Finish { open_settings: bool },
+    /// About's Install: download and verify the update.
+    Download,
+    /// About's Check for updates.
+    CheckUpdates,
 }
 
 pub fn build(page: Page, state: &State) -> Vec<Block> {
@@ -78,6 +112,7 @@ pub fn build(page: Page, state: &State) -> Vec<Block> {
         Page::Agents => agents::build(state),
         Page::Privacy => privacy::build(state),
         Page::About => about::build(state),
+        Page::WelcomeFeatures | Page::WelcomeShortcut | Page::WelcomeStartup => welcome::build(page, state),
     };
     if let Some(error) = &state.write_error {
         let row = Row::new("write-error", "Couldn't save").detail(error.clone()).tone(Tone::Negative);
@@ -95,9 +130,13 @@ pub fn act(page: Page, state: &mut State, target: &Target, act: Act) -> Effect {
         return Effect::None;
     }
     if let Some((file, key)) = bound(&target.row) {
-        if act == Act::Press && file != File::Island {
+        if act == Act::Press {
             let on = state.files.doc(file).bool(key);
             state.set(file, key, Value::Bool(!on));
+            if key == "enabled" {
+                // Modules are started (or not) with the hub.
+                state.restart_note = state.hub_running();
+            }
             return Effect::None;
         }
     }
@@ -110,6 +149,7 @@ pub fn act(page: Page, state: &mut State, target: &Target, act: Act) -> Effect {
         Page::Agents => agents::act(state, target, act),
         Page::Privacy => privacy::act(state, target, act),
         Page::About => about::act(state, target, act),
+        Page::WelcomeFeatures | Page::WelcomeShortcut | Page::WelcomeStartup => welcome::act(page, state, target, act),
     }
 }
 
@@ -118,6 +158,7 @@ pub fn menu(page: Page, state: &mut State, target: &Target) -> Option<(Vec<Strin
     match page {
         Page::NowPlaying => now_playing::menu(state, target),
         Page::Clipboard => clipboard::menu(state, target),
+        Page::General => general::menu(state, target),
         _ => None,
     }
 }
@@ -151,7 +192,14 @@ fn file_error(state: &State, file: File) -> Option<Block> {
 }
 
 fn intro(title: &str, body: &str) -> Block {
-    Block::Intro { title: title.into(), body: (!body.is_empty()).then(|| body.into()) }
+    Block::Intro { eyebrow: None, title: title.into(), body: (!body.is_empty()).then(|| body.into()) }
+}
+
+/// A feature page's first row: whether the feature runs at all (`enabled` in its file).
+fn enable(state: &State, file: File, title: &str) -> Block {
+    let row = flag(state, file, "enabled", title, "");
+    let row = if state.restart_note { row.detail("Takes effect when ReUI restarts").tone(Tone::Warning) } else { row };
+    group("", vec![row])
 }
 
 /// The intro, then the file's error card if it has one.
@@ -180,7 +228,7 @@ mod tests {
     #[test]
     fn every_page_builds_and_bound_toggles_write_their_key() {
         let (mut state, dir) = state("pages");
-        for page in Page::ALL {
+        for page in Page::ALL.into_iter().chain(Page::WELCOME) {
             let blocks = build(page, &state);
             assert!(matches!(blocks[0], Block::Intro { .. }), "{page:?} starts with its intro");
         }
@@ -213,5 +261,8 @@ mod tests {
         assert_eq!(Page::from_arg("osd"), Some(Page::Osd));
         assert_eq!(Page::from_arg("about"), Some(Page::About));
         assert_eq!(Page::from_arg("zzz"), None);
+        assert_eq!(Page::from_arg("what"), None, "welcome steps aren't Settings pages");
+        assert_eq!((Page::WelcomeShortcut.index(), Page::About.index()), (1, 7));
+        assert!(Page::WelcomeStartup.is_welcome() && !Page::General.is_welcome());
     }
 }

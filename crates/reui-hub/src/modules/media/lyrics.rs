@@ -226,7 +226,7 @@ pub async fn lookup(query: Query) -> Option<Vec<LyricLine>> {
 }
 
 fn cache_dir() -> Option<PathBuf> {
-    std::env::var_os("LOCALAPPDATA").map(|d| PathBuf::from(d).join("ReUI").join("lyrics"))
+    Some(crate::paths::local().join("lyrics"))
 }
 
 fn unix_s() -> u64 {

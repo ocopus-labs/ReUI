@@ -32,7 +32,7 @@ impl Default for Settings {
 
 impl Settings {
     pub fn path() -> PathBuf {
-        std::env::var_os("APPDATA").map(|d| PathBuf::from(d).join("ReUI")).unwrap_or_else(|| PathBuf::from(".")).join("devices.json")
+        crate::paths::config().join("devices.json")
     }
 
     pub fn load() -> Self {

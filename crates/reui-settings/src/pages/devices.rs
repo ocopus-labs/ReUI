@@ -1,12 +1,13 @@
 //! Devices (`devices.json`).
 
-use super::{button, flag, group, head, Effect};
+use super::{button, enable, flag, group, head, Effect};
 use crate::model::files::File;
 use crate::state::State;
 use crate::ui::{Act, Block, Role, Row, Target};
 
 pub fn build(state: &State) -> Vec<Block> {
     let mut blocks = head(state, File::Devices, "Devices", "Bluetooth devices as they connect, batteries before they run out, charging, and drives you plug in, with Eject.");
+    blocks.push(enable(state, File::Devices, "Devices"));
     blocks.push(group(
         "Moments",
         vec![

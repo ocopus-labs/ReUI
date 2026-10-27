@@ -2,7 +2,7 @@
 
 use serde_json::Value;
 
-use super::{flag, group, head, Effect};
+use super::{enable, flag, group, head, Effect};
 use crate::model::files::{File, VISUALIZER};
 use crate::state::State;
 use crate::ui::{Act, Block, Part, Row, Target};
@@ -12,6 +12,7 @@ const RETRACT: [u64; 7] = [1, 5, 10, 15, 30, 60, 0];
 
 pub fn build(state: &State) -> Vec<Block> {
     let mut blocks = head(state, File::Media, "Now Playing", "Whatever plays on this PC, in the island: artwork, controls, a timeline you can scrub, and bars that move with the music.");
+    blocks.push(enable(state, File::Media, "Now Playing"));
     let ok = state.files.doc(File::Media).error().is_none();
     let selected = state.files.visualizer();
     let detail = ["Bars follow the player's own audio", "Bars move without listening to the audio", "Bars stay still"][selected];

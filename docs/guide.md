@@ -1,0 +1,81 @@
+# ReUI guide
+
+ReUI puts a dynamic island at the top of your screen: a small black pill that shows what's happening on your PC and lets you act on it without switching windows. This page covers what each feature does and every shortcut and gesture. Settings (left-click the tray icon, or launch ReUI again from the Start menu) has a page for each feature.
+
+## The island
+
+| Do this | It does |
+| --- | --- |
+| Rest the pointer on the pill | After a short pause it becomes clickable and peeks. Until then clicks go through to what's underneath (browser tabs stay usable) |
+| Click the pill | Opens the card |
+| Move the pointer away | The card folds back |
+| Scroll the wheel over the island | Steps through everything that's going on; over a row of cards it scrolls the row |
+| Click the small bubble beside the pill | Brings that activity into the pill |
+| Right-click the pill or the tray icon | Settings, Pause ReUI for 1 hour, Clipboard history, Devices, Quit |
+| Push the pointer against the top edge | Shows a hidden island (Settings → General → Show the island: When active / When needed) |
+
+The island hides while a game, video or presentation fills the screen (Settings → General → Hide in full screen), and can sit on your main display, the display the pointer is on, or one display you choose (Settings → General → Display).
+
+**Pause ReUI** (tray, or Settings → General) quiets the island and stops recording the clipboard for an hour. Permission requests from coding agents still show.
+
+## Now Playing
+
+Whatever plays on this PC (Spotify, browsers, VLC, Media Player: anything in Windows' media controls) shows its artwork, title and artist, with a timeline and the controls the player offers.
+
+| Do this | It does |
+| --- | --- |
+| Swipe sideways on the pill (trackpad, or a sideways wheel) | Next or previous track |
+| Drag the timeline | Scrub |
+| Click the artwork | Opens the player |
+| Scroll over the volume row | Changes the volume; click its icon to mute |
+
+Synced lyrics are off until you turn them on (Settings → Now Playing → Synced lyrics); song titles are sent to lrclib.net to find them.
+
+## Clipboard history
+
+Everything you copy (text with its formatting, images, files) is kept on this PC and comes back as rich cards. Copies from password managers and anything that looks like a secret are never saved.
+
+| Shortcut | It does |
+| --- | --- |
+| **Win+Alt+V** | Opens or closes clipboard history (change it in Settings → Clipboard) |
+| Type | Searches |
+| ← / → | Selects a card |
+| Enter, or click | Pastes into the app you were in |
+| Shift+Enter, or Shift+click | Pastes as plain text |
+| Ctrl+Enter | Copies only |
+| Alt+1 … Alt+9 | Pastes the 1st … 9th card |
+| Ctrl+P | Pins or unpins |
+| Delete | Deletes (Ctrl+Z brings it back) |
+| Tab | Next tab (All, Pinned, Links, Images, Text, Code, Colors, Files) |
+| Esc | Clears the search, then closes |
+| Right-click a card | Its menu |
+| **Ctrl+Alt+1 … Ctrl+Alt+9** | Pastes a recent item without opening anything |
+
+If the app you paste into runs as administrator, the item is put on the clipboard and the island says "Press Ctrl+V".
+
+## Volume and brightness
+
+The volume and brightness keys show the level in the island. Hover or click it to drag the level, scroll to change it, click the icon to mute, or switch the output device from its menu. Caps Lock, Num Lock, battery saver and microphone mute can show too (Settings → Volume & brightness).
+
+**Replace Windows' pop-up** hides Windows' own volume and brightness pop-up while ReUI runs. It comes back when ReUI quits, and when you uninstall.
+
+## Devices
+
+Bluetooth devices show a card with their battery when they connect; this PC and its devices warn at 20 % and 10 %; plugging in shows the time to full; USB drives and memory cards show with **Eject**. **Devices** in the tray menu shows every connected device's battery. AirPods case and bud levels come from a short Bluetooth scan nearby, so that's off until you turn it on.
+
+## Coding agents
+
+Claude Code, Codex and OpenCode sessions show in the island: what they're doing, when they finish (with time and tokens), and permission requests you can answer with **Allow** / **Deny** (Claude Code also offers **Always**).
+
+Connect an agent in Settings → Coding agents (it shows the file that changes; Disconnect removes exactly what was added). Each agent's row says whether it's connected and when ReUI last heard from it; **Send test** makes the island confirm the connection. Codex asks you to trust new hooks once: run `/hooks` in Codex. OpenCode picks the plugin up on its next start.
+
+## Updates
+
+ReUI checks GitHub for a new version once a day (Settings → About → Check automatically; nothing personal is sent). When one is out, the island mentions it once; **Install** in Settings → About downloads it, checks it, installs it and restarts ReUI. After an update, About shows what changed (Settings → About → What's new after updates).
+
+## Help
+
+- **Replay the tour:** Settings → About → Replay the tour.
+- **Report a bug:** Settings → About → Report a bug opens a GitHub issue with only ReUI's version and the Windows build filled in.
+- **Logs:** `%LOCALAPPDATA%\ReUI` (Settings → About → Logs).
+- **Your data:** settings and clipboard history in `%APPDATA%\ReUI`, caches and logs in `%LOCALAPPDATA%\ReUI` (Settings → Privacy & data).

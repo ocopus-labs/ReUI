@@ -7,7 +7,6 @@ use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, SC_MINIMIZE, WM_CLOS
 use windows::Win32::Foundation::{LPARAM, WPARAM};
 
 use super::{App, Drag};
-use crate::pages::Page;
 use crate::render::menu;
 use crate::ui::layout::{self, Rect};
 use crate::ui::{Act, Focus, Hover, Part, Target};
@@ -44,7 +43,7 @@ impl App {
         if let Some(i) = layout::caption_buttons(w).iter().position(|r| r.contains(x, y)) {
             return Hover::Caption(i);
         }
-        if let Some(i) = layout::nav_items(Page::ALL.len()).iter().position(|r| r.contains(x, y)) {
+        if let Some(i) = layout::nav_items(self.page.nav().len()).iter().position(|r| r.contains(x, y)) {
             return Hover::Nav(i);
         }
         if x >= w - s::scrollbar::HOVER_WIDTH - 2.0 * s::scrollbar::MARGIN && y >= s::caption::HEIGHT && layout::scrollbar(self.scroll, self.layout.height, h).is_some() {
@@ -134,7 +133,7 @@ impl App {
             Hover::Caption(i) => self.pressed_caption = Some(i),
             Hover::Nav(i) => {
                 self.focus = Some(Focus::Nav);
-                self.set_page(Page::ALL[i]);
+                self.set_page(self.page.nav()[i]);
             }
             Hover::Scrollbar => {
                 let (_, h) = self.dips();
@@ -221,8 +220,9 @@ impl App {
             return self.menu_key(vk);
         }
         if vk == VK_TAB && ctrl {
+            let nav = self.page.nav();
             let i = self.page.index() as isize + if shift { -1 } else { 1 };
-            self.set_page(Page::ALL[i.rem_euclid(Page::ALL.len() as isize) as usize]);
+            self.set_page(nav[i.rem_euclid(nav.len() as isize) as usize]);
             return true;
         }
         if vk == VK_TAB {
@@ -265,8 +265,9 @@ impl App {
             }
             (VK_UP | VK_DOWN, Some(Focus::Nav), _) => {
                 self.focus_visible = true;
+                let nav = self.page.nav();
                 let i = self.page.index() as isize + if vk == VK_UP { -1 } else { 1 };
-                self.set_page(Page::ALL[i.clamp(0, Page::ALL.len() as isize - 1) as usize]);
+                self.set_page(nav[i.clamp(0, nav.len() as isize - 1) as usize]);
             }
             (VK_LEFT | VK_RIGHT, _, Some((target, Part::Segmented { options, selected }))) => {
                 let next = if vk == VK_LEFT { selected.saturating_sub(1) } else { (selected + 1).min(options.len() - 1) };

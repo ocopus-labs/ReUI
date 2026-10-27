@@ -10,7 +10,7 @@
 use std::path::{Path, PathBuf};
 
 pub fn installed_path() -> Option<PathBuf> {
-    std::env::var_os("LOCALAPPDATA").map(|dir| PathBuf::from(dir).join("ReUI").join("bin").join("reui-bridge.exe"))
+    Some(crate::paths::local().join("bin").join("reui-bridge.exe"))
 }
 
 /// Replaces `installed` with `source` if they differ. Returns whether it changed anything.

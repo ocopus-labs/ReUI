@@ -8,6 +8,10 @@
 //!
 //! `reui-bridge install claude [--scope user|project|local] [--project DIR]` and
 //! `reui-bridge uninstall claude [...]` add or remove the hook entries.
+//!
+//! `reui-bridge test claude` sends a synthetic event through the same pipe a hook uses
+//! (Settings' "Send test event"); the agent module answers it with a short "connected"
+//! moment in the island, never a session. Exits 1 if ReUI isn't running.
 
 mod install;
 
@@ -37,12 +41,22 @@ fn main() {
                 1
             }
         },
+        Some("test") => match test(args.get(1).map(String::as_str)) {
+            Ok(message) => {
+                println!("{message}");
+                0
+            }
+            Err(e) => {
+                eprintln!("reui-bridge: {e}");
+                1
+            }
+        },
         Some(agent) => {
             hook(agent);
             0
         }
         None => {
-            eprintln!("usage: reui-bridge <agent>  |  reui-bridge install|uninstall <agent> [--scope user|project|local] [--project DIR]");
+            eprintln!("usage: reui-bridge <agent>  |  reui-bridge install|uninstall <agent> [--scope user|project|local] [--project DIR]  |  reui-bridge test <agent>");
             0
         }
     };
@@ -68,6 +82,36 @@ fn hook(agent: &str) {
         _ = stdout.write_all(output.as_bytes());
         _ = stdout.flush();
     }
+}
+
+/// The event `test` sends; the hub's agent module (`modules/agent`) knows it by this name.
+const TEST_EVENT: &str = "ReUITest";
+
+fn test_payload() -> String {
+    serde_json::json!({ "hook_event_name": TEST_EVENT, "session_id": "reui-test" }).to_string()
+}
+
+/// `reui-bridge test <agent>`: the normal hook path, with a synthetic event.
+fn test(agent: Option<&str>) -> Result<String, String> {
+    let agent = match agent {
+        Some(a @ ("claude" | "codex" | "opencode")) => a,
+        other => return Err(format!("unsupported agent {other:?} (supported: claude, codex, opencode)")),
+    };
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|e| e.to_string())?;
+    runtime.block_on(async {
+        let pipe = timeout(CONNECT_TIMEOUT, connect()).await.ok().flatten().ok_or("ReUI isn't running")?;
+        let (mut reader, mut writer) = tokio::io::split(pipe);
+        write_frame(&mut writer, &ClientMsg::Hello { version: PROTOCOL_VERSION, surface: SurfaceKind::Bridge }).await.map_err(|e| e.to_string())?;
+        match timeout(CONNECT_TIMEOUT, read_frame::<_, HubMsg>(&mut reader)).await {
+            Ok(Ok(HubMsg::Welcome { .. })) => {}
+            Ok(Ok(HubMsg::Rejected { reason })) => return Err(format!("ReUI refused the test: {reason}")),
+            _ => return Err("ReUI didn't answer".into()),
+        }
+        write_frame(&mut writer, &ClientMsg::Hook { agent: agent.to_string(), payload: test_payload(), wants_reply: false }).await.map_err(|e| e.to_string())?;
+        // Let the hub read it before the pipe closes.
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        Ok("Sent a test event to ReUI".to_string())
+    })
 }
 
 async fn forward(agent: &str, payload: String, wants_reply: bool) -> Option<String> {
@@ -98,5 +142,19 @@ async fn connect() -> Option<tokio::net::windows::named_pipe::NamedPipeClient> {
             Err(e) if e.raw_os_error() == Some(ERROR_PIPE_BUSY) => tokio::time::sleep(Duration::from_millis(20)).await,
             Err(_) => return None,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_test_event_is_named_and_never_waits() {
+        let payload: serde_json::Value = serde_json::from_str(&test_payload()).unwrap();
+        assert_eq!(payload["hook_event_name"], TEST_EVENT);
+        assert!(payload["session_id"].is_string());
+        assert!(test(Some("vim")).is_err());
+        assert!(test(None).is_err());
     }
 }

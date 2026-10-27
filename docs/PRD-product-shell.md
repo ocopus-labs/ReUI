@@ -122,13 +122,13 @@ Each offer appears **once** and is remembered. *Not now* means the feature waits
 ### 5.4 In-island tips
 
 - One-time, contextual, short, dismissed by use.
-- Tracked in `%APPDATA%\ReUI\tips.json`.
+- Tracked in `%APPDATA%\ReUI\onboarding.json` (built Oct 28: `welcomed`, `tips`, `offers` accepted/declined, `counts`).
 - Never permanent filler text (DESIGN's no-filler rule still holds: tips are first-time teaching, not decoration).
 
 ### 5.5 Updates, uninstall, help
 
 - **Updates:**
-  - Store/winget handle delivery.
+  - ~~Store/winget handle delivery.~~ GitHub releases (Oct 28): ReUI checks once a day (opt-out) and installs from Settings → About.
   - The app shows "What's new" once after an update (can be turned off).
   - Settings survive updates (schema migrations).
 - **Uninstall:**
@@ -143,11 +143,11 @@ Each offer appears **once** and is remembered. *Not now* means the feature waits
 
 | Risk | Requirement | Today |
 |---|---|---|
-| Covers browser tabs / taskbar | The island takes clicks only on its visible shape after hover intent; no opening on drag-over (boring.notch #1530) | Hover intent exists; drag-over not handled |
-| Shows over fullscreen | Hidden in fullscreen games, video and presentations by default (setting) | Hidden for fullscreen windows; verify games/video/presentation modes |
-| Breaks after sleep / Explorer restart | Re-place and re-raise after resume, display changes and `TaskbarCreated` | Topmost re-asserted on foreground changes; resume path to verify |
+| Covers browser tabs / taskbar | The island takes clicks only on its visible shape after hover intent; no opening on drag-over (boring.notch #1530) | Done (P5): a button held from elsewhere (tab, file, selection) blocks hover intent until it's released |
+| Shows over fullscreen | Hidden in fullscreen games, video and presentations by default (setting) | Done (P5): exclusive D3D, presentation mode, "busy" and any window covering the display (borderless games, players, browser video, rechecked as the window resizes); `hide_in_fullscreen` |
+| Breaks after sleep / Explorer restart | Re-place and re-raise after resume, display changes and `TaskbarCreated` | Done (P5): re-placed and re-raised after resume (twice), display, DPI and work-area changes and `TaskbarCreated` (tray icon re-added) |
 | Idle cost doubts | Measured idle numbers in About | — |
-| Multi-monitor | Choose the monitor; correct centring at any DPI | Primary only |
+| Multi-monitor | Choose the monitor; correct centring at any DPI | Done (P5): `monitor` = primary / cursor (when an activity appears) / a display name; rebuilt at that display's DPI |
 
 ## 6. Edge cases
 
@@ -160,7 +160,7 @@ Each offer appears **once** and is remembered. *Not now* means the feature waits
 | P-5 | Two ReUI versions (Store + installer) | The second instance opens the first's Settings and quits |
 | P-6 | Uninstall while Windows' pop-up is hidden | Restored before removal |
 | P-7 | Agent config file edited by the user later | Connect status re-checks; never overwrites their changes silently |
-| P-8 | No internet | Nothing in the shell needs it (updates through the Store) |
+| P-8 | No internet | Nothing in the shell needs it; an update check fails quietly and tries again the next day |
 | P-9 | Accessibility (screen reader, keyboard-only, high contrast) | Settings fully keyboard-operable and named; reduced motion respected everywhere |
 
 ## 7. Milestones
@@ -169,10 +169,10 @@ Each offer appears **once** and is remembered. *Not now* means the feature waits
 |---|---|---|
 | **P0: Package & start** (*built Oct 28: per-user `ReUI-Setup.exe` + zip via GitHub Actions, HKCU Run, Start entry, Apps & features uninstall, single instance → Settings*) | MSIX packaging (Store-ready manifest, startupTask), signed GitHub build, single instance, Start entry → Settings, short tray menu, quit/pause | A friend installs from a link without warnings and it starts at login |
 | **P1: Settings window** (*built Oct 28: custom native window in the island's design language, not Fluent; live reload; short tray*) | General + feature pages + Privacy + About (idle cost, logs, report bug); modules reload on change; tray toggles removed | Every JSON setting reachable; nothing requires editing files |
-| **P2: First run** | 5-s demo, welcome (3 steps, once), one-time in-island tips, contextual offers (flyout, lyrics, agents) | A first-time tester understands hover, the clipboard hotkey and agents without the README |
-| **P3: Agents in the GUI** | Connect/Disconnect per agent, file diff preview, status, test event | Claude Code connected with two clicks |
-| **P4: Updates, uninstall, help** | "What's new", clean uninstall (hooks, startup, flyout, data), online guide, replay tour | Uninstall leaves nothing behind |
-| **P5: Behaviour fixes** | Drag-over guard, fullscreen variants, resume/Explorer recovery, monitor choice | The section 5.6 table all green |
+| **P2: First run** (*built Oct 28: hub `onboarding` module: 5-s demo card, "Hover me" until the first hover, then `reui-settings --welcome`; one-time tips and offers (clipboard hotkey, volume pop-up, coding agents by process, lyrics), queued, never in fullscreen or pause; new users default to "When active"*) | 5-s demo, welcome (3 steps, once), one-time in-island tips, contextual offers (flyout, lyrics, agents) | A first-time tester understands hover, the clipboard hotkey and agents without the README |
+| **P3: Agents in the GUI** (*built Oct 28: per-agent status "Connected · last event 2 min ago" / "no events yet" / "Not connected" / "Agent not found on this PC" from the hub's throttled `agents.json`; Send test (`reui-bridge test <agent>`) answered by a Brief "Connected", never a session; the file that changes; no file diff preview yet*) | Connect/Disconnect per agent, file diff preview, status, test event | Claude Code connected with two clicks |
+| **P4: Updates, uninstall, help** (*built Oct 28: GitHub releases: daily check (hub runs `reui-settings --check-updates`; on by default, disclosed in Privacy), "Update available" Brief once per version, Install downloads + verifies size and `sha256sums.txt` then runs the setup `--quiet`; What's new once after an update from the CHANGELOG entry (release notes are that entry too); `docs/guide.md`; Replay the tour (`--welcome`). Updates are untested against a real release until the repository constant is set*) | "What's new", clean uninstall (hooks, startup, flyout, data), online guide, replay tour | Uninstall leaves nothing behind |
+| **P5: Behaviour fixes** (*built Oct 28: see the 5.6 table*) | Drag-over guard, fullscreen variants, resume/Explorer recovery, monitor choice | The section 5.6 table all green |
 
 ## 8. Open decisions
 

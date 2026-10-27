@@ -254,6 +254,12 @@ impl ModuleContext {
         _ = self.hub.focus.send(ActivityId { module: self.module.to_string(), key: key.to_string() });
     }
 
+    /// Sends another module a command, as the tray and the Settings window do (`reload`,
+    /// `lyrics:on`).
+    pub fn command(&self, module: &str, action: &str) {
+        self.hub.route_command(module, action.to_string());
+    }
+
     pub fn retract(&self, key: &str) {
         self.hub.retract(&ActivityId { module: self.module.to_string(), key: key.to_string() });
     }

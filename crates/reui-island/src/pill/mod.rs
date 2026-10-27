@@ -32,6 +32,8 @@ use crate::features::music::{self, SeekHold, Swipe, Throttle};
 use crate::features::visualizer::Visualizer;
 use crate::ipc::Event;
 use crate::render::{self, Hit, Interaction, Renderer, Thumb};
+use crate::drag_guard::DragGuard;
+use crate::place::MonitorChoice;
 use crate::settings::Visibility;
 use crate::{images, order};
 
@@ -139,6 +141,12 @@ pub struct Pill {
     hovered: bool,
     /// A fullscreen app is in front.
     hidden: bool,
+    /// The `hide_in_fullscreen` setting.
+    hide_in_fullscreen: bool,
+    /// The `monitor` setting.
+    monitor_choice: MonitorChoice,
+    /// A drag from elsewhere is passing over: hover intent doesn't count.
+    drag_guard: DragGuard,
     visibility: Visibility,
     /// "Pause ReUI" is on (settings.json): hidden whatever happens until it ends.
     paused: bool,
@@ -180,6 +188,34 @@ pub struct Pill {
 impl Pill {
     fn front(&self) -> Option<&Activity> {
         self.snapshot.activities.first()
+    }
+
+    /// Nothing is happening (no activities from the hub).
+    pub fn idle(&self) -> bool {
+        self.raw.activities.is_empty()
+    }
+
+    /// Hands over the hub link and the last snapshot, for a pill rebuilt at another scale
+    /// (see `main::rebuild`). This pill is left without a link.
+    pub fn take_link(&mut self) -> (UnboundedSender<ClientMsg>, Receiver<Event>, Snapshot) {
+        let to_hub = std::mem::replace(&mut self.to_hub, tokio::sync::mpsc::unbounded_channel().0);
+        let events = std::mem::replace(&mut self.events, std::sync::mpsc::channel().1);
+        (to_hub, events, std::mem::take(&mut self.raw))
+    }
+
+    /// Shows `snapshot` on a freshly built pill: its images are decoded again from the
+    /// encoded copies the link keeps.
+    pub fn restore(&mut self, snapshot: Snapshot) {
+        for id in clipboard::referenced(&snapshot) {
+            if let Some(bytes) = images::get(id) {
+                if let Err(e) = self.renderer.add_image(id, &bytes) {
+                    eprintln!("island: can't decode image: {e}");
+                }
+            }
+        }
+        if let Err(e) = self.apply(snapshot) {
+            eprintln!("island: render failed: {e}");
+        }
     }
 
     /// Apply everything the hub link queued; only the newest snapshot matters. Messages for
@@ -318,6 +354,9 @@ impl Pill {
                     }
                 } else if (is_new && was_decision && !self.hovered) || self.state == State::Idle {
                     // An answered decision folds away; the first activity wakes an idle pill.
+                    self.set_state(State::Compact);
+                } else if self.state == State::Expanded && !expandable {
+                    // The card was taken away (a module folding its own card): back to compact.
                     self.set_state(State::Compact);
                 }
             }

@@ -64,7 +64,9 @@ impl Rect {
 /// A placed block piece, for drawing.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Shape {
-    Intro { block: usize, title: Rect, body: Option<Rect> },
+    Intro { block: usize, eyebrow: Option<Rect>, title: Rect, body: Option<Rect> },
+    /// A text well: the well, its title line and its wrapped body.
+    Text { block: usize, rect: Rect, title: Rect, body: Rect },
     Label { block: usize, rect: Rect },
     /// A row's well: corner radii at the top and bottom (outer or inner), and where its text
     /// may go.
@@ -118,10 +120,15 @@ pub fn layout(blocks: &[Block], width: f32, m: &impl Measure) -> Layout {
             y += if matches!(blocks[i - 1], Block::Intro { .. }) { s::page::INTRO_AFTER } else { s::page::GROUP_GAP };
         }
         match block {
-            Block::Intro { title, body } => {
+            Block::Intro { eyebrow, body, .. } => {
+                let eyebrow = eyebrow.as_ref().map(|_| {
+                    let h = s::typography::LABEL.line_height;
+                    let rect = Rect::new(0.0, y, width, y + h);
+                    y += h + s::page::LABEL_GAP;
+                    rect
+                });
                 let title_h = s::typography::TITLE.line_height;
                 let title_rect = Rect::new(0.0, y, width, y + title_h);
-                let _ = title;
                 y += title_h;
                 let body = body.as_ref().map(|text| {
                     y += s::page::INTRO_GAP;
@@ -130,7 +137,25 @@ pub fn layout(blocks: &[Block], width: f32, m: &impl Measure) -> Layout {
                     y += h;
                     rect
                 });
-                out.shapes.push(Shape::Intro { block: i, title: title_rect, body });
+                out.shapes.push(Shape::Intro { block: i, eyebrow, title: title_rect, body });
+            }
+            Block::Text { label, body, .. } => {
+                if label.is_some() {
+                    let h = s::typography::LABEL.line_height;
+                    out.shapes.push(Shape::Label { block: i, rect: Rect::new(s::row::PADDING, y, width, y + h) });
+                    y += h + s::page::LABEL_GAP;
+                }
+                let inner = (width - 2.0 * s::row::PADDING).max(1.0);
+                let title_h = s::typography::ROW_TITLE.line_height;
+                let body_h = m.height(body, Font::RowDetail, inner);
+                let h = 2.0 * s::row::PADDING + title_h + s::row::LINE_GAP + body_h;
+                let rect = Rect::new(0.0, y, width, y + h);
+                let t = y + s::row::PADDING;
+                let title = Rect::new(s::row::PADDING, t, width - s::row::PADDING, t + title_h);
+                let bt = t + title_h + s::row::LINE_GAP;
+                let body = Rect::new(s::row::PADDING, bt, width - s::row::PADDING, bt + body_h);
+                out.shapes.push(Shape::Text { block: i, rect, title, body });
+                y += h;
             }
             Block::Group { label, rows } => {
                 if label.is_some() {
@@ -348,7 +373,7 @@ mod tests {
 
     fn page() -> Vec<Block> {
         vec![
-            Block::Intro { title: "Clipboard".into(), body: Some("x".repeat(200)) },
+            Block::Intro { eyebrow: None, title: "Clipboard".into(), body: Some("x".repeat(200)) },
             group("History", vec![
                 Row::new("a", "One").detail("quiet").part(Part::Toggle { on: true }),
                 Row::new("b", "Two").part(button("Open", Role::Secondary)).part(Part::Remove),
@@ -377,6 +402,24 @@ mod tests {
         assert_eq!(rows[3].0.t, rows[2].0.b + s::page::GROUP_GAP);
         assert_eq!((rows[3].1, rows[3].2), (s::row::RADIUS, s::row::RADIUS));
         assert_eq!(l.height, rows[3].0.b + s::page::BOTTOM);
+    }
+
+    #[test]
+    fn eyebrows_sit_above_the_title_and_text_wells_wrap() {
+        let blocks = vec![
+            Block::Intro { eyebrow: Some("Step 1 of 3".into()), title: "What ReUI shows".into(), body: None },
+            Block::Text { label: Some("What's new".into()), title: "ReUI 0.2.0".into(), body: "y".repeat(200), accent: true },
+        ];
+        let l = layout(&blocks, 600.0, &Fixed);
+        let Shape::Intro { eyebrow: Some(eyebrow), title, .. } = &l.shapes[0] else { panic!("intro first") };
+        assert_eq!(eyebrow.t, s::page::TOP);
+        assert_eq!(title.t, eyebrow.b + s::page::LABEL_GAP);
+        let Some(Shape::Text { rect, title, body, .. }) = l.shapes.iter().find(|s| matches!(s, Shape::Text { .. })) else { panic!("a text well") };
+        assert_eq!(title.t, rect.t + s::row::PADDING);
+        // 1400 DIPs of text in 600 - 2 × padding wraps to 3 lines of 20.
+        assert_eq!(body.h(), 60.0);
+        assert_eq!(rect.b, body.b + s::row::PADDING);
+        assert_eq!(l.height, rect.b + s::page::BOTTOM);
     }
 
     #[test]

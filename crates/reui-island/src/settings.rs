@@ -1,12 +1,18 @@
-//! User settings for the island, stored as JSON in `%APPDATA%\ReUI\settings.json`.
-//! Written by the Settings window and the tray (pause); the island watches the folder
-//! ([`watch`]) and applies changes as they land. Unknown or missing fields fall back to
-//! defaults; keys this version doesn't know are kept when saving, and a file that isn't a
-//! JSON object is never overwritten.
+//! User settings for the island, stored as JSON in `%APPDATA%\ReUI\settings.json`
+//! (`REUI_CONFIG_DIR\roaming` when that's set, for testing). Written by the Settings window
+//! and the tray (pause); the island watches the folder ([`watch`]) and applies changes as
+//! they land. Unknown or missing fields fall back to defaults; keys this version doesn't
+//! know are kept when saving, and a file that isn't a JSON object is never overwritten.
+//!
+//! Keys: `visibility` ("always" | "when-active" | "when-needed"), `paused_until` (Unix ms),
+//! `hide_in_fullscreen` (bool, default true), `monitor` ("primary" | "cursor" | a display's
+//! device name such as `\\.\DISPLAY2`).
 
 use std::path::{Path, PathBuf};
 
 use reui_protocol::{Activity, Priority};
+
+use crate::place::MonitorChoice;
 use serde_json::{Map, Value};
 use windows::core::HSTRING;
 use windows::Win32::Foundation::{HWND, LPARAM, WAIT_OBJECT_0, WPARAM};
@@ -63,17 +69,31 @@ impl Visibility {
     }
 }
 
-#[derive(Default, Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, PartialEq, Clone)]
 pub struct Settings {
     pub visibility: Visibility,
     /// "Pause ReUI": the island stays hidden (and clipboard recording is paused) until this
     /// Unix time in ms. A time in the past means not paused.
     pub paused_until: Option<u64>,
+    /// Hide while a game, video or presentation is fullscreen.
+    pub hide_in_fullscreen: bool,
+    /// Which display the island sits on.
+    pub monitor: MonitorChoice,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self { visibility: Visibility::default(), paused_until: None, hide_in_fullscreen: true, monitor: MonitorChoice::default() }
+    }
 }
 
 impl Settings {
     pub fn dir() -> Option<PathBuf> {
-        std::env::var_os("APPDATA").map(|dir| PathBuf::from(dir).join("ReUI"))
+        let var = |name: &str| std::env::var_os(name).filter(|v| !v.is_empty()).map(PathBuf::from);
+        match var("REUI_CONFIG_DIR") {
+            Some(root) => Some(root.join("roaming")),
+            None => var("APPDATA").map(|dir| dir.join("ReUI")),
+        }
     }
 
     fn path() -> Option<PathBuf> {
@@ -89,6 +109,8 @@ impl Settings {
         Self {
             visibility: map.get("visibility").and_then(Value::as_str).and_then(Visibility::parse).unwrap_or_default(),
             paused_until: map.get("paused_until").and_then(Value::as_u64),
+            hide_in_fullscreen: map.get("hide_in_fullscreen").and_then(Value::as_bool).unwrap_or(true),
+            monitor: map.get("monitor").and_then(Value::as_str).map(MonitorChoice::parse).unwrap_or_default(),
         }
     }
 
@@ -161,8 +183,12 @@ mod tests {
 
     #[test]
     fn reads_what_it_writes_and_tolerates_junk() {
-        let s = Settings { visibility: Visibility::WhenNeeded, paused_until: Some(5) };
+        let s = Settings { visibility: Visibility::WhenNeeded, paused_until: Some(5), ..Settings::default() };
         assert_eq!(Settings::parse(r#"{"visibility":"when-needed","paused_until":5}"#), s);
+        let full = Settings::parse(r#"{"hide_in_fullscreen":false,"monitor":"cursor"}"#);
+        assert_eq!((full.hide_in_fullscreen, full.monitor), (false, MonitorChoice::Cursor));
+        assert_eq!(Settings::parse(r#"{"monitor":"\\\\.\\DISPLAY2"}"#).monitor, MonitorChoice::Named(r"\\.\DISPLAY2".into()));
+        assert!(Settings::default().hide_in_fullscreen);
         // Missing or extra fields fall back to defaults instead of failing.
         assert_eq!(Settings::parse(r#"{"other":1}"#), Settings::default());
         assert_eq!(Settings::parse(r#"{"visibility":"sometimes"}"#), Settings::default());
@@ -174,11 +200,11 @@ mod tests {
         let dir = std::env::temp_dir().join(format!("reui-island-settings-{}", std::process::id()));
         _ = std::fs::remove_dir_all(&dir);
         let path = dir.join("settings.json");
-        let s = Settings { visibility: Visibility::WhenActive, paused_until: Some(42) };
+        let s = Settings { visibility: Visibility::WhenActive, paused_until: Some(42), ..Settings::default() };
         s.save_to(&path).unwrap();
         assert_eq!(Settings::parse(&std::fs::read_to_string(&path).unwrap()), s);
         std::fs::write(&path, r#"{ "future": [1], "visibility": "always", "paused_until": 9 }"#).unwrap();
-        Settings { visibility: Visibility::WhenNeeded, paused_until: None }.save_to(&path).unwrap();
+        Settings { visibility: Visibility::WhenNeeded, paused_until: None, ..Settings::default() }.save_to(&path).unwrap();
         let saved: Value = serde_json::from_str(&std::fs::read_to_string(&path).unwrap()).unwrap();
         assert_eq!((saved["future"][0].as_u64(), saved["visibility"].as_str(), saved.get("paused_until")), (Some(1), Some("when-needed"), None));
         std::fs::write(&path, "{ broken").unwrap();

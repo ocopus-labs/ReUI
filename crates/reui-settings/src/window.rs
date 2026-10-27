@@ -297,7 +297,12 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             keys::stop();
             LRESULT(0)
         }
+        crate::updates::WM_UPDATES => {
+            with_app(|app| app.on_updates());
+            LRESULT(0)
+        }
         WM_DESTROY => {
+            with_app(|app| app.closing());
             PostQuitMessage(0);
             LRESULT(0)
         }

@@ -105,7 +105,7 @@ struct Hidden {
 static HIDDEN: Mutex<Option<Hidden>> = Mutex::new(None);
 
 fn marker() -> PathBuf {
-    std::env::var_os("LOCALAPPDATA").map(|d| PathBuf::from(d).join("ReUI")).unwrap_or_else(|| PathBuf::from(".")).join("flyout-hidden.json")
+    crate::paths::local().join("flyout-hidden.json")
 }
 
 fn alive(hwnd: isize) -> bool {

@@ -25,6 +25,14 @@ Running the setup again, or a newer one, upgrades in place; your settings and cl
 
 Setup options: `--no-autostart` (don't start with Windows), `--no-launch`, `--quiet` (no message boxes).
 
+## Guide
+
+What each feature does, and every shortcut and gesture: [docs/guide.md](docs/guide.md). Settings → About → Replay the tour shows the three welcome steps again.
+
+## Updates
+
+ReUI looks for a new GitHub release once a day (Settings → About → Check automatically, on by default; Privacy & data lists it): the hub runs `reui-settings.exe --check-updates`, which asks `api.github.com` for the latest release and notes it in `%LOCALAPPDATA%\ReUI\update.json`, and the island mentions a new version once. **Install** in Settings → About downloads `ReUI-Setup-<version>.exe` to `%TEMP%`, checks its size and its SHA-256 against the release's `sha256sums.txt`, and runs it with `--quiet` (it stops ReUI, upgrades and starts it again). On the first start of a new version, About shows that version's CHANGELOG entry once (Settings → About → What's new after updates). The repository is one constant, `REPOSITORY` in `crates/reui-settings/src/updates/mod.rs`; while it's the placeholder, nothing is checked.
+
 ## Uninstall
 
 **Settings → Apps → Installed apps → ReUI → Uninstall**, or run `%LOCALAPPDATA%\Programs\ReUI\reui-setup.exe --uninstall`. It stops ReUI, puts back Windows' volume pop-up if ReUI was replacing it, removes the coding-agent hooks it installed, start with Windows and the Start menu entry, then asks whether to delete your data too (clipboard history, settings, caches). `--quiet` uninstalls without asking and keeps your data.
@@ -49,7 +57,10 @@ One `agent` module per agent shows each session (thinking, the current tool, wai
 %LOCALAPPDATA%\ReUI\bin\reui-bridge.exe install codex    [--scope user|project]   then trust the hooks in Codex: /hooks
 %LOCALAPPDATA%\ReUI\bin\reui-bridge.exe install opencode [--scope user|project]   loaded on OpenCode's next start
 %LOCALAPPDATA%\ReUI\bin\reui-bridge.exe uninstall <agent> [same options]
+%LOCALAPPDATA%\ReUI\bin\reui-bridge.exe test <agent>      the island answers "Connected" (exits 1 if ReUI isn't running)
 ```
+
+Settings → Coding agents does the same with Connect / Disconnect / Send test, and shows each agent's status ("Connected · last event 2 min ago", "Agent not found on this PC"); the hub notes each agent's last event in `%LOCALAPPDATA%\ReUI\agents.json` (at most one write per 10 s).
 
 | Agent | What gets installed | Usage from |
 | --- | --- | --- |

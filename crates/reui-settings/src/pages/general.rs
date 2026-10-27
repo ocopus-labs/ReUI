@@ -1,9 +1,9 @@
-//! General: start with Windows, when the island shows, and pausing ReUI.
+//! General: start with Windows, where and when the island shows, and pausing ReUI.
 
 use serde_json::Value;
 
-use super::{button, group, head, Effect};
-use crate::model::files::{File, VISIBILITY};
+use super::{button, flag, group, head, Effect};
+use crate::model::files::{File, MONITOR_CURSOR, MONITOR_PRIMARY, VISIBILITY};
 use crate::state::State;
 use crate::system::{self, Startup};
 use crate::ui::{Act, Block, Part, Role, Row, Target, Tone};
@@ -33,7 +33,9 @@ pub fn build(state: &State) -> Vec<Block> {
         .detail(detail)
         .part(Part::Segmented { options: vec!["Always".into(), "When active".into(), "When needed".into()], selected })
         .enabled(doc_ok);
-    blocks.push(group("Island", vec![visibility]));
+    let monitor = Row::new("monitor", "Display").detail("Where the island sits").part(Part::Dropdown { label: monitor_label(&state.files.monitor()) }).enabled(doc_ok);
+    let fullscreen = flag(state, File::Island, "hide_in_fullscreen", "Hide in full screen", "Games, videos and presentations keep the whole screen");
+    blocks.push(group("Island", vec![visibility, monitor, fullscreen]));
 
     let left = state.files.paused_until().and_then(|until| until.checked_sub(reui_protocol::unix_ms())).filter(|&ms| ms > 0);
     let pause = match left {
@@ -44,8 +46,44 @@ pub fn build(state: &State) -> Vec<Block> {
     blocks
 }
 
+/// How the `monitor` value reads.
+fn monitor_label(value: &str) -> String {
+    match value {
+        MONITOR_PRIMARY => "Main display".into(),
+        MONITOR_CURSOR => "Where the pointer is".into(),
+        device => system::monitor_label(device),
+    }
+}
+
+/// The choices: main display, where the pointer is, then each display (and the saved one,
+/// if it isn't connected now).
+fn monitor_choices(state: &State) -> Vec<String> {
+    let mut list = vec![MONITOR_PRIMARY.to_string(), MONITOR_CURSOR.to_string()];
+    list.extend(state.monitors.iter().map(|(device, _)| device.clone()));
+    let current = state.files.monitor();
+    if !list.contains(&current) {
+        list.push(current);
+    }
+    list
+}
+
+pub fn menu(state: &mut State, target: &Target) -> Option<(Vec<String>, Option<usize>)> {
+    if target.row != "monitor" {
+        return None;
+    }
+    state.monitors = system::monitors();
+    let list = monitor_choices(state);
+    let current = state.files.monitor();
+    Some((list.iter().map(|m| monitor_label(m)).collect(), list.iter().position(|m| *m == current)))
+}
+
 pub fn act(state: &mut State, target: &Target, act: Act) -> Effect {
     match (target.row.as_str(), act) {
+        ("monitor", Act::Choose(i)) => {
+            if let Some(choice) = monitor_choices(state).get(i).cloned() {
+                state.set(File::Island, "monitor", Value::String(choice));
+            }
+        }
         ("startup", Act::Press) => {
             match state.startup {
                 Startup::DisabledInTaskManager => system::open_task_manager(),
@@ -87,6 +125,24 @@ mod tests {
         assert_eq!(state.files.paused_until(), None);
         let saved: Value = serde_json::from_str(&std::fs::read_to_string(dir.join("roaming").join("settings.json")).unwrap()).unwrap();
         assert_eq!(saved["visibility"], "when-active");
+        assert_eq!(saved["hide_in_fullscreen"], true, "a new file gets every default");
+        _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_monitor_and_fullscreen_keys_are_written() {
+        let (mut state, dir) = state("general-monitor");
+        state.monitors = vec![(r"\\.\DISPLAY1".into(), "Display 1".into()), (r"\\.\DISPLAY2".into(), "Display 2".into())];
+        act(&mut state, &Target::new("monitor", 0), Act::Choose(1));
+        assert_eq!(state.files.monitor(), "cursor");
+        act(&mut state, &Target::new("monitor", 0), Act::Choose(3));
+        assert_eq!(state.files.monitor(), r"\\.\DISPLAY2");
+        assert_eq!(monitor_label(&state.files.monitor()), "Display 2");
+        // Unplugged: still listed, so the menu shows what's saved.
+        state.monitors.clear();
+        assert_eq!(monitor_choices(&state), ["primary", "cursor", r"\\.\DISPLAY2"]);
+        crate::pages::act(crate::pages::Page::General, &mut state, &Target::new("island:hide_in_fullscreen", 0), Act::Press);
+        assert!(!state.files.doc(File::Island).bool("hide_in_fullscreen"));
         _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -60,6 +60,11 @@ const NEUTRAL_ACCENT: Rgb = Rgb(229, 229, 234);
 
 pub struct NowPlaying;
 
+/// Whether media.json has synced lyrics on (for onboarding's offer).
+pub fn lyrics_on() -> bool {
+    Settings::load().lyrics
+}
+
 impl Module for NowPlaying {
     fn name(&self) -> &'static str {
         "media"
@@ -563,6 +568,9 @@ impl State {
         let Some(length_ms) = card.timeline.map(|t| t.length_ms).filter(|&l| l > 0) else { return };
         // Video sources too: music is often played as YouTube videos, and LRCLIB only answers
         // when title, artist and length match a real song (other videos simply find nothing).
+        if !self.settings.lyrics && !card.ad && !sessions::is_browser(&card.app) && lyrics::Query::new(&card.title, &card.artist, &card.album, length_ms, false).is_some() {
+            crate::modules::onboarding::note(crate::modules::onboarding::Moment::Song);
+        }
         if !self.settings.lyrics || card.ad || self.lyrics_asked.as_deref() == Some(card.track.as_str()) {
             return;
         }

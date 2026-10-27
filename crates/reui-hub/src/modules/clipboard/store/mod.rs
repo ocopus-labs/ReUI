@@ -25,7 +25,7 @@ mod items;
 mod query;
 mod schema;
 
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::time::Duration;
 
 use rusqlite::{Connection, Result};
@@ -211,7 +211,7 @@ pub struct Store {
 
 impl Store {
     pub fn open() -> Result<Self> {
-        let dir = std::env::var_os("APPDATA").map(|d| PathBuf::from(d).join("ReUI")).unwrap_or_else(|| PathBuf::from("."));
+        let dir = crate::paths::config();
         _ = std::fs::create_dir_all(&dir);
         let path = dir.join("clipboard.db");
         match Self::open_at(&path) {

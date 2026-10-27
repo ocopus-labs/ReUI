@@ -3,7 +3,7 @@
 
 use serde_json::Value;
 
-use super::{button, flag, group, head, Effect};
+use super::{button, enable, flag, group, head, Effect};
 use crate::keys;
 use crate::model::files::{add_app, File};
 use crate::model::hotkey::{self, Hotkey, Problem};
@@ -15,6 +15,7 @@ const RETENTION: [u64; 6] = [1, 7, 30, 90, 365, 0];
 
 pub fn build(state: &State) -> Vec<Block> {
     let mut blocks = head(state, File::Clipboard, "Clipboard", "A history of what you copy, kept on this PC, to search and paste again. Copies from password managers and anything that looks like a secret are never saved.");
+    blocks.push(enable(state, File::Clipboard, "Clipboard history"));
     let ok = state.files.doc(File::Clipboard).error().is_none();
 
     let hotkey = state.files.hotkey();

@@ -15,8 +15,11 @@ pub fn draw(p: &Painter, v: &View, dx: f32, dy: f32) -> Result<()> {
     let visible = |r: &Rect| r.b + dy >= 0.0 && r.t + dy <= v.height;
     for shape in &v.layout.shapes {
         match shape {
-            Shape::Intro { block, title, body } => {
-                let Block::Intro { title: text, body: paragraph } = &v.blocks[*block] else { continue };
+            Shape::Intro { block, eyebrow, title, body } => {
+                let Block::Intro { eyebrow: label, title: text, body: paragraph } = &v.blocks[*block] else { continue };
+                if let (Some(r), Some(label)) = (eyebrow, label) {
+                    p.text(label, Font::Label, r.offset(dx, dy), Align::Start, color::label::SECONDARY)?;
+                }
                 p.text(text, Font::Title, title.offset(dx, dy), Align::Start, color::label::PRIMARY)?;
                 if let (Some(r), Some(paragraph)) = (body, paragraph) {
                     p.paragraph(paragraph, Font::Intro, r.offset(dx, dy), color::label::SECONDARY)?;
@@ -24,7 +27,7 @@ pub fn draw(p: &Painter, v: &View, dx: f32, dy: f32) -> Result<()> {
             }
             Shape::Label { block, rect } if visible(rect) => {
                 let text = match &v.blocks[*block] {
-                    Block::Group { label: Some(label), .. } | Block::Figures { label: Some(label), .. } => label,
+                    Block::Group { label: Some(label), .. } | Block::Figures { label: Some(label), .. } | Block::Text { label: Some(label), .. } => label,
                     _ => continue,
                 };
                 p.text(text, Font::Label, rect.offset(dx, dy), Align::Start, color::label::SECONDARY)?;
@@ -32,7 +35,9 @@ pub fn draw(p: &Painter, v: &View, dx: f32, dy: f32) -> Result<()> {
             Shape::Row { block, row, rect, top, bottom, text } if visible(rect) => {
                 let Block::Group { rows, .. } = &v.blocks[*block] else { continue };
                 let row = &rows[*row];
-                p.fill_corners(rect.offset(dx, dy), *top, *bottom, s::color::WELL)?;
+                if !row.bare {
+                    p.fill_corners(rect.offset(dx, dy), *top, *bottom, s::color::WELL)?;
+                }
                 p.alpha.set(if row.enabled { 1.0 } else { 0.4 });
                 let t = text.offset(dx, dy);
                 let title_font = if row.mono { Font::Mono } else { Font::RowTitle };
@@ -48,6 +53,13 @@ pub fn draw(p: &Painter, v: &View, dx: f32, dy: f32) -> Result<()> {
                     None => p.text(&row.title, title_font, t, Align::Start, color::label::PRIMARY)?,
                 }
                 p.alpha.set(1.0);
+            }
+            Shape::Text { block, rect, title, body } if visible(rect) => {
+                let Block::Text { title: heading, body: text, accent, .. } = &v.blocks[*block] else { continue };
+                let well = if *accent { color::accent::DEFAULT.with_alpha(reui_design::tokens::opacity::TINT_FILL) } else { s::color::WELL };
+                p.fill(rect.offset(dx, dy), s::row::RADIUS, well)?;
+                p.text(heading, Font::RowTitle, title.offset(dx, dy), Align::Start, color::label::PRIMARY)?;
+                p.paragraph(text, Font::RowDetail, body.offset(dx, dy), color::label::SECONDARY)?;
             }
             Shape::Figures { block, rect } if visible(rect) => {
                 let Block::Figures { items, .. } = &v.blocks[*block] else { continue };

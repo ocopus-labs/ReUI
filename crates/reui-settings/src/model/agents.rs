@@ -1,6 +1,8 @@
 //! Coding agents: whether ReUI is connected to each (read the same way the bridge's
-//! installer finds its own entries, `reui-bridge/src/install.rs`), and connecting or
-//! disconnecting by running that installer.
+//! installer finds its own entries, `reui-bridge/src/install.rs`), whether the agent is on
+//! this PC at all, when its last hook event reached ReUI (`agents.json`, written by the
+//! hub's agent module), and connecting, disconnecting or sending a test event by running
+//! the bridge.
 
 use std::os::windows::process::CommandExt;
 use std::path::{Path, PathBuf};
@@ -54,6 +56,39 @@ impl Agent {
         }
     }
 
+    /// Folders the agent keeps under the user's home once it has run here.
+    fn homes(self, paths: &Paths) -> Vec<PathBuf> {
+        match self {
+            Agent::Claude => vec![paths.home.join(".claude")],
+            Agent::Codex => vec![paths.home.join(".codex")],
+            Agent::OpenCode => vec![paths.home.join(".config").join("opencode"), paths.home.join(".local").join("share").join("opencode")],
+        }
+    }
+
+    /// Program names on `PATH` (npm installs a `.cmd`).
+    fn programs(self) -> &'static [&'static str] {
+        match self {
+            Agent::Claude => &["claude.exe", "claude.cmd"],
+            Agent::Codex => &["codex.exe", "codex.cmd"],
+            Agent::OpenCode => &["opencode.exe", "opencode.cmd"],
+        }
+    }
+
+    /// Whether the agent is on this PC: its folder under the home, or its program on
+    /// `PATH` (not looked up in the sandbox, which has its own home).
+    pub fn installed(self, paths: &Paths) -> bool {
+        if self.homes(paths).iter().any(|d| d.is_dir()) {
+            return true;
+        }
+        !paths.sandbox && std::env::var_os("PATH").is_some_and(|path| std::env::split_paths(&path).any(|dir| self.programs().iter().any(|p| dir.join(p).is_file())))
+    }
+
+    /// When its last hook event reached ReUI (unix ms).
+    pub fn last_event(self, paths: &Paths) -> Option<u64> {
+        let text = std::fs::read_to_string(paths.local.join(STATUS_FILE)).ok()?;
+        last_event_in(&serde_json::from_str(&text).ok()?, self.arg())
+    }
+
     pub fn status(self, paths: &Paths) -> Status {
         let file = self.file(paths);
         if self == Agent::OpenCode {
@@ -68,6 +103,36 @@ impl Agent {
             },
             Err(_) => Status::NotConnected,
         }
+    }
+}
+
+/// The hub's agent module notes each agent's last hook event here (`%LOCALAPPDATA%\ReUI`).
+pub const STATUS_FILE: &str = "agents.json";
+
+/// `{ "claude": { "last_event_ms": 1761600000000 } }` → the agent's time.
+pub fn last_event_in(root: &Value, agent: &str) -> Option<u64> {
+    root.get(agent)?.get("last_event_ms")?.as_u64()
+}
+
+/// "just now", "2 min ago", "3 h ago", "1 day ago".
+pub fn ago(now_ms: u64, then_ms: u64) -> String {
+    let secs = now_ms.saturating_sub(then_ms) / 1000;
+    match secs {
+        0..60 => "just now".into(),
+        60..3600 => format!("{} min ago", secs / 60),
+        3600..86_400 => format!("{} h ago", secs / 3600),
+        86_400..172_800 => "1 day ago".into(),
+        _ => format!("{} days ago", secs / 86_400),
+    }
+}
+
+/// What a row says about an agent: connection first, then whether it has been heard from.
+pub fn status_line(status: Status, installed: bool, last_event: Option<u64>, now_ms: u64) -> String {
+    match (status, last_event) {
+        (Status::Connected, Some(t)) => format!("Connected · last event {}", ago(now_ms, t)),
+        (Status::Connected, None) => "Connected · no events yet".into(),
+        (_, _) if !installed => "Agent not found on this PC".into(),
+        _ => "Not connected".into(),
     }
 }
 
@@ -107,10 +172,22 @@ pub fn bridge(paths: &Paths) -> Option<PathBuf> {
 
 /// Runs `reui-bridge install|uninstall <agent>`; the installer's message, or its error.
 pub fn run(bridge: &Path, agent: Agent, connect: bool, paths: &Paths) -> Result<String, String> {
+    bridge_command(bridge, &[if connect { "install" } else { "uninstall" }, agent.arg()], paths)
+}
+
+/// Runs `reui-bridge test <agent>`: a synthetic event through the normal hook path, which
+/// the island answers with a short "connected" moment.
+pub fn send_test(bridge: &Path, agent: Agent, paths: &Paths) -> Result<String, String> {
+    bridge_command(bridge, &["test", agent.arg()], paths)
+}
+
+fn bridge_command(bridge: &Path, args: &[&str], paths: &Paths) -> Result<String, String> {
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     let mut command = Command::new(bridge);
-    command.args([if connect { "install" } else { "uninstall" }, agent.arg()]).creation_flags(CREATE_NO_WINDOW);
+    command.args(args).creation_flags(CREATE_NO_WINDOW);
     if paths.sandbox {
+        // `REUI_CONFIG_DIR` is inherited too: a test event goes to a sandboxed hub's own
+        // pipe, never the real ReUI's.
         command.env("USERPROFILE", &paths.home);
     }
     let output = command.output().map_err(|e| format!("can't run {}: {e}", bridge.display()))?;
@@ -156,5 +233,37 @@ mod tests {
         assert_eq!(Agent::OpenCode.status(&paths), Status::Connected);
         assert!(bridge(&paths).is_none(), "no bridge shipped next to the exe here");
         _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn installs_are_found_by_their_folder_and_last_events_by_the_hubs_file() {
+        let dir = crate::model::doc::tests::temp_dir("agents-installed");
+        let paths = Paths { config: dir.join("c"), local: dir.join("l"), home: dir.join("h"), exe_dir: dir.clone(), sandbox: true };
+        assert!(!Agent::Codex.installed(&paths));
+        std::fs::create_dir_all(paths.home.join(".codex")).unwrap();
+        assert!(Agent::Codex.installed(&paths));
+        std::fs::create_dir_all(paths.home.join(".local").join("share").join("opencode")).unwrap();
+        assert!(Agent::OpenCode.installed(&paths));
+        assert_eq!(Agent::Claude.last_event(&paths), None);
+        std::fs::create_dir_all(&paths.local).unwrap();
+        std::fs::write(paths.local.join(STATUS_FILE), r#"{ "claude": { "last_event_ms": 42 }, "codex": {} }"#).unwrap();
+        assert_eq!(Agent::Claude.last_event(&paths), Some(42));
+        assert_eq!(Agent::Codex.last_event(&paths), None);
+        _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn times_and_status_lines_read_naturally() {
+        let now = 10_000_000_000;
+        assert_eq!(ago(now, now - 5_000), "just now");
+        assert_eq!(ago(now, now - 120_000), "2 min ago");
+        assert_eq!(ago(now, now - 3 * 3_600_000), "3 h ago");
+        assert_eq!(ago(now, now - 30 * 3_600_000), "1 day ago");
+        assert_eq!(ago(now, now - 72 * 3_600_000), "3 days ago");
+        assert_eq!(ago(now, now + 9_000), "just now", "a clock that moved back isn't negative");
+        assert_eq!(status_line(Status::Connected, true, Some(now - 120_000), now), "Connected · last event 2 min ago");
+        assert_eq!(status_line(Status::Connected, false, None, now), "Connected · no events yet");
+        assert_eq!(status_line(Status::NotConnected, true, Some(1), now), "Not connected");
+        assert_eq!(status_line(Status::NotConnected, false, None, now), "Agent not found on this PC");
     }
 }

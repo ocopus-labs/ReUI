@@ -85,6 +85,35 @@ pub(super) fn publish_session(ctx: &ModuleContext, me: &Agentry, id: &str, sessi
     );
 }
 
+pub(super) const TEST_KEY: &str = "test";
+
+/// The answer to `reui-bridge test`: "Claude Code · Connected", briefly. Not a session.
+pub(super) fn publish_test(ctx: &ModuleContext, me: &Agentry) {
+    let done = Element::Glyph { glyph: GLYPH_DONE, tone: Tone::Positive };
+    ctx.publish(
+        TEST_KEY,
+        Priority::Brief,
+        View {
+            accent: Some(me.profile.accent),
+            audio: None,
+            compact: CompactView { leading: me.mark.clone(), trailing: done.clone() },
+            minimal: me.mark.clone(),
+            expanded: Some(ExpandedView {
+                leading: me.mark.clone(),
+                eyebrow: Some(me.profile.display.to_string()),
+                headline: Headline::Text("Connected".into()),
+                detail: None,
+                trailing: done,
+                wide: false,
+                tint: false,
+                pager: None,
+                open: None,
+                rows: Vec::new(),
+            }),
+        },
+    );
+}
+
 pub(super) fn publish_request(ctx: &ModuleContext, me: &Agentry, id: u64, project: &str, tool: &str, input: &Value, can_always: bool) {
     let (glyph, headline, detail) = describe_tool(tool, input);
     let button = |action: &str, label: &str, role| Button { action: action.into(), content: ButtonContent::Text(label.into()), role };

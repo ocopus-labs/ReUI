@@ -9,6 +9,7 @@ use crate::paths::Paths;
 use crate::stats::Stats;
 use crate::system::{self, Startup};
 use crate::ui::{Target, Tone};
+use crate::updates::{self, Updates};
 use crate::hub;
 
 pub struct State {
@@ -16,6 +17,10 @@ pub struct State {
     pub files: Files,
     pub startup: Startup,
     pub agents: [Status; 3],
+    /// Whether each agent is on this PC.
+    pub agent_installed: [bool; 3],
+    /// When ReUI last heard from each (unix ms).
+    pub agent_last: [Option<u64>; 3],
     /// What the last Connect / Disconnect said, per agent.
     pub agent_notes: [Option<(String, Tone)>; 3],
     /// A write that failed for a reason other than an invalid file.
@@ -38,6 +43,14 @@ pub struct State {
     /// (roaming, local) folder sizes.
     pub sizes: (u64, u64),
     pub windows_build: String,
+    /// A feature was switched on or off while the hub runs: it applies on its next start.
+    pub restart_note: bool,
+    pub updates: Updates,
+    /// This version's CHANGELOG entry, when this run follows an update (kept for the
+    /// session once About has shown it).
+    pub whats_new: Option<String>,
+    /// Displays for the island's monitor choice: (device name, label).
+    pub monitors: Vec<(String, String)>,
 }
 
 impl State {
@@ -48,6 +61,8 @@ impl State {
             files,
             startup: Startup::Off,
             agents: [Status::NotConnected; 3],
+            agent_installed: [false; 3],
+            agent_last: [None; 3],
             agent_notes: Default::default(),
             write_error: None,
             recording: false,
@@ -58,6 +73,10 @@ impl State {
             stats: Stats::default(),
             sizes: (0, 0),
             windows_build: system::windows_build(),
+            restart_note: false,
+            updates: Updates::new(&paths),
+            whats_new: updates::whats_new(&updates::read_state(&paths)),
+            monitors: Vec::new(),
             paths,
         };
         state.refresh();
@@ -69,6 +88,8 @@ impl State {
         self.files.reload();
         self.startup = system::startup(&self.paths);
         self.agents = Agent::ALL.map(|a| a.status(&self.paths));
+        self.agent_installed = Agent::ALL.map(|a| a.installed(&self.paths));
+        self.agent_last = Agent::ALL.map(|a| a.last_event(&self.paths));
         self.stats.sample();
     }
 
@@ -107,6 +128,14 @@ impl State {
     }
 
     pub fn hub_running(&self) -> bool {
-        self.stats.usage[0].running
+        // In the sandbox no ReUI is ours.
+        !self.paths.sandbox && self.stats.usage[0].running
+    }
+
+    /// About showed What's new: not again after this session.
+    pub fn whats_new_seen(&mut self) {
+        if self.whats_new.is_some() {
+            _ = updates::write_state(&self.paths, vec![("whats_new_seen", serde_json::Value::from(crate::pages::VERSION))]);
+        }
     }
 }

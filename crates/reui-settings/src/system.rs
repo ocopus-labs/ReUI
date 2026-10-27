@@ -213,6 +213,39 @@ pub fn time_left(ms: u64) -> String {
     }
 }
 
+/// The displays, as (device name, label): `\\.\DISPLAY2` → "Display 2".
+pub fn monitors() -> Vec<(String, String)> {
+    use windows::Win32::Foundation::RECT;
+    use windows::Win32::Graphics::Gdi::{EnumDisplayMonitors, GetMonitorInfoW, HDC, HMONITOR, MONITORINFO, MONITORINFOEXW};
+    unsafe extern "system" fn visit(monitor: HMONITOR, _: HDC, _: *mut RECT, lparam: LPARAM) -> BOOL {
+        let names = &mut *(lparam.0 as *mut Vec<String>);
+        let mut info = MONITORINFOEXW { monitorInfo: MONITORINFO { cbSize: size_of::<MONITORINFOEXW>() as u32, ..Default::default() }, ..Default::default() };
+        if GetMonitorInfoW(monitor, &mut info.monitorInfo).as_bool() {
+            let len = info.szDevice.iter().position(|&c| c == 0).unwrap_or(info.szDevice.len());
+            names.push(String::from_utf16_lossy(&info.szDevice[..len]));
+        }
+        BOOL(1)
+    }
+    let mut names: Vec<String> = Vec::new();
+    unsafe { _ = EnumDisplayMonitors(None, None, Some(visit), LPARAM(&mut names as *mut _ as isize)) };
+    names.sort();
+    names
+        .into_iter()
+        .map(|n| {
+            let label = monitor_label(&n);
+            (n, label)
+        })
+        .collect()
+}
+
+/// "Display 2" for `\\.\DISPLAY2`; the name itself otherwise.
+pub fn monitor_label(device: &str) -> String {
+    match device.trim_start_matches(['\\', '.']).strip_prefix("DISPLAY") {
+        Some(n) if !n.is_empty() && n.chars().all(|c| c.is_ascii_digit()) => format!("Display {n}"),
+        _ => device.to_string(),
+    }
+}
+
 /// Percent-encodes a query value (RFC 3986 unreserved characters stay).
 pub fn url_encode(text: &str) -> String {
     text.bytes()
@@ -237,6 +270,8 @@ mod tests {
     #[test]
     fn sizes_and_times_read_naturally() {
         assert_eq!(bytes(512), "512 bytes");
+        assert_eq!(monitor_label(r"\\.\DISPLAY12"), "Display 12");
+        assert_eq!(monitor_label("Dell U2720Q"), "Dell U2720Q");
         assert_eq!(bytes(1_234_567), "1.2 MB");
         assert_eq!(bytes(56_000_000), "56 MB");
         assert_eq!(time_left(1), "1 min");

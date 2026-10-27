@@ -7,11 +7,11 @@ use reui_design::Spring;
 use windows::core::{h, Interface, Result, HSTRING};
 use windows::Foundation::{IReference, PropertyValue, TimeSpan};
 use windows::Win32::Foundation::*;
-use windows::Win32::Graphics::Gdi::*;
-use windows::Win32::UI::Shell::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 use windows_numerics::{Vector2, Vector3};
 
+use crate::fullscreen;
+use crate::place::{self, MonitorChoice, Placement};
 use crate::settings::{self, Settings};
 
 use super::{Pill, State};
@@ -141,7 +141,41 @@ impl Pill {
             eprintln!("island: showing {:?}", settings.visibility);
         }
         self.visibility = settings.visibility;
+        if self.hide_in_fullscreen != settings.hide_in_fullscreen {
+            self.hide_in_fullscreen = settings.hide_in_fullscreen;
+            self.update_fullscreen(unsafe { GetForegroundWindow() });
+        }
+        if self.monitor_choice != settings.monitor {
+            eprintln!("island: on {:?}", settings.monitor);
+            self.monitor_choice = settings.monitor;
+            unsafe { _ = PostMessageW(Some(self.hwnd), place::WM_PLACE, WPARAM(0), LPARAM(0)) };
+        }
         self.refresh_visibility();
+    }
+
+    /// The `monitor` setting.
+    pub fn monitor_choice(&self) -> &MonitorChoice {
+        &self.monitor_choice
+    }
+
+    /// Moves the island to `placement` (another display, a changed work area or
+    /// resolution) and puts it back on top. `false` when the display's scale differs: the
+    /// pill is built for one scale, so the caller rebuilds it there instead.
+    pub fn move_to(&mut self, placement: &Placement) -> bool {
+        if (placement.scale - self.scale).abs() > 0.001 {
+            return false;
+        }
+        if placement.window != self.window || placement.monitor != self.monitor {
+            let w = placement.window;
+            unsafe {
+                _ = SetWindowPos(self.hwnd, Some(HWND_TOPMOST), w.left, w.top, w.right - w.left, w.bottom - w.top, SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+            }
+            self.window = w;
+            self.monitor = placement.monitor;
+        }
+        self.raise();
+        self.update_fullscreen(unsafe { GetForegroundWindow() });
+        true
     }
 
     /// Pause ReUI for an hour (the tray), or resume it.
@@ -245,15 +279,27 @@ impl Pill {
         }
         // Switching apps means the summoned card is done with.
         self.dismiss_summoned();
-        let hide = is_fullscreen(fg, self.monitor);
-        if !hide {
+        if !self.update_fullscreen(fg) {
             self.raise();
         }
-        if hide == self.hidden {
-            return;
+    }
+
+    /// The foreground window moved or resized (a browser video going fullscreen keeps the
+    /// same window), or the setting changed: hide or show for fullscreen.
+    pub fn recheck_fullscreen(&mut self) {
+        self.update_fullscreen(unsafe { GetForegroundWindow() });
+    }
+
+    /// Hides while something fullscreen is in front of the island's display. Returns
+    /// whether it's hidden.
+    fn update_fullscreen(&mut self, fg: HWND) -> bool {
+        let (notify, foreground, monitor) = fullscreen::read(fg, self.monitor);
+        let hide = fullscreen::hides(self.hide_in_fullscreen, notify, foreground.as_ref(), &monitor);
+        if hide != self.hidden {
+            self.hidden = hide;
+            self.refresh_visibility();
         }
-        self.hidden = hide;
-        self.refresh_visibility();
+        hide
     }
 
     /// Puts the island back at the top of the always-on-top band. Being topmost once isn't
@@ -263,33 +309,5 @@ impl Pill {
         unsafe {
             _ = SetWindowPos(self.hwnd, Some(HWND_TOPMOST), 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE | SWP_NOOWNERZORDER);
         }
-    }
-}
-
-/// A foreground window covering its whole monitor (and not the desktop) counts as fullscreen.
-fn is_fullscreen(fg: HWND, monitor: HMONITOR) -> bool {
-    unsafe {
-        if let Ok(state) = SHQueryUserNotificationState() {
-            if state == QUNS_RUNNING_D3D_FULL_SCREEN || state == QUNS_PRESENTATION_MODE {
-                return true;
-            }
-        }
-        if fg.is_invalid() || MonitorFromWindow(fg, MONITOR_DEFAULTTONULL) != monitor {
-            return false;
-        }
-        let mut class = [0u16; 64];
-        let len = GetClassNameW(fg, &mut class) as usize;
-        let class = String::from_utf16_lossy(&class[..len]);
-        if matches!(class.as_str(), "Progman" | "WorkerW" | "Shell_TrayWnd") {
-            return false;
-        }
-        let mut info = MONITORINFO { cbSize: size_of::<MONITORINFO>() as u32, ..Default::default() };
-        let mut rect = RECT::default();
-        GetMonitorInfoW(monitor, &mut info).as_bool()
-            && GetWindowRect(fg, &mut rect).is_ok()
-            && rect.left <= info.rcMonitor.left
-            && rect.top <= info.rcMonitor.top
-            && rect.right >= info.rcMonitor.right
-            && rect.bottom >= info.rcMonitor.bottom
     }
 }

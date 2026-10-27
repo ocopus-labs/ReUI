@@ -36,13 +36,18 @@ hub.rs             activities, ordering, ModuleContext (publish, retract, focus,
 ipc.rs             the pipe: snapshots + images to surfaces, actions/commands/hooks back
 island.rs          launches and supervises reui-island
 bridge_sync.rs     keeps the installed reui-bridge in step with this build
+paths.rs           %APPDATA% / %LOCALAPPDATA% / home, or REUI_CONFIG_DIR's sandbox (own pipe and lock)
 modules/
   mod.rs           Module trait, start, supervise (restart on error/panic)
   audio/           shared Core Audio: devices, volume, outputs, per-app volume, change events
   system_events/   shared hidden window: power settings, resume/unlock, volume and phone
                    arrivals, brightness keys (Raw Input), lock keys, Explorer restarts
   demo.rs
-  agent/           Claude Code / Codex / OpenCode sessions; view; token usage
+  onboarding/      first run (demo card, "Hover me", the welcome), one-time tips and offers
+                   (state + queue, views, system: fullscreen/pause, agent processes, Connect);
+                   other modules report moments with `onboarding::note`
+  agent/           Claude Code / Codex / OpenCode sessions; view; token usage; status
+                   (agents.json, the bridge's test event)
   clipboard/       history: module loop, notch panel, toast, paste stack, view model,
                    settings, secrets, link previews, paste-as transforms, OCR
     os/            the OS side: window thread, hotkeys, target/caret, capture, formats,
@@ -56,6 +61,8 @@ modules/
                    AirPods ads), anti-spam gate, low battery, controllers, laptop power
                    and time to full, drives and Eject, phones, overview, OSD hand-off,
                    settings
+  updates.rs       daily update check (runs reui-settings --check-updates), "Update
+                   available" and "Updated" briefs
 ```
 
 **Pattern:**
@@ -70,6 +77,9 @@ main.rs            window class, message loop, mouse/foreground hooks
 ipc.rs             pipe client
 settings.rs        visibility modes, pause, watching settings.json   tray.rs   tray icon, short menu
 order.rs           which activity is in the pill and which in the bubble
+place.rs           which display (monitor setting) and the window rect at its DPI
+fullscreen.rs      when to hide: D3D, presentation, busy, a window covering the display
+drag_guard.rs      no hover intent while a drag from elsewhere passes over
 images.rs          encoded images from the hub
 pill/              the island's behaviour
   mod.rs           state machine, snapshot apply, render orchestration
@@ -98,7 +108,8 @@ features/          per-feature island logic
 ## `reui-settings/src`
 
 ```
-main.rs            single instance, --page, REUI_CONFIG_DIR (test sandbox)
+main.rs            single instance, --page, --welcome, --check-updates (no window),
+                   REUI_CONFIG_DIR (test sandbox)
 window.rs          the window: own caption (no system title bar), hit-testing, DWM corners,
                    per-monitor DPI v2
 app/               state machine: page, scroll, hover, focus, menus, drags, animations
@@ -107,9 +118,13 @@ ui/                pages as data: blocks, rows, parts (controls)
   layout.rs        where everything goes (pure, tested): rows, controls, scrolling, nav
 render/            drawing only: Renderer/Painter primitives, fonts, frame (nav, caption,
                    scrollbar), page, controls, menu
-pages/             one file per page: build its rows from State, handle its controls
+pages/             one file per page: build its rows from State, handle its controls;
+                   welcome.rs is the three-step welcome (first run, Replay the tour)
 model/             settings files (read, change a key, atomic write, keep unknown keys,
-                   never write an invalid file), hotkeys, coding agents
+                   never write an invalid file), hotkeys, coding agents (status, test)
+updates/           GitHub releases: release.rs (JSON, semver, checksums, notes; pure),
+                   net.rs (WinHTTP GET/download, CNG SHA-256), mod.rs (check, download +
+                   verify, run the setup, update.json, What's new)
 state.rs           what the pages show and change      hub.rs     pipe client (reload, clear)
 keys.rs            hotkey recorder (low-level hook)     system.rs  startup entry, folders, apps
 stats.rs           idle cost: CPU and private memory of ReUI's processes
@@ -119,12 +134,15 @@ stats.rs           idle cost: CPU and private memory of ReUI's processes
 
 | Path | What |
 |---|---|
-| `%APPDATA%\ReUI\settings.json` | island visibility, and `paused_until` while ReUI is paused |
+| `%APPDATA%\ReUI\settings.json` | island `visibility`, `hide_in_fullscreen`, `monitor`, and `paused_until` while ReUI is paused |
+| `%APPDATA%\ReUI\onboarding.json` | first run done (`welcomed`), tips shown, offers answered |
 | `%APPDATA%\ReUI\clipboard.db`, `clipboard.json` | clipboard history and settings |
 | `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json` | music, OSD and Devices settings |
 | `%LOCALAPPDATA%\ReUI\lyrics\` | lyrics cache |
 | `%LOCALAPPDATA%\ReUI\hub.log` | panics |
 | `%LOCALAPPDATA%\ReUI\bin\reui-bridge.exe` | the installed hook bridge |
+| `%LOCALAPPDATA%\ReUI\agents.json` | each coding agent's last hook event (hub's agent module, ≤ 1 write / 10 s per agent; Settings' status line) |
+| `%LOCALAPPDATA%\ReUI\update.json` | the last update check and what it found (Settings), the last version run, `updated_from` and the version announced (hub's updates module) |
 | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` value `ReUI` | start with Windows (the Settings window's toggle) |
 
 ## Conventions

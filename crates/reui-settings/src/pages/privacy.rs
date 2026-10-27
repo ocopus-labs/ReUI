@@ -7,7 +7,7 @@ use crate::state::State;
 use crate::system;
 use crate::ui::{Act, Block, Part, Role, Row, Target};
 
-pub const STATEMENT: &str = "Everything stays on this PC. ReUI connects to the internet only for lyrics (lrclib.net) and link previews, when you turn them on.";
+pub const STATEMENT: &str = "Everything stays on this PC. ReUI connects to the internet only for lyrics (lrclib.net) and link previews when you turn them on, and to check for updates.";
 
 pub fn build(state: &State) -> Vec<Block> {
     let mut blocks = vec![intro("Privacy & data", STATEMENT)];
@@ -27,6 +27,7 @@ pub fn build(state: &State) -> Vec<Block> {
         vec![
             Row::new("net-lyrics", "Synced lyrics").detail("Song titles go to lrclib.net").part(Part::Value(on(File::Media, "lyrics").into())).part(button("Change", Role::Secondary)),
             Row::new("net-links", "Link previews").detail("Copied links' pages are fetched for their title and image").part(Part::Value(on(File::Clipboard, "link_previews").into())).part(button("Change", Role::Secondary)),
+            Row::new("net-updates", "Update checks").detail("api.github.com, once a day, no personal data").part(Part::Value(on(File::Island, "check_updates").into())).part(button("Change", Role::Secondary)),
         ],
     ));
     let armed = state.is_armed("clear", 0);
@@ -46,6 +47,7 @@ pub fn act(state: &mut State, target: &Target, act: Act) -> Effect {
         "data-local" => system::open_folder(&state.paths.local),
         "net-lyrics" => return Effect::Navigate(Page::NowPlaying),
         "net-links" => return Effect::Navigate(Page::Clipboard),
+        "net-updates" => return Effect::Navigate(Page::About),
         "clear" => {
             state.tell_hub("clipboard", "clear");
             state.refresh_sizes();
