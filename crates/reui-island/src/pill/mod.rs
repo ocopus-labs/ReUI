@@ -240,7 +240,10 @@ impl Pill {
     /// What to show where (see `order::arrange`).
     fn ordered(&mut self) -> Snapshot {
         let open = if self.state == State::Expanded { self.open_id.clone() } else { None };
-        let (activities, pin_alive) = order::arrange(self.raw.activities.clone(), self.pinned.as_ref(), self.summoned, open.as_ref());
+        // "When needed" hides ongoing things, so a confirmation there leads instead of
+        // waiting in the bubble beside something the user can't see.
+        let briefs_lead = self.visibility == Visibility::WhenNeeded && !self.raw.activities.iter().any(|a| a.priority >= reui_protocol::Priority::Alert);
+        let (activities, pin_alive) = order::arrange(self.raw.activities.clone(), self.pinned.as_ref(), self.summoned, open.as_ref(), briefs_lead);
         if !pin_alive {
             self.pinned = None;
             self.summoned = false;

@@ -26,7 +26,7 @@ reui-bridge.exe  run by coding agents' hooks (Claude Code, Codex, OpenCode); for
 ## `reui-hub/src`
 
 ```
-main.rs            flags (--no-agents, --no-media, --no-clipboard, --no-osd, …), module list
+main.rs            flags (--no-agents, --no-media, --no-clipboard, --no-osd, --no-devices, …), module list
 hub.rs             activities, ordering, ModuleContext (publish, retract, focus, image store)
 ipc.rs             the pipe: snapshots + images to surfaces, actions/commands/hooks back
 island.rs          launches and supervises reui-island
@@ -34,6 +34,8 @@ bridge_sync.rs     keeps the installed reui-bridge in step with this build
 modules/
   mod.rs           Module trait, start, supervise (restart on error/panic)
   audio/           shared Core Audio: devices, volume, outputs, per-app volume, change events
+  system_events/   shared hidden window: power settings, resume/unlock, volume and phone
+                   arrivals, brightness keys (Raw Input), lock keys, Explorer restarts
   demo.rs
   agent/           Claude Code / Codex / OpenCode sessions; view; token usage
   clipboard/       history: module loop, notch panel, toast, paste stack, view model,
@@ -43,8 +45,12 @@ modules/
     store/         SQLite: schema/migrations, items, queries (FTS), collections, db thread
   media/           Now Playing: module loop, GSMTC sessions, card, controls, cover/artwork,
                    ranking, lyrics (LRCLIB), player activation, settings
-  osd/             volume/brightness HUDs, OS window events, brightness (WMI, DDC/CI),
-                   Windows flyout hiding, settings
+  osd/             volume/brightness HUDs, brightness (WMI, DDC/CI), Windows flyout hiding,
+                   settings
+  devices/         Bluetooth connects and batteries (watchers, containers, PnP battery,
+                   AirPods ads), anti-spam gate, low battery, controllers, laptop power
+                   and time to full, drives and Eject, phones, overview, OSD hand-off,
+                   settings
 ```
 
 **Pattern:**
@@ -90,7 +96,7 @@ features/          per-feature island logic
 |---|---|
 | `%APPDATA%\ReUI\settings.json` | island visibility |
 | `%APPDATA%\ReUI\clipboard.db`, `clipboard.json` | clipboard history and settings |
-| `%APPDATA%\ReUI\media.json`, `osd.json` | music and OSD settings |
+| `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json` | music, OSD and Devices settings |
 | `%LOCALAPPDATA%\ReUI\lyrics\` | lyrics cache |
 | `%LOCALAPPDATA%\ReUI\hub.log` | panics |
 | `%LOCALAPPDATA%\ReUI\bin\reui-bridge.exe` | the installed hook bridge |

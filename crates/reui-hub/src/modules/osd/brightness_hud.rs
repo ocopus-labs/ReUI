@@ -5,7 +5,7 @@ use reui_protocol::Priority;
 use tokio::time::Instant;
 
 use super::brightness::{Display, Report, INTERNAL};
-use super::os::{LockKey, OsEvent};
+use crate::modules::system_events::{LockKey, SystemEvent as OsEvent};
 use super::view::{self, DisplayLevel, LINGER};
 use super::{Osd, BATTERY_SAVER, BRIGHTNESS, LOCK};
 use crate::hub::ModuleContext;
@@ -70,6 +70,8 @@ impl Osd {
                     w.probe();
                 }
             }
+            // The Devices module's events.
+            OsEvent::PowerSource { .. } | OsEvent::BatteryPercent { .. } | OsEvent::Resumed | OsEvent::Unlocked | OsEvent::Volume | OsEvent::PortableDevice { .. } => {}
         }
     }
 

@@ -5,7 +5,7 @@
 //! - volume, mute, default output and (opt-in) microphone mute: `audio::watch_events` on its
 //!   own thread;
 //! - built-in panel brightness, battery saver, brightness keys, lock keys, Explorer restarts
-//!   and display changes: the hidden window in `os.rs`, on its own thread;
+//!   and display changes: the shared hidden window (`modules/system_events`), on its own thread;
 //! - brightness reads and writes (WMI, DDC/CI): the worker in `brightness.rs`;
 //! - Windows' flyout (opt-in hiding, `flyout.rs`) and Core Audio setters: the blocking pool.
 //!
@@ -15,8 +15,8 @@
 //! it), staying while its card is open. Our own changes never raise a HUD.
 //!
 //! Files: `volume.rs` and `brightness_hud.rs` (each HUD's state), `view.rs` (the HUDs as
-//! views), `os.rs` (the hidden window), `brightness.rs` (the brightness worker), `flyout.rs`
-//! (Windows' own flyout) and `settings.rs`.
+//! views), `brightness.rs` (the brightness worker), `flyout.rs` (Windows' own flyout) and
+//! `settings.rs`.
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -33,17 +33,16 @@ use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 mod brightness;
 mod brightness_hud;
 mod flyout;
-mod os;
 mod settings;
 mod view;
 mod volume;
 
 use self::brightness::Display;
 use self::flyout::Hide;
-use self::os::OsWindow;
 use self::settings::Settings;
 use self::view::{Hud, LINGER_STATE};
 use super::audio::{self, AudioEvent, DefaultOutput, Output};
+use super::system_events::{self, Subscription};
 use super::media::player;
 use super::{supervise, Module};
 use crate::hub::{ModuleAction, ModuleContext, ModuleInput};
@@ -77,7 +76,7 @@ enum Internal {
     Outputs { outputs: Vec<Output>, can_switch: bool },
     Settings(Settings),
     Watch { watch: Option<audio::Watch>, capture: bool },
-    Os(Option<OsWindow>),
+    Os(Option<Subscription>),
     Flyout(Option<Hide>),
 }
 
@@ -87,7 +86,7 @@ struct Osd {
     audio_tx: mpsc::UnboundedSender<AudioEvent>,
     watch: Option<audio::Watch>,
     watch_capture: bool,
-    os: Option<OsWindow>,
+    os: Option<Subscription>,
     worker: Option<brightness::Worker>,
 
     // Volume.
@@ -165,7 +164,7 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
     osd.read_audio();
     osd.read_outputs();
     tokio::spawn(async move {
-        if let Ok(window) = tokio::task::spawn_blocking(move || OsWindow::start(os_tx)).await {
+        if let Ok(window) = tokio::task::spawn_blocking(move || system_events::subscribe(os_tx)).await {
             _ = internal_tx.send(Internal::Os(window));
         }
     });

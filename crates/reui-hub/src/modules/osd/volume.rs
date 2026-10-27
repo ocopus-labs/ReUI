@@ -8,6 +8,7 @@ use super::view::{self, VolumeHud, LINGER};
 use super::{Osd, MIC, VOLUME};
 use crate::hub::ModuleContext;
 use crate::modules::audio::{self, AudioEvent, DefaultOutput};
+use crate::modules::devices::handoff;
 use crate::modules::media::player;
 
 /// Volume writes at most this often (20 Hz), the latest value winning.
@@ -41,7 +42,8 @@ impl Osd {
                 self.device = Some(DefaultOutput { id, name, kind });
                 self.read_audio();
                 self.read_outputs();
-                if self.settings.volume {
+                // A Bluetooth audio device that just connected has the Devices card (S8).
+                if self.settings.volume && !handoff::audio_connect_claimed() {
                     self.device_until = Some(now + LINGER);
                     self.show_volume(ctx, now);
                 }

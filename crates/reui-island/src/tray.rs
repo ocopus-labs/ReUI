@@ -17,6 +17,7 @@ const CMD_CLIPBOARD: usize = 300;
 const CMD_ITEM: usize = 400;
 const CMD_MUSIC: usize = 500;
 const CMD_OSD: usize = 600;
+const CMD_DEVICES: usize = 700;
 
 /// Module commands in the menu: (module, action, label). Sent whether or not the module
 /// has anything showing; clearing keeps pins, so it asks nothing.
@@ -44,6 +45,19 @@ const OSD: [(&str, &str, &str); 6] = [
     ("osd", "lock-keys:off", "Show lock keys: off"),
     ("osd", "battery-saver:on", "Show battery saver: on"),
     ("osd", "battery-saver:off", "Show battery saver: off"),
+];
+
+/// Devices: the overview card and the device moments' switches (kept by the devices module).
+const DEVICES: [(&str, &str, &str); 9] = [
+    ("devices", "overview", "Show devices"),
+    ("devices", "connect:on", "Connect cards: on"),
+    ("devices", "connect:off", "Connect cards: off"),
+    ("devices", "low-battery:on", "Low battery alerts: on"),
+    ("devices", "low-battery:off", "Low battery alerts: off"),
+    ("devices", "drives:on", "Drives: on"),
+    ("devices", "drives:off", "Drives: off"),
+    ("devices", "airpods:on", "AirPods detail (nearby scan): on"),
+    ("devices", "airpods:off", "AirPods detail (nearby scan): off"),
 ];
 
 pub enum Command {
@@ -116,6 +130,12 @@ pub fn menu(hwnd: HWND, current: Visibility) -> Option<Command> {
             _ = AppendMenuW(menu, MF_STRING, CMD_OSD + i, PCWSTR(label.as_ptr()));
         }
         _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
+        _ = AppendMenuW(menu, MF_STRING | MF_DISABLED | MF_GRAYED, 0, w!("Devices"));
+        for (i, (_, _, label)) in DEVICES.iter().enumerate() {
+            let label: Vec<u16> = format!("    {label}").encode_utf16().chain([0]).collect();
+            _ = AppendMenuW(menu, MF_STRING, CMD_DEVICES + i, PCWSTR(label.as_ptr()));
+        }
+        _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
         _ = AppendMenuW(menu, MF_STRING, CMD_QUIT, w!("Quit ReUI"));
 
         let mut pt = POINT::default();
@@ -138,6 +158,10 @@ pub fn menu(hwnd: HWND, current: Visibility) -> Option<Command> {
             }
             n if (CMD_OSD..CMD_OSD + OSD.len()).contains(&n) => {
                 let (module, action, _) = OSD[n - CMD_OSD];
+                Some(Command::Module(module, action))
+            }
+            n if (CMD_DEVICES..CMD_DEVICES + DEVICES.len()).contains(&n) => {
+                let (module, action, _) = DEVICES[n - CMD_DEVICES];
                 Some(Command::Module(module, action))
             }
             _ => None,

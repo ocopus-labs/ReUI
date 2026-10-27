@@ -250,7 +250,6 @@ impl ModuleContext {
     }
 
     /// Asks surfaces to bring this (published) activity to the front and open it.
-    #[allow(dead_code)] // the v1 island panel used it; kept for future hotkey-summoned cards
     pub fn focus(&self, key: &str) {
         _ = self.hub.focus.send(ActivityId { module: self.module.to_string(), key: key.to_string() });
     }

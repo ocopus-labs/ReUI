@@ -17,6 +17,8 @@ reqwest = { version = "0.13", default-features = false, features = ["native-tls"
 serde.workspace = true
 serde_json = "1.0"
 windows-future = "0.3.2"
+# `IIterable<HSTRING>` from a Vec (device watcher properties).
+windows-collections = "0.3.2"
 # `#[implement]`/`#[interface]` expand to `::windows_core` paths (audio callbacks, IPolicyConfig).
 windows-core = "0.62.2"
 tokio = { workspace = true, features = ["rt", "net", "io-util", "sync", "time", "macros", "process", "signal"] }
@@ -67,4 +69,20 @@ features = [
     "Win32_System_SystemServices",
     "Win32_System_Registry",
     "Win32_UI_Input",
+    # Shared system-events window: session unlocks, device-interface arrivals
+    "Win32_System_RemoteDesktop",
+    "Win32_System_Ioctl",
+    "Win32_Devices_PortableDevices",
+    # Devices: Bluetooth watchers and advertisements, PnP properties and eject, controllers,
+    # batteries, drives, the eject veto's event
+    "Devices_Bluetooth",
+    "Devices_Bluetooth_Advertisement",
+    "Devices_Enumeration",
+    "Devices_Power",
+    "Gaming_Input",
+    "System_Power",
+    "Win32_Devices_DeviceAndDriverInstallation",
+    "Win32_Devices_Properties",
+    "Win32_System_IO",
+    "Win32_System_EventLog",
 ]

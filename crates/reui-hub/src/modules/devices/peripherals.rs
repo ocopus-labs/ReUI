@@ -1,0 +1,246 @@
+//! Bluetooth devices, their batteries, AirPods scans and game controllers, as the module
+//! handles them: connect cards (upgraded in place when the battery arrives), the battery
+//! read schedule, and low-battery moments.
+
+use std::collections::HashMap;
+use std::time::Duration;
+
+use reui_protocol::Priority;
+use tokio::time::Instant;
+
+use super::airpods::{self, Family, Scan, Sighting};
+use super::bluetooth::BtEvent;
+use super::controllers::{self, PadEvent, Reading};
+use super::kinds::Kind;
+use super::low::CRITICAL;
+use super::registry::Change;
+use super::spam::Verdict;
+use super::{handoff, pnp, view, Burst, ConnectCard, State, Internal, Pad};
+use crate::hub::ModuleContext;
+
+/// A connect card's time (S1)...
+const CONNECT: Duration = Duration::from_secs(3);
+/// ...and at least this much more once its battery arrives.
+const UPGRADED: Duration = Duration::from_secs(2);
+/// A battery that arrives this long after the card no longer upgrades it (D-1).
+const UPGRADE_WINDOW: Duration = Duration::from_secs(5);
+const LOW: Duration = Duration::from_secs(4);
+/// Battery reads after a connect (HFP reports only after a while, D-3)...
+const READS_AFTER_CONNECT: [Duration; 2] = [Duration::from_secs(3), Duration::from_secs(10)];
+/// ...then this often while a battery device is connected.
+const BATTERY_POLL: Duration = Duration::from_secs(60);
+const PAD_POLL: Duration = Duration::from_secs(60);
+/// An AirPods advertisement scan (D4).
+const BURST: Duration = Duration::from_secs(20);
+
+fn device_key(key: u64) -> String {
+    format!("device:{key:016x}")
+}
+
+impl State {
+    pub(super) fn on_bluetooth(&mut self, ctx: &ModuleContext, event: BtEvent) {
+        let now = Instant::now();
+        match self.registry.apply(event) {
+            Some(Change::Connected(key)) => {
+                self.battery_reads.extend(READS_AFTER_CONNECT.iter().map(|d| now + *d));
+                let Some(device) = self.registry.get(key) else { return };
+                let (kind, apple, family) = (device.kind, device.apple_audio(), airpods::family_of_name(&device.name));
+                if apple && self.settings.airpods {
+                    self.start_scan(key, family);
+                }
+                if kind.announces() {
+                    let verdict = self.gate.connected(key, now);
+                    if self.settings.connect_cards {
+                        self.announce(ctx, key, verdict);
+                    }
+                }
+                self.refresh_overview(ctx);
+            }
+            Some(Change::Disconnected(key)) => {
+                self.gate.disconnected(&key, now);
+                if self.burst.as_ref().is_some_and(|b| b.device == key) {
+                    self.stop_scan();
+                }
+                self.refresh_overview(ctx);
+            }
+            None => {}
+        }
+    }
+
+    fn announce(&mut self, ctx: &ModuleContext, key: u64, verdict: Verdict<u64>) {
+        match verdict {
+            Verdict::Quiet => {}
+            Verdict::Show => {
+                let card = device_key(key);
+                self.connect = Some(ConnectCard { key: card.clone(), members: vec![key], since: Instant::now() });
+                self.publish_connect(ctx, CONNECT);
+            }
+            Verdict::Merge { into, members } => match &mut self.connect {
+                Some(card) if card.members.first() == Some(&into) && self.moments.is_live(&card.key) => {
+                    card.members = members;
+                    self.publish_connect(ctx, Duration::ZERO);
+                }
+                // The first card already went: this one stands alone.
+                _ => {
+                    self.connect = Some(ConnectCard { key: device_key(key), members: vec![key], since: Instant::now() });
+                    self.publish_connect(ctx, CONNECT);
+                }
+            },
+        }
+    }
+
+    /// Publishes the connect card as it is now, keeping it at least `linger` longer.
+    fn publish_connect(&mut self, ctx: &ModuleContext, linger: Duration) {
+        let Some(card) = &self.connect else { return };
+        let devices: Vec<_> = card.members.iter().filter_map(|k| self.registry.get(*k)).collect();
+        let view = match devices.as_slice() {
+            [] => return,
+            [d] => view::connect_view(&view::DeviceInfo { name: d.name.clone(), kind: d.kind, level: d.level(), pods: d.pods }),
+            many => view::merged_view(&many.iter().map(|d| d.kind).collect::<Vec<_>>()),
+        };
+        if devices.iter().any(|d| d.kind.is_audio()) {
+            handoff::claim_audio_connect();
+        }
+        let key = card.key.clone();
+        self.show(ctx, &key, Priority::Brief, view, linger);
+    }
+
+    /// A device's battery (or buds) changed: upgrade its card if it's new, check the
+    /// thresholds.
+    fn battery_changed(&mut self, ctx: &ModuleContext, key: u64) {
+        let now = Instant::now();
+        let upgrade = self.connect.as_ref().filter(|c| c.members == [key] && self.moments.is_live(&c.key)).map(|c| if now < c.since + UPGRADE_WINDOW { UPGRADED } else { Duration::ZERO });
+        if let Some(linger) = upgrade {
+            self.publish_connect(ctx, linger);
+        }
+        let Some(device) = self.registry.get_mut(key) else { return };
+        let Some(level) = device.level() else { return };
+        let charging = device.charging();
+        if let Some(threshold) = device.low.update(level, charging) {
+            let glyph = device.kind.glyph();
+            self.show_low(ctx, &format!("low:{key:016x}"), glyph, level, threshold);
+        }
+    }
+
+    pub(super) fn show_low(&mut self, ctx: &ModuleContext, key: &str, glyph: char, level: u8, threshold: u8) {
+        if !self.settings.low_battery {
+            return;
+        }
+        // Critical ones also show in "only when it needs me" mode (D8).
+        let priority = if threshold <= CRITICAL { Priority::Alert } else { Priority::Brief };
+        self.show(ctx, key, priority, view::low_view(glyph, level), LOW);
+    }
+
+    pub(super) fn read_batteries(&self) {
+        let containers: Vec<u128> = self.registry.connected().filter_map(|d| d.container).collect();
+        if containers.is_empty() {
+            return;
+        }
+        let tx = self.internal.clone();
+        tokio::spawn(async move {
+            if let Ok(levels) = tokio::task::spawn_blocking(move || pnp::batteries(&containers)).await {
+                _ = tx.send(Internal::Batteries(levels));
+            }
+        });
+    }
+
+    pub(super) fn on_batteries(&mut self, ctx: &ModuleContext, levels: HashMap<u128, u8>) {
+        let changed: Vec<u64> = self
+            .registry
+            .connected()
+            .filter(|d| d.container.and_then(|c| levels.get(&c)).copied() != d.battery && d.container.is_some_and(|c| levels.contains_key(&c)))
+            .map(|d| d.key)
+            .collect();
+        for key in changed {
+            if let Some(device) = self.registry.get_mut(key) {
+                // Only connected devices are read, so a stale value can't land here (D-2).
+                device.battery = device.container.and_then(|c| levels.get(&c)).copied();
+            }
+            self.battery_changed(ctx, key);
+        }
+        let battery_device = self.registry.connected().any(|d| d.battery.is_some() || d.pods.is_some());
+        self.battery_poll = battery_device.then(|| Instant::now() + BATTERY_POLL);
+        self.refresh_overview(ctx);
+    }
+
+    // ---- AirPods -----------------------------------------------------------------------
+
+    pub(super) fn start_scan(&mut self, device: u64, family: Family) {
+        if !self.settings.airpods {
+            return;
+        }
+        let until = Instant::now() + BURST;
+        if let Some(b) = &mut self.burst {
+            (b.device, b.family, b.until) = (device, family, until);
+            return;
+        }
+        match Scan::start(self.sightings.clone()) {
+            Ok(scan) => self.burst = Some(Burst { _scan: scan, device, family, until }),
+            Err(e) => eprintln!("devices: can't scan for AirPods batteries ({e})"),
+        }
+    }
+
+    pub(super) fn stop_scan(&mut self) {
+        if let Some(burst) = self.burst.take() {
+            // Stopping a watcher can wait on the radio stack.
+            tokio::task::spawn_blocking(move || drop(burst));
+        }
+    }
+
+    pub(super) fn on_sighting(&mut self, ctx: &ModuleContext, s: Sighting) {
+        let Some(burst) = &self.burst else { return };
+        if !airpods::accept(burst.family, &s.pods, s.rssi) {
+            return;
+        }
+        let key = burst.device;
+        let Some(device) = self.registry.get_mut(key).filter(|d| d.connected) else { return };
+        if device.pods == Some(s.pods) {
+            return;
+        }
+        device.pods = Some(s.pods);
+        self.battery_changed(ctx, key);
+        self.refresh_overview(ctx);
+    }
+
+    // ---- controllers -------------------------------------------------------------------
+
+    pub(super) fn on_pad(&mut self, ctx: &ModuleContext, event: PadEvent) {
+        match event {
+            PadEvent::Added(reading) => {
+                self.on_pad_reading(ctx, reading);
+                self.schedule_pad_poll();
+            }
+            PadEvent::Removed(key) => {
+                self.pads.remove(&key);
+                if self.pads.is_empty() {
+                    self.pad_poll = None;
+                }
+            }
+        }
+        self.refresh_overview(ctx);
+    }
+
+    pub(super) fn on_pad_reading(&mut self, ctx: &ModuleContext, reading: Reading) {
+        let key = reading.key;
+        let pad = self.pads.entry(key).or_insert_with(|| Pad { reading: reading.clone(), low: Default::default() });
+        pad.reading = reading;
+        let Some(level) = pad.reading.level else { return };
+        if let Some(threshold) = pad.low.update(level, pad.reading.charging) {
+            self.show_low(ctx, &format!("low:pad:{key:016x}"), Kind::Gamepad.glyph(), level, threshold);
+        }
+    }
+
+    pub(super) fn schedule_pad_poll(&mut self) {
+        self.pad_poll = self.pads.values().any(|p| p.reading.level.is_some()).then(|| Instant::now() + PAD_POLL);
+    }
+
+    pub(super) fn poll_pads(&self) {
+        let Some(pads) = self.pads_watch.clone() else { return };
+        let tx = self.internal.clone();
+        tokio::spawn(async move {
+            if let Ok(readings) = tokio::task::spawn_blocking(move || controllers::poll_shared(&pads)).await {
+                _ = tx.send(Internal::Pads(readings));
+            }
+        });
+    }
+}

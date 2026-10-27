@@ -6,8 +6,10 @@ pub mod agent;
 mod audio;
 pub mod clipboard;
 pub mod demo;
+pub mod devices;
 pub mod media;
 pub mod osd;
+mod system_events;
 
 use std::future::Future;
 use std::pin::Pin;
