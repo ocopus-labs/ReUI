@@ -4,30 +4,10 @@
 
 pub mod agent;
 mod audio;
-mod artwork;
-mod brightness;
 pub mod clipboard;
-mod clipboard_panel;
-mod clipboard_settings;
-mod clipboard_store;
-mod clipboard_view;
-mod link;
-mod secrets;
-mod clipboard_os;
 pub mod demo;
-mod flyout;
 pub mod media;
-mod media_settings;
-mod lyrics;
-mod ocr;
 pub mod osd;
-mod osd_os;
-mod osd_settings;
-mod osd_view;
-mod player;
-mod sessions;
-mod transform;
-mod usage;
 
 use std::future::Future;
 use std::pin::Pin;

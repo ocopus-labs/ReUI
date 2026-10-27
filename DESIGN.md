@@ -8,8 +8,8 @@ The look and behaviour of every ReUI surface. The island is the first surface; t
 | --- | --- |
 | Tokens (source of truth) | `design/tokens.json`, W3C Design Tokens format |
 | Tokens in code | `reui-design` crate, generated at build time: `tokens::color::label::PRIMARY` etc. |
-| Components and layout | `crates/reui-island/src/render.rs` |
-| Presentations and motion | `crates/reui-island/src/pill.rs` |
+| Components and layout | `crates/reui-island/src/render/` (one file per presentation and row) |
+| Presentations and motion | `crates/reui-island/src/pill/` |
 | Semantic view model (what modules may say) | `crates/reui-protocol` |
 | References | `design/reference/` (Figma kit export, moodboard in `inspiration/`) |
 | Figma | [Dynamic Island – Live Activities (Community)](https://www.figma.com/design/Oavznl8mcr41wrSfXdpCNs/Dynamic-Island---Live-Activities--Community-) by Jasper Cheyney; island geometry comes from here |

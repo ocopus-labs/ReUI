@@ -5,14 +5,10 @@
 
 #![windows_subsystem = "windows"]
 
-mod audio;
+mod features;
 mod images;
 mod ipc;
-mod keys;
-mod level;
-mod music;
 mod order;
-mod panel;
 mod pill;
 mod render;
 mod settings;
@@ -32,6 +28,7 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 
 use reui_design::tokens::island;
 
+use crate::features::clipboard_keys;
 use crate::pill::{MenuEntry, Pill};
 use crate::settings::{Settings, Visibility};
 use crate::render::{COMPACT_MAX_WIDTH, EXPANDED_SURFACE};
@@ -130,7 +127,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             LRESULT(0)
         }
         WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
-        keys::WM_KEYS => {
+        clipboard_keys::WM_KEYS => {
             with_pill(|pill| pill.on_keys());
             LRESULT(0)
         }
