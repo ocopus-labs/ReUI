@@ -138,6 +138,8 @@ pub enum Thumb {
 pub struct ExpandedLayout {
     pub width: f32,
     pub height: f32,
+    /// Corner radius of the expanded shape (the wide panel's is calmer than the pill's).
+    pub radius: f32,
     pub hits: Vec<Hit>,
     /// Left edge, vertical centre and liveness of the level bars, in expanded-surface DIPs.
     pub bars: Option<(f32, f32, bool)>,
@@ -179,6 +181,7 @@ struct Fonts {
     note: Font,
     icon_search: Font,
     icon_star: Font,
+    icon_kind: Font,
     icon_pager: Font,
     lyric: Font,
     pager: Font,
@@ -255,6 +258,7 @@ impl Renderer {
             note: f(typography::NOTE, false)?,
             icon_search: f(icons(icon::SEARCH), false)?,
             icon_star: f(icons(icon::STAR), false)?,
+            icon_kind: f(icons(component::card::KIND_ICON), false)?,
             icon_pager: f(icons(icon::PAGER), false)?,
             lyric: f(typography::LYRIC, false)?,
             pager: f(typography::PAGER, true)?,
@@ -599,7 +603,8 @@ impl Renderer {
             bars = bars.map(|(x, mid, live)| (x + dx, mid, live));
             Ok(())
         })?;
-        Ok(ExpandedLayout { width, height, hits, bars })
+        let radius = if width == island::expanded::WIDE_WIDTH { island::expanded::PANEL_RADIUS } else { island::expanded::RADIUS };
+        Ok(ExpandedLayout { width, height, radius, hits, bars })
     }
 
     /// A bar from `span.0` to `span.1` at `y`: track, accent fill, and a thumb at the fill's
@@ -963,6 +968,8 @@ impl Renderer {
                 let radius = component::card::RADIUS * s;
                 let shape = D2D1_ROUNDED_RECT { rect: self.rect(l, y, r, b), radiusX: radius, radiusY: radius };
                 let body = (l + pad, y + pad, cw - 2.0 * pad, ch - footer - 2.0 * pad);
+                let selected = with.keyboard && i == with.selected;
+                let card_fill = if selected { color::fill::SECONDARY } else { color::fill::TERTIARY };
                 let well = |tint: Color| unsafe {
                     rt.FillRoundedRectangle(&shape, &self.brush(rt, tint)?);
                     Ok::<(), windows::core::Error>(())
@@ -985,12 +992,24 @@ impl Renderer {
                         }
                     }
                     Preview::Text(text) => {
-                        well(color::fill::TERTIARY)?;
-                        self.text_block(rt, text, &self.fonts.card_text, body.0, body.1, body.2, body.3, color::label::PRIMARY)?;
+                        well(card_fill)?;
+                        // Plain text is the default kind: no badge (code gets one).
+                        let first_w = body.2;
+                        match text.trim().split_once('\n') {
+                            // Several lines: the first reads as a title, the rest quieter.
+                            Some((first, rest)) if !first.trim().is_empty() => {
+                                let line = self.fonts.card_label.style.line_height;
+                                self.text(rt, first.trim(), &self.fonts.card_label, body.0, body.1, first_w, Align::Start, color::label::PRIMARY)?;
+                                let top = body.1 + line + space::XS;
+                                self.text_block(rt, rest.trim_start(), &self.fonts.card_text, body.0, top, body.2, body.1 + body.3 - top, color::label::SECONDARY)?;
+                            }
+                            _ => self.text_block(rt, text.trim(), &self.fonts.card_text, body.0, body.1, first_w, body.3, color::label::PRIMARY)?,
+                        }
                     }
                     Preview::Code(text) => {
-                        well(color::fill::TERTIARY)?;
-                        self.text_block(rt, text, &self.fonts.card_code, body.0, body.1, body.2, body.3, color::label::PRIMARY)?;
+                        well(card_fill)?;
+                        self.kind_glyph(rt, '\u{E943}', r - pad, body.1)?;
+                        self.text_block(rt, text, &self.fonts.card_code, body.0, body.1, body.2 - component::card::KIND_ICON - space::XS, body.3, color::label::PRIMARY)?;
                     }
                     Preview::Color(rgb) => {
                         let swatch = rgb_color(*rgb);
@@ -1002,7 +1021,7 @@ impl Renderer {
                         on_media = !light;
                     }
                     Preview::Link { host, path, title, image, .. } => {
-                        well(color::fill::TERTIARY)?;
+                        well(card_fill)?;
                         let mut text_top = body.1;
                         if let Some(id) = image.filter(|id| matches!(self.images.get(id), Some(Decoded::Bitmap(_)))) {
                             // The page image across the top, rounded only where the card is.
@@ -1020,14 +1039,14 @@ impl Renderer {
                         self.text_block(rt, &heading, &self.fonts.card_title, body.0, text_top, body.2, b - footer - pad * 0.5 - text_top, color::label::PRIMARY)?;
                     }
                     Preview::Files { name, .. } => {
-                        well(color::fill::TERTIARY)?;
+                        well(card_fill)?;
                         self.text(rt, "\u{E8A5}", &self.fonts.icon_tile, body.0, body.1, icon::TILE, Align::Start, accent)?;
                         let name_top = body.1 + icon::TILE + pad * 0.75;
                         self.text_block(rt, name, &self.fonts.card_title, body.0, name_top, body.2, body.1 + body.3 - name_top, color::label::PRIMARY)?;
                     }
                 }
                 self.card_footer(rt, item, l, b - footer - pad * 0.25, cw, on_media)?;
-                if with.keyboard && i == with.selected {
+                if selected {
                     // Concentric with the card: its radius grows by exactly the ring's offset.
                     let out = component::card::RING_GAP + component::card::RING_WIDTH / 2.0;
                     let rr = (component::card::RADIUS + out) * s;
@@ -1036,11 +1055,44 @@ impl Renderer {
                 }
                 hits.push(Hit { card: Some(i), ..Hit::new(l.max(0.0), y, r.min(w), b, &item.action) });
             }
+            // The row runs on past the edge: fade it out there instead of cutting it.
+            let fade = component::card::FADE;
+            if scroll < row.max_scroll() - 0.5 {
+                self.edge_fade(rt, w - inset + ring - fade, w - inset + ring, y - ring, y + ch + ring, true)?;
+            }
+            if scroll > 0.5 {
+                self.edge_fade(rt, inset - ring, inset - ring + fade, y - ring, y + ch + ring, false)?;
+            }
             Ok(())
         })();
         unsafe { rt.PopAxisAlignedClip() };
         result?;
         Ok(ch)
+    }
+
+    /// The island's background fading in across `left..right` (towards the right edge when
+    /// `rightward`), over the card row.
+    #[allow(clippy::too_many_arguments)]
+    fn edge_fade(&self, rt: &ID2D1RenderTarget, left: f32, right: f32, top: f32, bottom: f32, rightward: bool) -> Result<()> {
+        let s = self.scale;
+        let bg = color::island::BACKGROUND;
+        let clear = D2D1_COLOR_F { r: bg.r, g: bg.g, b: bg.b, a: 0.0 };
+        let solid = D2D1_COLOR_F { r: bg.r, g: bg.g, b: bg.b, a: 1.0 };
+        let (from, to) = if rightward { (clear, solid) } else { (solid, clear) };
+        unsafe {
+            let stops = [D2D1_GRADIENT_STOP { position: 0.0, color: from }, D2D1_GRADIENT_STOP { position: 1.0, color: to }];
+            let collection = rt.CreateGradientStopCollection(&stops, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP)?;
+            let props = D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES { startPoint: Vector2::new(left * s, 0.0), endPoint: Vector2::new(right * s, 0.0) };
+            let brush = rt.CreateLinearGradientBrush(&props, None, &collection)?;
+            rt.FillRectangle(&self.rect(left, top, right, bottom), &brush);
+        }
+        Ok(())
+    }
+
+    /// A card's small type glyph, right-aligned at `right`, top at `top`.
+    fn kind_glyph(&self, rt: &ID2D1RenderTarget, glyph: char, right: f32, top: f32) -> Result<()> {
+        let size = component::card::KIND_ICON;
+        self.text(rt, &glyph.to_string(), &self.fonts.icon_kind, right - size, top, size, Align::Center, color::label::TERTIARY)
     }
 
     /// Source app icon, age, a star when pinned, and one fact on the right, inside the
@@ -1094,7 +1146,7 @@ impl Renderer {
             self.button(rt, button, right, y, bw, h, accent, hits)?;
             right -= component::search::BUTTON_GAP;
         }
-        unsafe { self.round_rect(rt, inset, y, right, y + h, radius::CONCENTRIC.min(h / 2.0), color::fill::TERTIARY)? };
+        unsafe { self.round_rect(rt, inset, y, right, y + h, h / 2.0, color::fill::QUATERNARY)? };
         let glyph = icon::SEARCH;
         self.text(rt, "\u{E721}", &self.fonts.icon_search, inset + pad, y + (h - glyph) / 2.0, glyph, Align::Center, color::label::SECONDARY)?;
         let left = inset + pad + glyph + space::SM;
@@ -1145,12 +1197,11 @@ impl Renderer {
             let mut x = inset - offset;
             for (tab, (label_w, count_w, tw)) in tabs.iter().zip(sizes) {
                 if x + tw > 0.0 && x < w {
-                    let (fill, ink, quiet) = if tab.selected {
-                        (color::label::PRIMARY, color::label::ON_ACCENT, color::label::ON_ACCENT.with_alpha(0.5))
-                    } else {
-                        (color::fill::TERTIARY, color::label::SECONDARY, color::label::TERTIARY)
-                    };
-                    unsafe { self.round_rect(rt, x, y, x + tw, y + h, h / 2.0, fill)? };
+                    // Plain text; the selected tab sits on a soft fill (no bright pill).
+                    let (ink, quiet) = if tab.selected { (color::label::PRIMARY, color::label::SECONDARY) } else { (color::label::SECONDARY, color::label::TERTIARY) };
+                    if tab.selected {
+                        unsafe { self.round_rect(rt, x, y, x + tw, y + h, h / 2.0, color::fill::SECONDARY)? };
+                    }
                     self.text(rt, &tab.label, &self.fonts.tab, x + pad, top, label_w + 1.0, Align::Start, ink)?;
                     self.text(rt, &tab.count.to_string(), &self.fonts.tab_count, x + tw - pad - count_w, top, count_w + 1.0, Align::Start, quiet)?;
                     hits.push(Hit::new(x.max(0.0), y, (x + tw).min(w), y + h, &tab.action));

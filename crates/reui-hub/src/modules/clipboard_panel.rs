@@ -11,8 +11,6 @@ use serde_json::json;
 use super::clipboard_view as cv;
 use crate::hub::View;
 
-const GLYPH_PAUSE: char = '\u{E769}';
-const GLYPH_RESUME: char = '\u{E768}';
 const GLYPH_CLIPBOARD: char = '\u{E77F}';
 
 /// The notch panel for a view: search, collection tabs, then the cards (or one quiet line).
@@ -21,8 +19,10 @@ pub fn panel(view: &cv::View, accent: Rgb) -> View {
     if view.undo {
         buttons.push(Button { action: ACTION_UNDO.into(), content: ButtonContent::Text("Undo".into()), role: ButtonRole::Secondary });
     }
-    let (glyph, action) = if view.paused { (GLYPH_RESUME, "resume") } else { (GLYPH_PAUSE, "pause") };
-    buttons.push(Button { action: action.into(), content: ButtonContent::Glyph(glyph), role: ButtonRole::Plain });
+    // Pausing lives in the tray and the card menu; the panel only says so while paused.
+    if view.paused {
+        buttons.push(Button { action: "resume".into(), content: ButtonContent::Text("Resume".into()), role: ButtonRole::Secondary });
+    }
 
     let tabs = view
         .collections

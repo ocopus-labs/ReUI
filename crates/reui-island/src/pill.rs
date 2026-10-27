@@ -212,6 +212,8 @@ impl Pill {
         props.InsertScalar(h!("h"), core.1 * s)?;
         props.InsertScalar(h!("m"), 0.0)?;
         props.InsertScalar(h!("eh"), island::expanded::MIN_HEIGHT * s)?;
+        // Expanded corner radius: the pill's, or the wide panel's calmer one.
+        props.InsertScalar(h!("r"), island::expanded::RADIUS * s)?;
         let win_w = (window.right - window.left) as f32;
         let expr = |text: &str, scalars: &[(&str, f32)]| -> Result<ExpressionAnimation> {
             let e = compositor.CreateExpressionAnimationWithExpression(&HSTRING::from(text))?;
@@ -232,7 +234,7 @@ impl Pill {
         pill.StartAnimation(h!("Offset"), &expr("Vector3(Round((W - p.w) / 2), Round(T), 0)", &[("W", win_w), ("T", island::TOP * s)])?)?;
         let shape = compositor.CreateRoundedRectangleGeometry()?;
         shape.StartAnimation(h!("Size"), &expr("Vector2(p.w, p.h)", &[])?)?;
-        shape.StartAnimation(h!("CornerRadius"), &expr("Vector2(Min(p.h / 2, R), Min(p.h / 2, R))", &[("R", island::expanded::RADIUS * s)])?)?;
+        shape.StartAnimation(h!("CornerRadius"), &expr("Vector2(Min(p.h / 2, p.r), Min(p.h / 2, p.r))", &[])?)?;
         pill.SetClip(&compositor.CreateGeometricClipWithGeometry(&shape)?)?;
         root.Children()?.InsertAtTop(&pill)?;
 
@@ -743,6 +745,7 @@ impl Pill {
         self.expanded_width = card.width;
         self.hits = card.hits;
         self.props.InsertScalar(h!("eh"), card.height * self.scale)?;
+        self.props.InsertScalar(h!("r"), card.radius * self.scale)?;
         self.set_minimal(has_second);
 
         match front {
