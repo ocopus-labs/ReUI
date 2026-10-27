@@ -217,6 +217,7 @@ Agreed Oct 27, 2026. One feature at a time, each end to end (real source → hub
 | 4 | Clipboard (history, previews, paste-back, panel) | Spec: [docs/PRD-clipboard.md](docs/PRD-clipboard.md). v1 built (M0–M4, Oct 28, 2026): faithful capture (HTML/RTF, PNG alpha, cut files), SQLite v1 schema on its own thread, search + type tabs + scrolling card row, keyboard without stealing focus, card menu, pins/delete/undo, safe paste-back (elevation/focus check, terminal chord), privacy (ignored apps, secret detection, pause, retention, clear), safe link previews. Open: hands-on paste matrix, v2 (OCR, categories, drag-out) |
 | 5 | System OSD (volume, brightness) | Spec: [docs/PRD-system-osd.md](docs/PRD-system-osd.md) (M0–M4). Built Oct 28: volume HUD (level bar, bubble ring while music plays, no echo, device moment), brightness (panel events + WMI, DDC/CI set), opt-in Windows flyout hiding with crash-safe restore, optional lock keys / battery saver / mic mute |
 | 6 | Devices (Bluetooth battery, USB, charging) | Spec: [docs/PRD-devices.md](docs/PRD-devices.md) (M0–M4), draft for review |
+| 6.5 | **Product shell** (install, first run, Settings window, trust) | Spec: [docs/PRD-product-shell.md](docs/PRD-product-shell.md) (P0–P5), draft for review. Comes before feature #7 |
 | 7 | Timers and focus | |
 | 8 | Notifications (needs package identity) | |
 | 9 | Mic / camera in use | |
