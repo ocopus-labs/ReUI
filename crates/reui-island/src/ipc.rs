@@ -6,7 +6,7 @@ use std::io;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use reui_protocol::{pipe_name, read_frame, write_frame, ClientMsg, HubMsg, ImageId, Snapshot, SurfaceKind, PROTOCOL_VERSION};
+use reui_protocol::{pipe_name, read_frame, write_frame, ActivityId, ClientMsg, HubMsg, ImageId, Snapshot, SurfaceKind, PROTOCOL_VERSION};
 use tokio::io::{ReadHalf, WriteHalf};
 use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeClient};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -23,6 +23,9 @@ pub enum Event {
     Connected,
     Image(ImageId, Vec<u8>),
     Snapshot(Snapshot),
+    Focus(ActivityId),
+    /// A message for a module's window, with the images it refers to (already sent).
+    Window { surface: String, message: String, images: Vec<ImageId> },
     Disconnected,
 }
 
@@ -96,6 +99,8 @@ async fn read_loop(reader: &mut ReadHalf<NamedPipeClient>, notifier: &Notifier) 
         match read_frame(reader).await? {
             HubMsg::Snapshot(snapshot) => notifier.send(Event::Snapshot(snapshot)),
             HubMsg::Image { id, bytes } => notifier.send(Event::Image(id, bytes)),
+            HubMsg::Focus { id } => notifier.send(Event::Focus(id)),
+            HubMsg::Window { surface, message, images } => notifier.send(Event::Window { surface, message, images }),
             _ => {}
         }
     }

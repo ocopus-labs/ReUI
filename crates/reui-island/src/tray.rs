@@ -13,9 +13,31 @@ pub const WM_TRAY: u32 = WM_APP + 2;
 const ICON_ID: u32 = 1;
 const CMD_QUIT: usize = 100;
 const CMD_VISIBILITY: usize = 200;
+const CMD_CLIPBOARD: usize = 300;
+const CMD_ITEM: usize = 400;
+const CMD_MUSIC: usize = 500;
+
+/// Module commands in the menu: (module, action, label). Sent whether or not the module
+/// has anything showing; clearing keeps pins, so it asks nothing.
+const CLIPBOARD: [(&str, &str, &str); 3] = [
+    ("clipboard", "pause", "Pause clipboard for 1 hour"),
+    ("clipboard", "resume", "Resume clipboard"),
+    ("clipboard", "clear", "Clear clipboard history"),
+];
+
+/// Music settings, kept by the media module (lyrics go to lrclib.net, so they're opt-in).
+const MUSIC: [(&str, &str, &str); 5] = [
+    ("media", "lyrics:on", "Lyrics on"),
+    ("media", "lyrics:off", "Lyrics off"),
+    ("media", "visualizer:real", "Visualizer: real"),
+    ("media", "visualizer:simple", "Visualizer: simple"),
+    ("media", "visualizer:off", "Visualizer: off"),
+];
 
 pub enum Command {
     Visibility(Visibility),
+    /// (module, action)
+    Module(&'static str, &'static str),
     Quit,
 }
 
@@ -65,6 +87,17 @@ pub fn menu(hwnd: HWND, current: Visibility) -> Option<Command> {
             _ = AppendMenuW(menu, MF_STRING | checked, CMD_VISIBILITY + i, PCWSTR(label.as_ptr()));
         }
         _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
+        for (i, (_, _, label)) in CLIPBOARD.iter().enumerate() {
+            let label: Vec<u16> = label.encode_utf16().chain([0]).collect();
+            _ = AppendMenuW(menu, MF_STRING, CMD_CLIPBOARD + i, PCWSTR(label.as_ptr()));
+        }
+        _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
+        _ = AppendMenuW(menu, MF_STRING | MF_DISABLED | MF_GRAYED, 0, w!("Music"));
+        for (i, (_, _, label)) in MUSIC.iter().enumerate() {
+            let label: Vec<u16> = format!("    {label}").encode_utf16().chain([0]).collect();
+            _ = AppendMenuW(menu, MF_STRING, CMD_MUSIC + i, PCWSTR(label.as_ptr()));
+        }
+        _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
         _ = AppendMenuW(menu, MF_STRING, CMD_QUIT, w!("Quit ReUI"));
 
         let mut pt = POINT::default();
@@ -77,7 +110,45 @@ pub fn menu(hwnd: HWND, current: Visibility) -> Option<Command> {
         match picked {
             CMD_QUIT => Some(Command::Quit),
             n if (CMD_VISIBILITY..CMD_VISIBILITY + Visibility::ALL.len()).contains(&n) => Some(Command::Visibility(Visibility::ALL[n - CMD_VISIBILITY].0)),
+            n if (CMD_CLIPBOARD..CMD_CLIPBOARD + CLIPBOARD.len()).contains(&n) => {
+                let (module, action, _) = CLIPBOARD[n - CMD_CLIPBOARD];
+                Some(Command::Module(module, action))
+            }
+            n if (CMD_MUSIC..CMD_MUSIC + MUSIC.len()).contains(&n) => {
+                let (module, action, _) = MUSIC[n - CMD_MUSIC];
+                Some(Command::Module(module, action))
+            }
             _ => None,
         }
+    }
+}
+
+/// A card's context menu at the pointer, entries (label, checked); returns the index of
+/// the picked one.
+///
+/// A popup menu only closes on an outside click when its owner is the foreground window,
+/// so the island takes the foreground for the menu's life and hands it straight back to
+/// the app that had it (the paste target). Returns that app too, so the pill can ignore
+/// the foreground change this causes.
+pub fn item_menu(hwnd: HWND, labels: &[(&str, bool)]) -> (Option<usize>, HWND) {
+    unsafe {
+        let previous = GetForegroundWindow();
+        let Ok(menu) = CreatePopupMenu() else { return (None, previous) };
+        for (i, (label, checked)) in labels.iter().enumerate() {
+            let label: Vec<u16> = label.encode_utf16().chain([0]).collect();
+            let check = if *checked { MF_CHECKED } else { MF_UNCHECKED };
+            _ = AppendMenuW(menu, MF_STRING | check, CMD_ITEM + i, PCWSTR(label.as_ptr()));
+        }
+        let mut pt = POINT::default();
+        _ = GetCursorPos(&mut pt);
+        _ = SetForegroundWindow(hwnd);
+        let picked = TrackPopupMenu(menu, TPM_RETURNCMD | TPM_RIGHTBUTTON | TPM_NONOTIFY, pt.x, pt.y, None, hwnd, None).0 as usize;
+        _ = PostMessageW(Some(hwnd), WM_NULL, WPARAM(0), LPARAM(0));
+        _ = DestroyMenu(menu);
+        if !previous.is_invalid() && GetForegroundWindow() == hwnd {
+            _ = SetForegroundWindow(previous);
+        }
+        let picked = picked.checked_sub(CMD_ITEM).filter(|&i| i < labels.len());
+        (picked, previous)
     }
 }

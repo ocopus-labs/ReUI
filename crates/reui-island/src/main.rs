@@ -5,8 +5,15 @@
 
 #![windows_subsystem = "windows"]
 
+mod audio;
+mod clipwin;
+mod dragout;
+mod images;
 mod ipc;
+mod keys;
+mod music;
 mod order;
+mod panel;
 mod pill;
 mod render;
 mod settings;
@@ -21,11 +28,12 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::WinRT::*;
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
 use windows::Win32::UI::HiDpi::*;
+use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture};
 use windows::Win32::UI::WindowsAndMessaging::*;
 
 use reui_design::tokens::island;
 
-use crate::pill::Pill;
+use crate::pill::{MenuEntry, Pill};
 use crate::settings::{Settings, Visibility};
 use crate::render::{COMPACT_MAX_WIDTH, EXPANDED_SURFACE};
 
@@ -51,9 +59,42 @@ fn open_menu(hwnd: HWND) {
     with_pill(|pill| current = pill.visibility());
     match tray::menu(hwnd, current) {
         Some(tray::Command::Visibility(v)) => with_pill(|pill| pill.set_visibility(v)),
+        Some(tray::Command::Module(module, action)) => with_pill(|pill| pill.command(module, action)),
         Some(tray::Command::Quit) => unsafe { _ = DestroyWindow(hwnd) },
         None => {}
     }
+}
+
+/// Right-click: a card's own menu over a card that has one, the island's menu elsewhere.
+fn right_click(hwnd: HWND, x: f32, y: f32) {
+    let mut entries = None;
+    with_pill(|pill| entries = pill.card_menu(x, y));
+    match entries {
+        Some(entries) => card_menu(hwnd, entries),
+        None => open_menu(hwnd),
+    }
+}
+
+/// A menu from the open card (a card's actions, a slider's output devices). It runs
+/// outside the pill's borrow so hooks and timers keep working meanwhile.
+fn card_menu(hwnd: HWND, entries: Vec<MenuEntry>) {
+    if entries.is_empty() {
+        return;
+    }
+    with_pill(|pill| pill.menu_opened());
+    let items: Vec<(&str, bool)> = entries.iter().map(|(label, _, _, checked)| (label.as_str(), *checked)).collect();
+    let (picked, previous) = tray::item_menu(hwnd, &items);
+    with_pill(|pill| {
+        pill.menu_closed(previous);
+        if let Some(i) = picked {
+            let (_, action, closes, _) = &entries[i];
+            pill.act(action.clone(), *closes);
+        }
+    });
+}
+
+fn client_point(lparam: LPARAM) -> (f32, f32) {
+    ((lparam.0 & 0xffff) as i16 as f32, ((lparam.0 >> 16) & 0xffff) as i16 as f32)
 }
 
 /// Run `f` on the pill unless it's already borrowed (re-entrant window messages).
@@ -68,9 +109,13 @@ fn with_pill(f: impl FnOnce(&mut Pill)) {
 }
 
 unsafe extern "system" fn mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
-    if code >= 0 && wparam.0 as u32 == WM_MOUSEMOVE {
+    if code >= 0 {
         let info = &*(lparam.0 as *const MSLLHOOKSTRUCT);
-        with_pill(|pill| pill.on_mouse_move(info.pt));
+        match wparam.0 as u32 {
+            WM_MOUSEMOVE => with_pill(|pill| pill.on_mouse_move(info.pt)),
+            WM_LBUTTONDOWN | WM_RBUTTONDOWN | WM_MBUTTONDOWN => with_pill(|pill| pill.on_mouse_down(info.pt)),
+            _ => {}
+        }
     }
     CallNextHookEx(None, code, wparam, lparam)
 }
@@ -82,23 +127,62 @@ unsafe extern "system" fn foreground_hook(_: HWINEVENTHOOK, _: u32, hwnd: HWND, 
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     match msg {
         ipc::WM_HUB => {
-            with_pill(|pill| pill.drain_hub());
+            // Window messages go out after the pill's borrow ends: the clipboard window's
+            // host pumps messages (focus restore, drag-out) that land back in here.
+            let mut inbound = Vec::new();
+            with_pill(|pill| inbound = pill.drain_hub());
+            clipwin::deliver(inbound);
             LRESULT(0)
         }
         WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
-        WM_LBUTTONUP => {
-            let x = (lparam.0 & 0xffff) as i16 as f32;
-            let y = ((lparam.0 >> 16) & 0xffff) as i16 as f32;
-            with_pill(|pill| pill.on_click(x, y));
+        keys::WM_KEYS => {
+            with_pill(|pill| pill.on_keys());
             LRESULT(0)
         }
-        WM_MOUSEWHEEL => {
+        // A press on a bar in the open card drags it, with the mouse captured so the drag
+        // follows the pointer off the island; anything else acts on release.
+        WM_LBUTTONDOWN => {
+            let (x, y) = client_point(lparam);
+            let mut dragging = false;
+            with_pill(|pill| dragging = pill.on_press(x, y));
+            if dragging {
+                SetCapture(hwnd);
+            }
+            LRESULT(0)
+        }
+        WM_LBUTTONUP => {
+            let (x, y) = client_point(lparam);
+            let shift = wparam.0 & 0x0004 != 0; // MK_SHIFT
+            let (mut dragged, mut menu) = (false, None);
+            with_pill(|pill| {
+                dragged = pill.on_release(x, y);
+                if !dragged {
+                    menu = pill.click_menu(x, y);
+                }
+            });
+            if dragged {
+                _ = ReleaseCapture();
+            } else if let Some(entries) = menu {
+                card_menu(hwnd, entries);
+            } else {
+                with_pill(|pill| pill.on_click(x, y, shift));
+            }
+            LRESULT(0)
+        }
+        WM_CAPTURECHANGED => {
+            with_pill(|pill| pill.on_capture_lost());
+            LRESULT(0)
+        }
+        WM_MOUSEWHEEL | WM_MOUSEHWHEEL => {
             let delta = ((wparam.0 >> 16) & 0xffff) as i16;
-            with_pill(|pill| pill.on_wheel(delta));
+            // Wheel messages carry screen coordinates.
+            let (x, y) = client_point(lparam);
+            with_pill(|pill| pill.on_wheel(delta, msg == WM_MOUSEHWHEEL, POINT { x: x as i32, y: y as i32 }));
             LRESULT(0)
         }
         WM_RBUTTONUP => {
-            open_menu(hwnd);
+            let (x, y) = client_point(lparam);
+            right_click(hwnd, x, y);
             LRESULT(0)
         }
         tray::WM_TRAY => {
@@ -175,6 +259,7 @@ fn main() -> Result<()> {
     };
 
     let link = ipc::spawn(hwnd);
+    clipwin::init(link.to_hub.clone())?;
     let settings = Settings::load();
     let mut pill = Pill::new(hwnd, scale, window, monitor, !animations_enabled(), settings.visibility, link.to_hub, link.events)?;
     pill.refresh_visibility();
@@ -206,6 +291,7 @@ fn main() -> Result<()> {
         _ = UnhookWindowsHookEx(mouse);
         _ = UnhookWinEvent(foreground);
     }
+    clipwin::shutdown();
     PILL.with(|cell| cell.borrow_mut().take());
     Ok(())
 }

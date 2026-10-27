@@ -1,11 +1,11 @@
 //! The hub's shared state: every module's live activities, and which one is in front.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
 use reui_protocol::{Activity, ActivityId, CompactView, Element, ExpandedView, ImageId, Priority, Rgb, Snapshot};
-use tokio::sync::{mpsc, oneshot, watch};
+use tokio::sync::{broadcast, mpsc, oneshot, watch};
 
 /// How an activity presents itself; see the protocol for each presentation.
 #[derive(Debug, Clone, Default)]
@@ -14,6 +14,8 @@ pub struct View {
     pub compact: CompactView,
     pub minimal: Element,
     pub expanded: Option<ExpandedView>,
+    /// The process whose sound this is about (see the protocol's `Activity::audio`).
+    pub audio: Option<u32>,
 }
 
 /// An action a surface sent back for one of a module's activities.
@@ -43,6 +45,16 @@ pub enum ModuleInput {
     /// The bridge waiting on this hook call went away (the agent was answered in its own
     /// UI, timed out, or was closed); drop whatever was shown for it.
     HookGone(u64),
+    /// A message from the module's own window (JSON in the window's vocabulary).
+    Window(String),
+}
+
+/// A message for a module's window: surface name, JSON, images it refers to.
+#[derive(Debug, Clone)]
+pub struct WindowMessage {
+    pub surface: String,
+    pub message: String,
+    pub images: Vec<ImageId>,
 }
 
 struct Entry {
@@ -51,12 +63,23 @@ struct Entry {
     seq: u64,
 }
 
+/// Unshown images kept for a module that may show them again by id (its logo, the current
+/// track's art); the least recently used beyond this go. Shown images are always kept.
+const SPARE_IMAGE_BYTES: usize = 64 * 1024 * 1024;
+
+struct StoredImage {
+    bytes: Arc<Vec<u8>>,
+    /// `State::clock` when last added or shown.
+    used: u64,
+}
+
 #[derive(Default)]
 struct State {
     entries: HashMap<ActivityId, Entry>,
     routes: HashMap<String, mpsc::UnboundedSender<ModuleInput>>,
     /// Encoded images by content hash; surfaces fetch them once, before first use.
-    images: HashMap<ImageId, Arc<Vec<u8>>>,
+    images: HashMap<ImageId, StoredImage>,
+    clock: u64,
     next_seq: u64,
     next_hook: u64,
 }
@@ -65,16 +88,29 @@ struct State {
 pub struct Hub {
     state: Arc<Mutex<State>>,
     snapshots: Arc<watch::Sender<Arc<Snapshot>>>,
+    /// "Open this activity" requests for surfaces.
+    focus: broadcast::Sender<ActivityId>,
+    windows: broadcast::Sender<WindowMessage>,
 }
 
 impl Hub {
     pub fn new() -> Self {
         let (snapshots, _) = watch::channel(Arc::new(Snapshot::default()));
-        Self { state: Arc::default(), snapshots: Arc::new(snapshots) }
+        let (focus, _) = broadcast::channel(8);
+        let (windows, _) = broadcast::channel(64);
+        Self { state: Arc::default(), snapshots: Arc::new(snapshots), focus, windows }
     }
 
     /// Latest snapshot plus change notifications. `watch` keeps only the newest value,
     /// so a slow surface skips intermediate states instead of queueing them.
+    pub fn subscribe_focus(&self) -> broadcast::Receiver<ActivityId> {
+        self.focus.subscribe()
+    }
+
+    pub fn subscribe_windows(&self) -> broadcast::Receiver<WindowMessage> {
+        self.windows.subscribe()
+    }
+
     pub fn subscribe(&self) -> watch::Receiver<Arc<Snapshot>> {
         self.snapshots.subscribe()
     }
@@ -86,14 +122,18 @@ impl Hub {
     }
 
     pub fn image(&self, id: ImageId) -> Option<Arc<Vec<u8>>> {
-        self.state.lock().unwrap().images.get(&id).cloned()
+        self.state.lock().unwrap().images.get(&id).map(|i| i.bytes.clone())
     }
 
     fn add_image(&self, bytes: Vec<u8>) -> ImageId {
         let mut hasher = DefaultHasher::new();
         bytes.hash(&mut hasher);
         let id = ImageId(hasher.finish());
-        self.state.lock().unwrap().images.entry(id).or_insert_with(|| Arc::new(bytes));
+        let mut state = self.state.lock().unwrap();
+        state.clock += 1;
+        let used = state.clock;
+        // Adding again (modules do on every publish) also counts as recent use.
+        state.images.entry(id).or_insert_with(|| StoredImage { bytes: Arc::new(bytes), used: 0 }).used = used;
         id
     }
 
@@ -104,6 +144,20 @@ impl Hub {
         }
         if let Some(route) = state.routes.get(&id.module) {
             _ = route.send(ModuleInput::Action(ModuleAction { key: id.key.clone(), action }));
+        }
+    }
+
+    /// A module-level command (no activity needed); arrives as an action with an empty key.
+    /// A message from a module's window.
+    pub fn route_window(&self, module: &str, message: String) {
+        if let Some(route) = self.state.lock().unwrap().routes.get(module) {
+            _ = route.send(ModuleInput::Window(message));
+        }
+    }
+
+    pub fn route_command(&self, module: &str, action: String) {
+        if let Some(route) = self.state.lock().unwrap().routes.get(module) {
+            _ = route.send(ModuleInput::Action(ModuleAction { key: String::new(), action }));
         }
     }
 
@@ -135,12 +189,14 @@ impl Hub {
         };
         state.entries.insert(activity.id.clone(), Entry { activity, seq });
         self.rebuild(&state);
+        evict_images(&mut state);
     }
 
     fn retract(&self, id: &ActivityId) {
         let mut state = self.state.lock().unwrap();
         if state.entries.remove(id).is_some() {
             self.rebuild(&state);
+            evict_images(&mut state);
         }
     }
 
@@ -151,6 +207,7 @@ impl Hub {
         state.entries.retain(|id, _| id.module != module);
         if state.entries.len() != before {
             self.rebuild(&state);
+            evict_images(&mut state);
         }
     }
 
@@ -169,6 +226,32 @@ impl Hub {
     }
 }
 
+/// Drops images no live activity shows, oldest first, once they take more than
+/// [`SPARE_IMAGE_BYTES`]. Images a module has just added for its next publish are the most
+/// recent, so they're the last to go.
+fn evict_images(state: &mut State) {
+    let shown: HashSet<ImageId> = state.entries.values().flat_map(|e| e.activity.images()).collect();
+    state.clock += 1;
+    let now = state.clock;
+    let mut spare: Vec<(u64, ImageId, usize)> = Vec::new();
+    for (id, image) in state.images.iter_mut() {
+        if shown.contains(id) {
+            image.used = now;
+        } else {
+            spare.push((image.used, *id, image.bytes.len()));
+        }
+    }
+    let mut total: usize = spare.iter().map(|s| s.2).sum();
+    spare.sort_unstable_by_key(|s| s.0);
+    for (_, id, len) in spare {
+        if total <= SPARE_IMAGE_BYTES {
+            break;
+        }
+        state.images.remove(&id);
+        total -= len;
+    }
+}
+
 /// A module's handle to the hub. Dropping it retracts all of the module's activities.
 pub struct ModuleContext {
     module: &'static str,
@@ -179,13 +262,25 @@ pub struct ModuleContext {
 impl ModuleContext {
     pub fn publish(&self, key: &str, priority: Priority, view: View) {
         let id = ActivityId { module: self.module.to_string(), key: key.to_string() };
-        let View { accent, compact, minimal, expanded } = view;
-        self.hub.publish(Activity { id, priority, accent, compact, minimal, expanded });
+        let View { accent, compact, minimal, expanded, audio } = view;
+        self.hub.publish(Activity { id, priority, accent, compact, minimal, expanded, audio });
     }
 
     /// Registers encoded image bytes (PNG, JPEG, ...) for use as `Art::Image`.
     pub fn image(&self, bytes: Vec<u8>) -> ImageId {
         self.hub.add_image(bytes)
+    }
+
+    /// Asks surfaces to bring this (published) activity to the front and open it.
+    /// Sends a message to this module's window (the surface shows the window when the
+    /// message says so). `images` must already be in the store (`self.image(..)`).
+    pub fn window(&self, message: String, images: Vec<ImageId>) {
+        _ = self.hub.windows.send(WindowMessage { surface: self.module.to_string(), message, images });
+    }
+
+    #[allow(dead_code)] // the v1 island panel used it; kept for future hotkey-summoned cards
+    pub fn focus(&self, key: &str) {
+        _ = self.hub.focus.send(ActivityId { module: self.module.to_string(), key: key.to_string() });
     }
 
     pub fn retract(&self, key: &str) {
@@ -232,6 +327,27 @@ mod tests {
 
         ctx.retract("ask");
         assert_eq!(front(&hub), ["timer", "music"]);
+    }
+
+    #[test]
+    fn unshown_images_go_oldest_first_beyond_the_budget() {
+        use reui_protocol::Art;
+        let hub = Hub::new();
+        let ctx = hub.context("m");
+        let big = |n: u8| vec![n; SPARE_IMAGE_BYTES / 2 + 1];
+        let shown = ctx.image(big(1));
+        let art = |id| View { compact: CompactView { leading: Element::Art(Art::Image(id)), trailing: Element::Empty }, ..Default::default() };
+        ctx.publish("a", Priority::Ongoing, art(shown));
+        let old = ctx.image(big(2));
+        let newer = ctx.image(big(3));
+        let newest = ctx.image(big(4));
+        ctx.publish("b", Priority::Ongoing, compact("x"));
+        // Shown: kept however big. Unshown: the newest that fit the budget stay.
+        assert!(hub.image(shown).is_some());
+        assert!(hub.image(old).is_none() && hub.image(newer).is_none());
+        assert!(hub.image(newest).is_some());
+        ctx.retract("a");
+        assert!(hub.image(shown).is_none() || hub.image(newest).is_none());
     }
 
     #[test]

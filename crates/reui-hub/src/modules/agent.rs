@@ -209,6 +209,7 @@ async fn run(profile: &'static Profile, mut ctx: ModuleContext) {
                     let next = if allowed { Phase::Tool(short_tool_name(&p.tool)) } else { Phase::Thinking };
                     resume(&ctx, &me, &mut sessions, &p.session, next);
                 }
+                Some(ModuleInput::Window(_)) => {}
                 None => break,
             },
             _ = async { scan.as_mut().unwrap().await }, if scan.is_some() => {
@@ -424,6 +425,7 @@ fn publish_session(ctx: &ModuleContext, me: &Agentry, id: &str, session: &Sessio
         priority,
         View {
             accent: Some(me.profile.accent),
+            audio: None,
             compact: CompactView { leading: me.mark.clone(), trailing },
             minimal: me.mark.clone(),
             expanded: Some(ExpandedView {
@@ -433,6 +435,10 @@ fn publish_session(ctx: &ModuleContext, me: &Agentry, id: &str, session: &Sessio
                 headline: Headline::Text(session.prompt.clone().unwrap_or_else(|| session.project.clone())),
                 detail: Some(status),
                 trailing: Element::Empty,
+                wide: false,
+                tint: false,
+                pager: None,
+                open: None,
                 rows: Vec::new(),
             }),
         },
@@ -452,6 +458,7 @@ fn publish_request(ctx: &ModuleContext, me: &Agentry, id: u64, project: &str, to
         Priority::Decision,
         View {
             accent: Some(me.profile.accent),
+            audio: None,
             compact: CompactView { leading: me.mark.clone(), trailing: Element::Text { text: "Allow?".into(), tone: Tone::Accent } },
             minimal: me.mark.clone(),
             expanded: Some(ExpandedView {
@@ -460,6 +467,10 @@ fn publish_request(ctx: &ModuleContext, me: &Agentry, id: u64, project: &str, to
                 headline,
                 detail: Some(detail),
                 trailing: Element::Empty,
+                wide: false,
+                tint: false,
+                pager: None,
+                open: None,
                 rows: vec![Row::Buttons(buttons)],
             }),
         },

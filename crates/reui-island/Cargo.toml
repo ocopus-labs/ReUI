@@ -12,6 +12,13 @@ serde.workspace = true
 serde_json = "1.0"
 tokio = { workspace = true, features = ["rt", "net", "io-util", "sync", "time", "macros"] }
 windows-numerics.workspace = true
+# Band levels for the real visualizer (per-process loopback capture).
+realfft = "3.5"
+# `#[implement]` expands to `::windows_core` paths (the audio activation callback).
+windows-core = "0.62.2"
+# The clipboard window (WebView2, created on demand). Links the static WebView2 loader, so
+# there is no WebView2Loader.dll to ship; the runtime itself comes with Windows 11.
+webview2-com = "0.39.1"
 
 [dependencies.windows]
 workspace = true
@@ -28,18 +35,29 @@ features = [
     "Win32_Graphics_Direct2D",
     "Win32_Graphics_Direct2D_Common",
     "Win32_Graphics_Direct3D",
+    "Win32_Graphics_Dwm",
     "Win32_Graphics_Direct3D11",
     "Win32_Graphics_DirectWrite",
     "Win32_Graphics_Dxgi",
     "Win32_Graphics_Dxgi_Common",
     "Win32_Graphics_Gdi",
     "Win32_Graphics_Imaging",
+    "Win32_Media_Audio",
+    "Win32_Security",
     "Win32_System_Com",
+    "Win32_System_Com_StructuredStorage",
+    "Win32_System_DataExchange",
     "Win32_System_LibraryLoader",
+    "Win32_System_Memory",
+    "Win32_System_Ole",
+    "Win32_System_SystemServices",
+    "Win32_System_Threading",
+    "Win32_System_Variant",
     "Win32_System_WinRT",
     "Win32_System_WinRT_Composition",
     "Win32_UI_Accessibility",
     "Win32_UI_HiDpi",
+    "Win32_UI_Input_KeyboardAndMouse",
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",
 ]

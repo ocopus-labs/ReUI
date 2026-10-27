@@ -6,7 +6,7 @@ use std::ffi::c_void;
 use std::time::Duration;
 
 use anyhow::{bail, Context, Result};
-use reui_protocol::{read_frame, write_frame, ClientMsg, HubMsg, SurfaceKind, PROTOCOL_VERSION};
+use reui_protocol::{read_frame, write_frame, ClientMsg, HubMsg, ImageId, Snapshot, SurfaceKind, PROTOCOL_VERSION};
 use tokio::io::{AsyncReadExt, ReadHalf, WriteHalf};
 use tokio::net::windows::named_pipe::{NamedPipeServer, PipeMode, ServerOptions};
 use tokio::sync::oneshot;
@@ -88,27 +88,77 @@ async fn serve(pipe: NamedPipeServer, hub: Hub) -> Result<()> {
     println!("ipc: {surface:?} connected");
 
     let mut snapshots = hub.subscribe();
+    let mut focus = hub.subscribe_focus();
+    let mut windows = hub.subscribe_windows();
     let images = hub.clone();
     let sender = tokio::spawn(async move {
         let mut sent = HashSet::new();
-        loop {
-            let snapshot = snapshots.borrow_and_update().as_ref().clone();
-            // Images go ahead of the first snapshot that shows them, once per surface.
-            for id in snapshot.activities.iter().flat_map(|a| a.images()) {
-                if sent.insert(id) {
+        // Images each window's latest message refers to; kept as sent alongside the snapshot's.
+        let mut window_images: std::collections::HashMap<String, Vec<ImageId>> = std::collections::HashMap::new();
+        // Snapshot (with its images not yet sent to this surface) and focus requests share
+        // the writer; a focus always follows the snapshot that contains its activity.
+        macro_rules! send_snapshot {
+            () => {{
+                let snapshot = snapshots.borrow_and_update().as_ref().clone();
+                let keep: HashSet<ImageId> = window_images.values().flatten().copied().collect();
+                for id in images_to_send(&mut sent, &snapshot, &keep) {
+                    // An image the hub no longer has isn't marked sent, so it goes out
+                    // if it comes back.
                     if let Some(bytes) = images.image(id) {
                         if write_frame(&mut writer, &HubMsg::Image { id, bytes: bytes.to_vec() }).await.is_err() {
                             return;
                         }
+                        sent.insert(id);
                     }
                 }
-            }
-            if write_frame(&mut writer, &HubMsg::Snapshot(snapshot)).await.is_err() {
-                break;
-            }
-            tokio::time::sleep(MIN_SEND_INTERVAL).await;
-            if snapshots.changed().await.is_err() {
-                break;
+                if write_frame(&mut writer, &HubMsg::Snapshot(snapshot)).await.is_err() {
+                    return;
+                }
+            }};
+        }
+        send_snapshot!();
+        loop {
+            tokio::select! {
+                changed = snapshots.changed() => {
+                    if changed.is_err() {
+                        return;
+                    }
+                    tokio::time::sleep(MIN_SEND_INTERVAL).await;
+                    send_snapshot!();
+                }
+                message = windows.recv() => match message {
+                    Ok(message) => {
+                        for &id in &message.images {
+                            if sent.contains(&id) {
+                                continue;
+                            }
+                            if let Some(bytes) = images.image(id) {
+                                if write_frame(&mut writer, &HubMsg::Image { id, bytes: bytes.to_vec() }).await.is_err() {
+                                    return;
+                                }
+                                sent.insert(id);
+                            }
+                        }
+                        window_images.insert(message.surface.clone(), message.images.clone());
+                        if write_frame(&mut writer, &HubMsg::Window { surface: message.surface, message: message.message, images: message.images }).await.is_err() {
+                            return;
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(_) => return,
+                },
+                request = focus.recv() => match request {
+                    Ok(id) => {
+                        if snapshots.has_changed().unwrap_or(false) {
+                            send_snapshot!();
+                        }
+                        if write_frame(&mut writer, &HubMsg::Focus { id }).await.is_err() {
+                            return;
+                        }
+                    }
+                    Err(tokio::sync::broadcast::error::RecvError::Lagged(_)) => {}
+                    Err(_) => return,
+                },
             }
         }
     });
@@ -116,6 +166,8 @@ async fn serve(pipe: NamedPipeServer, hub: Hub) -> Result<()> {
     let result = loop {
         match read_frame::<_, ClientMsg>(&mut reader).await {
             Ok(ClientMsg::Action { id, action }) => hub.route_action(&id, action),
+            Ok(ClientMsg::Command { module, action }) => hub.route_command(&module, action),
+            Ok(ClientMsg::Window { surface, message }) => hub.route_window(&surface, message),
             Ok(ClientMsg::Hello { .. } | ClientMsg::Hook { .. }) => {}
             Err(e) => break Err(e.into()),
         }
@@ -123,6 +175,22 @@ async fn serve(pipe: NamedPipeServer, hub: Hub) -> Result<()> {
     sender.abort();
     println!("ipc: {surface:?} disconnected");
     result
+}
+
+/// The images `snapshot` shows that this surface doesn't have yet, in order. `sent` keeps
+/// only what the snapshot shows: the island drops its decoded copies of everything else at
+/// the same point in the stream (`reui-island` `panel::referenced`), so an image that comes
+/// back later is simply sent again.
+fn images_to_send(sent: &mut HashSet<ImageId>, snapshot: &Snapshot, keep: &HashSet<ImageId>) -> Vec<ImageId> {
+    let shown: HashSet<ImageId> = snapshot.activities.iter().flat_map(|a| a.images()).collect();
+    sent.retain(|id| shown.contains(id) || keep.contains(id));
+    let mut missing = Vec::new();
+    for id in snapshot.activities.iter().flat_map(|a| a.images()) {
+        if !sent.contains(&id) && !missing.contains(&id) {
+            missing.push(id);
+        }
+    }
+    missing
 }
 
 /// One hook call. If the agent waits for an answer, hold the connection until the module
@@ -172,5 +240,39 @@ fn current_user_only_descriptor() -> Result<usize> {
         let mut descriptor = PSECURITY_DESCRIPTOR::default();
         ConvertStringSecurityDescriptorToSecurityDescriptorW(&sddl, SDDL_REVISION_1, &mut descriptor, None)?;
         Ok(descriptor.0 as usize)
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use reui_protocol::{Activity, ActivityId, Art, CompactView, Element, Priority};
+
+    fn showing(ids: &[u64]) -> Snapshot {
+        let activity = |i: &u64| Activity {
+            id: ActivityId { module: "m".into(), key: i.to_string() },
+            priority: Priority::Ongoing,
+            accent: None,
+            compact: CompactView { leading: Element::Art(Art::Image(ImageId(*i))), trailing: Element::Empty },
+            minimal: Element::Art(Art::Image(ImageId(*i))),
+            audio: None,
+            expanded: None,
+        };
+        Snapshot { activities: ids.iter().map(activity).collect() }
+    }
+
+    #[test]
+    fn images_are_sent_once_and_again_after_they_were_dropped() {
+        let mut sent = HashSet::new();
+        let mut send = |ids: &[u64]| {
+            let out = images_to_send(&mut sent, &showing(ids), &HashSet::new());
+            sent.extend(&out);
+            out.into_iter().map(|i| i.0).collect::<Vec<_>>()
+        };
+        assert_eq!(send(&[1, 2]), [1, 2]);
+        assert_eq!(send(&[1, 2]), Vec::<u64>::new());
+        // 1 leaves the snapshot: both ends drop it, so it's sent again when it's back.
+        assert_eq!(send(&[2]), Vec::<u64>::new());
+        assert_eq!(send(&[1, 2]), [1]);
     }
 }

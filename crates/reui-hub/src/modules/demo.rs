@@ -162,6 +162,7 @@ fn publish_music(ctx: &ModuleContext, track: usize, playing: bool, image: Option
         Priority::Ongoing,
         View {
             accent: Some(accent),
+            audio: None,
             compact: CompactView { leading: Element::Art(art.clone()), trailing: Element::Bars { live: playing } },
             minimal: Element::Bars { live: playing },
             expanded: Some(ExpandedView {
@@ -170,6 +171,10 @@ fn publish_music(ctx: &ModuleContext, track: usize, playing: bool, image: Option
                 headline: Headline::Text(t.title.into()),
                 detail: Some(t.artist.into()),
                 trailing: Element::Bars { live: playing },
+                wide: false,
+                tint: false,
+                pager: None,
+                open: None,
                 rows: vec![
                     Row::Progress {
                         fraction: position as f32 / t.length as f32,
@@ -194,6 +199,7 @@ fn publish_timer(ctx: &ModuleContext, left: u32, running: bool) {
         Priority::Ongoing,
         View {
             accent: Some(TIMER_ACCENT),
+            audio: None,
             compact: CompactView { leading: ring.clone(), trailing: Element::Text { text: clock(left), tone: Tone::Accent } },
             minimal: ring.clone(),
             expanded: Some(ExpandedView {
@@ -203,6 +209,10 @@ fn publish_timer(ctx: &ModuleContext, left: u32, running: bool) {
                 detail: (!running).then(|| "Paused".into()),
                 trailing: Element::Empty,
                 // A lone glyph row sits inline beside the value.
+                wide: false,
+                tint: false,
+                pager: None,
+                open: None,
                 rows: vec![Row::Buttons(vec![
                     glyph_button("pause", if running { GLYPH_PAUSE } else { GLYPH_PLAY }, ButtonRole::Accent),
                     glyph_button("stop", GLYPH_STOP, ButtonRole::Secondary),
@@ -219,6 +229,7 @@ fn publish_request(ctx: &ModuleContext, key: &str, command: &str) {
         Priority::Decision,
         View {
             accent: Some(AGENT_ACCENT),
+            audio: None,
             compact: CompactView { leading: tile.clone(), trailing: Element::Text { text: "Allow?".into(), tone: Tone::Accent } },
             minimal: tile.clone(),
             expanded: Some(ExpandedView {
@@ -227,6 +238,10 @@ fn publish_request(ctx: &ModuleContext, key: &str, command: &str) {
                 headline: Headline::Code(command.into()),
                 detail: Some("wants to run this in ReUI".into()),
                 trailing: Element::Empty,
+                wide: false,
+                tint: false,
+                pager: None,
+                open: None,
                 rows: vec![Row::Buttons(vec![
                     text_button("deny", "Deny", ButtonRole::Destructive),
                     text_button("allow", "Allow once", ButtonRole::Primary),

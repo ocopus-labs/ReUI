@@ -50,6 +50,16 @@ Usage numbers are **fresh tokens** (cache reads, usually ~97 % of all tokens at 
 
 The hub's `media` module follows Windows' media sessions (GSMTC), so any player that shows up in the Windows media flyout works: Spotify, browsers, VLC, Media Player. It shows the artwork (its most vivid colour becomes the accent), title, artist, the player's name, a timeline the island advances itself, and only the transport controls the player enables. Playing is ongoing; paused steps back; nothing playing removes it. `--no-media` turns it off.
 
+## Clipboard
+
+The hub's `clipboard` module keeps everything you copy (text with its formatting, images with transparency, files) in `%APPDATA%\ReUI\clipboard.db` and gives it back from the island. The full spec is [docs/PRD-clipboard.md](docs/PRD-clipboard.md).
+
+- **Win+Alt+V** opens the panel (press again to close): a search field, type tabs with counts (All, Pinned, Links, Images, Text, Code, Colors, Files) and a scrolling row of rich cards. Each card shows the thing itself plus the source app's icon, its age and one fact (size, line count, site, "Cut", "Missing").
+- Keys while it's open: type to search, ←/→ select, Enter paste, Shift+Enter paste as plain text, Ctrl+Enter copy only, Alt+1–9 paste the Nth card, Ctrl+P pin, Delete (Ctrl+Z undoes), Tab switches tabs, Esc clears or closes. The app you were in keeps focus, so the paste lands there; if it runs elevated, or you switched apps, the item is left on the clipboard and the island says "Press Ctrl+V". Terminals get Shift+Insert.
+- Mouse: click pastes, Shift+click pastes plain text, right-click a card for its menu, the wheel scrolls the row.
+- Privacy: copies that apps mark private (password managers) are never read; copies from ignored apps and text that looks like a secret (private keys, API tokens, JWTs) are never stored; history older than 30 days is removed except pinned items; up to 1 000 items / 500 MB. Pause for an hour or clear history from the tray. Nothing leaves the machine except link previews (public sites only, fetched when the card is shown; links that look like reset/sign-in/signed URLs only fetch the site's name).
+- Settings: `%APPDATA%\ReUI\clipboard.json` (`hotkey`, `retention_days`, `ignored_apps`, `link_previews`). `--no-link-previews` and `--no-clipboard` turn previews / the module off.
+
 ## Adding a module
 
 Implement `modules::Module` in `crates/reui-hub/src/modules/`. In `run`, publish activities with `ctx.publish(key, priority, View { accent, compact, minimal, expanded })`, retract them with `ctx.retract(key)`, and handle inputs (button presses, agent hook calls) from `ctx.next()`. Register it in `main.rs`. Modules stay event-driven (no polling where an event exists) and describe meaning only: never sizes, fonts or theme colours.

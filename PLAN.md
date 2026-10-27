@@ -153,7 +153,7 @@ History with rich previews and paste-back from the island.
 | --- | --- | --- |
 | Capture | `AddClipboardFormatListener` → `WM_CLIPBOARD­UPDATE` on a hidden hub window | Some apps write several formats in quick succession; debounce |
 | Formats | Text, HTML, RTF, images (`PNG`, `CF_DIB`), files (`CF_HDROP`) | Store the original formats so paste-back is faithful, plus a preview |
-| Previews | Image thumbnails, colour swatches for hex/rgb values, link cards (title only, fetched on demand), code with language detection, file icons and names | Link previews make network calls, so they're opt-in |
+| Previews | Image thumbnails, colour swatches for hex/rgb values, link cards (title, site, og:image, fetched once per link for public hosts only), code, file names, source app icons | Link previews make network calls: public hosts only, capped, `--no-link-previews` turns them off |
 | Privacy | Skip items marked `ExcludeClipboardContentFromMonitorProcessing` or `CanIncludeInClipboardHistory = 0`, which password managers set; per-app exclude list; pause capture; auto-expire | Never sync history off the device in v1 |
 | Paste-back | Put the item on the clipboard, restore focus to the previous window, send Ctrl+V with `SendInput` | Elevated windows reject input from a non-elevated process |
 | Storage | SQLite with blobs, size cap and image downscaling for thumbnails | Large images and file lists |
@@ -212,9 +212,9 @@ Agreed Oct 27, 2026. One feature at a time, each end to end (real source → hub
 | # | Feature | Status |
 | --- | --- | --- |
 | 1 | Agents: Claude Code (bridge, installer, sessions, permissions, token usage) | Working end to end Oct 27, 2026; dogfooded in this repo (project-local hooks). Open: plan rate limits and cost via the statusline, "open terminal" action, confirm terminal-dialog behaviour while the hook waits |
-| 2 | Now Playing (GSMTC, artwork, transport, lyrics) | Working end to end Oct 27, 2026 (any GSMTC player; artwork with vivid accent; island-side timeline; enabled-only transport; live bars at 30 fps). Open: lyrics (LRCLIB), choosing between several players, Linux MPRIS |
+| 2 | Now Playing (GSMTC, artwork, transport, lyrics) | Spec: [docs/PRD-now-playing.md](docs/PRD-now-playing.md). v1 built (M0–M5, Oct 28, 2026): robust sessions (all subscribed, own ranking, ‹ › switcher, friendly names, ads, letterbox trim), tinted card with drag-scrub, rate, LIVE, shuffle/repeat, open player, per-app volume + output picker (IPolicyConfig with Sound-settings fallback), real per-process audio visualizer (WASAPI process loopback + FFT, synthetic fallback), opt-in LRCLIB lyrics, media.json settings and tray toggles. Open: hands-on matrix, card keyboard shortcuts, tint look |
 | 3 | Agents: Codex, OpenCode | Built Oct 27, 2026: generic agent module with per-agent profiles, Codex hooks installer, OpenCode plugin, SQLite usage readers; hub/island side verified with simulated events. Open: install on this machine and verify with real sessions (needs the user to run the installers and trust Codex's hooks), Codex logo |
-| 4 | Clipboard (history, previews, paste-back, panel) | |
+| 4 | Clipboard (history, previews, paste-back, panel) | Spec: [docs/PRD-clipboard.md](docs/PRD-clipboard.md). v1 built (M0–M4, Oct 28, 2026): faithful capture (HTML/RTF, PNG alpha, cut files), SQLite v1 schema on its own thread, search + type tabs + scrolling card row, keyboard without stealing focus, card menu, pins/delete/undo, safe paste-back (elevation/focus check, terminal chord), privacy (ignored apps, secret detection, pause, retention, clear), safe link previews. Open: hands-on paste matrix, v2 (OCR, categories, drag-out) |
 | 5 | System OSD (volume, brightness) | |
 | 6 | Devices (Bluetooth battery, USB, charging) | |
 | 7 | Timers and focus | |

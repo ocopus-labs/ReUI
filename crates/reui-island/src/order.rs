@@ -6,20 +6,33 @@ use reui_protocol::{Activity, ActivityId, Priority};
 /// Orders activities for display, front first, from the hub's priority order:
 ///
 /// 1. The activity the user brought forward (`pinned`) goes first, unless something more
-///    urgent (above both it and "ongoing") is waiting.
-/// 2. The bubble (second place) shows a different kind of activity from the pill when there
+///    urgent (above both it and "ongoing") is waiting. A `summoned` pin (opened with a
+///    hotkey, so the user asked for exactly this) goes first regardless.
+/// 2. A card the user has open (`open`) stays in front of anything but a decision: an
+///    alert from another activity waits in the bubble until the card closes.
+/// 3. The bubble (second place) shows a different kind of activity from the pill when there
 ///    is one, so two Claude sessions don't push the music out of sight, and vice versa.
+/// 4. A brief confirmation (a copy) never takes the pill from something else: it shows in
+///    the bubble for its moment, unless the user brought it forward themselves.
 ///
 /// Returns the order and whether the pin still refers to a live activity.
-pub fn arrange(mut activities: Vec<Activity>, pinned: Option<&ActivityId>) -> (Vec<Activity>, bool) {
+pub fn arrange(mut activities: Vec<Activity>, pinned: Option<&ActivityId>, summoned: bool, open: Option<&ActivityId>) -> (Vec<Activity>, bool) {
     let mut pin_alive = false;
     if let Some(pin) = pinned {
         if let Some(i) = activities.iter().position(|a| &a.id == pin) {
             pin_alive = true;
             let level = activities[i].priority.max(Priority::Ongoing);
-            if !activities.iter().any(|a| a.priority > level) {
+            if summoned || !activities.iter().any(|a| a.priority > level) {
                 let front = activities.remove(i);
                 activities.insert(0, front);
+            }
+        }
+    }
+    if let (Some(open), Some(front)) = (open, activities.first()) {
+        if &front.id != open && front.priority < Priority::Decision {
+            if let Some(i) = activities.iter().position(|a| &a.id == open) {
+                let kept = activities.remove(i);
+                activities.insert(0, kept);
             }
         }
     }
@@ -28,6 +41,15 @@ pub fn arrange(mut activities: Vec<Activity>, pinned: Option<&ActivityId>) -> (V
         if let Some(i) = activities.iter().skip(2).position(|a| a.id.module != front_module) {
             let other = activities.remove(i + 2);
             activities.insert(1, other);
+        }
+    }
+    let chosen = |a: &Activity| pinned == Some(&a.id) || open == Some(&a.id);
+    if activities.len() > 1 {
+        if let Some(i) = activities.iter().position(|a| a.priority == Priority::Brief && !chosen(a)) {
+            if i != 1 {
+                let brief = activities.remove(i);
+                activities.insert(1, brief);
+            }
         }
     }
     (activities, pin_alive)
@@ -45,6 +67,7 @@ mod tests {
             accent: None,
             compact: CompactView::default(),
             minimal: Element::Empty,
+            audio: None,
             expanded: None,
         }
     }
@@ -60,7 +83,7 @@ mod tests {
             activity("claude", "session-b", Priority::Ongoing),
             activity("media", "now-playing", Priority::Ongoing),
         ];
-        let (shown, _) = arrange(hub_order, None);
+        let (shown, _) = arrange(hub_order, None, false, None);
         assert_eq!(keys(&shown), ["session-a", "now-playing", "session-b"]);
     }
 
@@ -72,7 +95,7 @@ mod tests {
             activity("media", "now-playing", Priority::Ongoing),
         ];
         let pin = ActivityId { module: "media".into(), key: "now-playing".into() };
-        let (shown, alive) = arrange(hub_order, Some(&pin));
+        let (shown, alive) = arrange(hub_order, Some(&pin), false, None);
         assert!(alive);
         assert_eq!(keys(&shown), ["now-playing", "session-a", "session-b"]);
     }
@@ -85,18 +108,18 @@ mod tests {
             activity("claude", "session-a", Priority::Ongoing),
             activity("media", "now-playing", Priority::Ongoing),
         ];
-        let (shown, _) = arrange(with_request, Some(&pin));
+        let (shown, _) = arrange(with_request, Some(&pin), false, None);
         assert_eq!(keys(&shown), ["permission-1", "now-playing", "session-a"]);
 
         let answered = vec![activity("claude", "session-a", Priority::Ongoing), activity("media", "now-playing", Priority::Ongoing)];
-        let (shown, _) = arrange(answered, Some(&pin));
+        let (shown, _) = arrange(answered, Some(&pin), false, None);
         assert_eq!(keys(&shown), ["now-playing", "session-a"]);
     }
 
     #[test]
     fn a_pin_to_something_gone_is_dropped() {
         let pin = ActivityId { module: "media".into(), key: "now-playing".into() };
-        let (shown, alive) = arrange(vec![activity("claude", "session-a", Priority::Ongoing)], Some(&pin));
+        let (shown, alive) = arrange(vec![activity("claude", "session-a", Priority::Ongoing)], Some(&pin), false, None);
         assert!(!alive);
         assert_eq!(keys(&shown), ["session-a"]);
     }
@@ -108,6 +131,39 @@ mod tests {
             activity("claude", "b", Priority::Ongoing),
             activity("claude", "c", Priority::Ongoing),
         ];
-        assert_eq!(keys(&arrange(hub_order, None).0), ["a", "b", "c"]);
+        assert_eq!(keys(&arrange(hub_order, None, false, None).0), ["a", "b", "c"]);
+    }
+
+    #[test]
+    fn an_alert_waits_while_another_card_is_open_but_a_decision_does_not() {
+        let open = activity("media", "now-playing", Priority::Ongoing).id;
+        let alert = vec![activity("claude", "done", Priority::Alert), activity("media", "now-playing", Priority::Ongoing)];
+        assert_eq!(keys(&arrange(alert.clone(), None, false, Some(&open)).0), ["now-playing", "done"]);
+        assert_eq!(keys(&arrange(alert, None, false, None).0), ["done", "now-playing"]);
+        let decision = vec![activity("claude", "ask", Priority::Decision), activity("media", "now-playing", Priority::Ongoing)];
+        assert_eq!(keys(&arrange(decision, None, false, Some(&open)).0), ["ask", "now-playing"]);
+    }
+
+    #[test]
+    fn a_summoned_card_beats_an_alert() {
+        let pin = activity("clipboard", "clipboard", Priority::Passive).id;
+        let hub_order = vec![activity("claude", "session-a", Priority::Decision), activity("clipboard", "clipboard", Priority::Passive)];
+        assert_eq!(keys(&arrange(hub_order.clone(), Some(&pin), true, None).0), ["clipboard", "session-a"]);
+        assert_eq!(keys(&arrange(hub_order, Some(&pin), false, None).0), ["session-a", "clipboard"]);
+    }
+
+    #[test]
+    fn a_brief_confirmation_waits_in_the_bubble() {
+        let music = activity("media", "now-playing", Priority::Ongoing);
+        let claude = activity("claude", "session-a", Priority::Ongoing);
+        let copied = activity("clipboard", "clipboard", Priority::Brief);
+        // The hub ranks it first; the island keeps the music in the pill.
+        let (shown, _) = arrange(vec![copied.clone(), music.clone(), claude.clone()], None, false, None);
+        assert_eq!(keys(&shown), ["now-playing", "clipboard", "session-a"]);
+        // Alone, it takes the pill.
+        assert_eq!(keys(&arrange(vec![copied.clone()], None, false, None).0), ["clipboard"]);
+        // Brought forward by the user, it stays in front.
+        let (shown, _) = arrange(vec![copied.clone(), music.clone()], Some(&copied.id), false, None);
+        assert_eq!(keys(&shown), ["clipboard", "now-playing"]);
     }
 }

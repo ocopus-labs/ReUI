@@ -78,7 +78,8 @@ Layout templates fall out of the content, so modules don't pick them:
 | Fullscreen app in front | Hide entirely |
 | Right-click the pill, or the tray icon | Menu: visibility mode, Quit |
 | Click the minimal bubble | Swaps that activity into the pill |
-| Mouse wheel over the island | Cycles through all activities (also in the open card) |
+| A brief confirmation (copied) while something else is in the pill | Shows in the minimal bubble for its moment (copy icon), never takes the pill; alone, it takes the pill with a glimpse of what was copied |
+| Mouse wheel over the island | Cycles through all activities; over an open card with a row of cards it scrolls the row instead (horizontal wheel too) |
 
 **Choosing what's in front.** The hub orders activities by priority. The activity you bring forward (bubble or wheel) stays in front until something more urgent arrives (anything above both it and *ongoing*, such as a permission request or a done alert); when that's gone, your choice comes back. The minimal bubble shows a **different kind** of activity from the pill when there is one (Claude in the pill → music in the bubble, and the other way round), so several sessions of one kind never hide another kind; the rest are a wheel away. This lives in the island only (`crates/reui-island/src/order.rs`, unit-tested); the hub's order is unchanged.
 
@@ -140,7 +141,21 @@ Tones: `Primary`, `Secondary` (label colours), `Accent` (the activity's accent),
 
 Hero (`Headline`): `Value` (numbers: `value` type, tabular figures), `Text` (`headline` type) or `Code` (`code` type in a `fill.tertiary` chip, radius `radius.chip`).
 
-Rows: `Progress { fraction, leading, trailing }` (accent bar on track, tabular captions) and `Buttons`.
+Rows: `Progress { fraction, leading, trailing }` (accent bar on track, tabular captions), `Timeline` (the same, advanced by the island, click to seek when allowed), `Buttons`, `Items`, `Search { query, buttons }` (a capsule field; the island owns the text while typing and sends `search:<q>`), `Tabs` (capsules with a quieter tabular count, selected one filled) and `Note` (one quiet line, e.g. "No matches").
+
+`Items` is a row of up to four **rich preview cards** (`component.card`: 116 high, radius 14, 8 gap and padding). Card faces: an image cover-fitted; text and code wrapped (`card-text`, `card-code`) in whole lines, the last ellipsised; a colour as a full swatch with its hex value in black or white, whichever reads; a link as the page image across the top half (`card.media`) with its title under it, or globe + title when there's no image; files as icon + name. Inside the bottom of every card is a footer (`card.footer`): the source app's icon, the age, and at most one fact on the right ("640 × 400", "4 lines", "3 files", the link's site). Over images the footer sits on a scrim. The whole card is the click target.
+
+More than four cards show as 4½, the half card saying there's more; the row scrolls with eased motion on a timer that stops when settled, and is cut at the content inset (never past the pill's curve). The selected card (keyboard) has an accent ring `card.ring-gap` outside it, following its radius.
+
+A summoned card with a search field takes the **keyboard without taking focus** (a low-level hook while it's open), so the app you're in stays in front and receives the paste.
+
+**Header alignment:** the leading art's top sits one inset from the top, the same as its left edge; text is centred on the art when it fits, otherwise starts at the inset. Image art gets a 1 px inner hairline (`opacity.art-stroke`) so dark covers keep their edge on the black island.
+
+**Music rows:** `Slider` (volume: mute button, accent bar, wheel ±5 %, trailing menu for the output device), `Lyrics` (current line primary, next line secondary, two lines tall so the card doesn't jump), `Timeline` with drag-to-scrub (thumb only while hovering or dragging) and "LIVE" for streams. Cards stay black: no colour washes (a `tint` option exists in the protocol but nothing uses it; it looked muddy). A `pager` shows "‹ 1/2 ›" at the top right. The real visualizer drives the bars from the activity's `audio` process at the same 30 fps timer, and falls back to synthetic levels.
+
+A view whose only content is cards asks for the **wide** island (`island.expanded.wide-width`) and has no header at all.
+
+**No filler text.** A panel never explains itself ("Click an item to paste it", "N saved", hotkey hints): the cards say what they are and clicking is the only thing to do. Every word on screen has to be content or a fact about content.
 
 Buttons, by role:
 
@@ -165,7 +180,7 @@ Text buttons are 44 high capsules; inline glyph buttons are 40 circles; transpor
 ## Open items
 
 - **Continuous corners:** the island and tiles use circular arcs. Apple uses continuous (squircle-like) curvature for the expanded island; worth trying once the shape is final.
-- **Clipboard panel:** a larger expanded variant with tabs, search and horizontal preview cards (see `inspiration/clipboard-supaste.png`); needs a "panel" presentation and scrolling.
+- **Clipboard v2:** OCR search, user categories, drag-out, large preview (see `docs/PRD-clipboard.md`).
 - **Lock-screen style banner** from the Figma kit (14 px margins, 84–160 high) for notifications.
 - **Image decoding** happens on the UI thread (once per image); move it to the hub-link thread if large images cause a hitch.
 - **Figma sync:** tokens are hand-copied. Next: a ReUI Figma file with these tokens as variables, pulled with the Figma MCP (`get_variable_defs`).

@@ -10,11 +10,12 @@
 //!
 //! Layout is in DIPs; `scale` converts to pixels at draw time.
 
-use std::collections::HashMap;
+use std::cell::Cell;
+use std::collections::{HashMap, HashSet};
 
 use reui_design::tokens::{color, component, font, icon, island, opacity, radius, space, typography};
 use reui_design::{Color, TextStyle};
-use reui_protocol::{Art, Button, ButtonContent, ButtonRole, CompactView, Element, ExpandedView, Headline, ImageId, Rgb, Row, Tone};
+use reui_protocol::{Art, Button, ButtonContent, ButtonRole, CompactView, Element, ExpandedView, Headline, ImageId, Item, LyricLine, Menu, Pager, Preview, Rgb, Row, Tab, Tone};
 use windows::core::{w, Interface, Result, HSTRING};
 use windows::Foundation::Size;
 use windows::Graphics::DirectX::{DirectXAlphaMode, DirectXPixelFormat};
@@ -32,10 +33,14 @@ use windows::Win32::UI::Shell::SHCreateMemStream;
 use windows::Win32::System::WinRT::Composition::{ICompositionDrawingSurfaceInterop, ICompositorInterop};
 use windows_numerics::{Matrix3x2, Vector2};
 
+use crate::music::{self, SeekHold};
+use crate::panel::{self, CardRow};
+
 /// Widest compact presentation: two maximal sides around the centre gap.
 pub const COMPACT_MAX_WIDTH: f32 = island::compact::CENTER_GAP + 2.0 * (island::compact::MAX_SIDE + island::compact::TEXT_MARGIN);
 pub const COMPACT_SURFACE: (f32, f32) = (COMPACT_MAX_WIDTH, island::HEIGHT);
-pub const EXPANDED_SURFACE: (f32, f32) = (island::expanded::WIDTH, island::expanded::MAX_HEIGHT);
+/// Wide enough for the wide expanded island; normal views are drawn centred in it.
+pub const EXPANDED_SURFACE: (f32, f32) = (island::expanded::WIDE_WIDTH, island::expanded::MAX_HEIGHT);
 pub const MINIMAL_SURFACE: (f32, f32) = (island::minimal::SIZE, island::minimal::SIZE);
 
 pub const BARS: usize = 4;
@@ -66,16 +71,25 @@ pub struct Hit {
     /// A seekable bar: its left and right edges and the timeline length. Clicking at `x`
     /// means "seek to (x - left) / (right - left) of the length".
     pub seek: Option<(f32, f32, u64)>,
+    /// A card: its index in the row, for Shift+click and its context menu.
+    pub card: Option<usize>,
+    /// A slider's bar (left and right edges); `action` is its prefix (`volume:`).
+    pub slider: Option<(f32, f32)>,
+    /// The slider's trailing menu button: a click opens the view's [`Menu`].
+    pub menu: bool,
+    /// The source switcher: the wheel over it switches source.
+    pub pager: bool,
 }
 
 impl Hit {
+    fn new(left: f32, top: f32, right: f32, bottom: f32, action: &str) -> Self {
+        Hit { left, top, right, bottom, action: action.to_string(), seek: None, card: None, slider: None, menu: false, pager: false }
+    }
+
     /// The action a click at `x` (card DIPs) sends.
     pub fn action_at(&self, x: f32) -> String {
         match self.seek {
-            Some((left, right, length)) => {
-                let fraction = ((x - left) / (right - left).max(1.0)).clamp(0.0, 1.0);
-                format!("seek:{}", (fraction as f64 * length as f64) as u64)
-            }
+            Some((left, right, length)) => format!("seek:{}", music::scrub_ms(x, left, right, length)),
             None => self.action.clone(),
         }
     }
@@ -95,7 +109,34 @@ pub struct CompactLayout {
     pub logo: Option<(ImageId, f32, f32)>,
 }
 
+/// What the user is doing with an open panel, drawn over the module's view.
+#[derive(Default)]
+pub struct Interaction<'a> {
+    /// The search text as typed (the module's query when `None`).
+    pub query: Option<&'a str>,
+    /// The panel has the keyboard: a caret in the field and a ring on the selected card.
+    pub keyboard: bool,
+    pub selected: usize,
+    /// How far the card row is scrolled, in DIPs.
+    pub scroll: f32,
+    /// Timeline position shown while dragging the scrubber.
+    pub scrub: Option<u64>,
+    /// A seek shown before the player confirmed it (the pill drops it once it has).
+    pub hold: Option<SeekHold>,
+    /// Slider value shown instead of the module's (dragging, or just set).
+    pub slider: Option<f32>,
+    /// The bar under the pointer (or being dragged) shows its thumb.
+    pub thumb: Option<Thumb>,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum Thumb {
+    Seek,
+    Slider,
+}
+
 pub struct ExpandedLayout {
+    pub width: f32,
     pub height: f32,
     pub hits: Vec<Hit>,
     /// Left edge, vertical centre and liveness of the level bars, in expanded-surface DIPs.
@@ -128,6 +169,19 @@ struct Fonts {
     icon_tile: Font,
     icon_tile_compact: Font,
     icon_trailing: Font,
+    card_text: Font,
+    card_code: Font,
+    card_label: Font,
+    card_title: Font,
+    tab: Font,
+    tab_count: Font,
+    search: Font,
+    note: Font,
+    icon_search: Font,
+    icon_star: Font,
+    icon_pager: Font,
+    lyric: Font,
+    pager: Font,
 }
 
 pub struct Renderer {
@@ -140,6 +194,8 @@ pub struct Renderer {
     round: ID2D1StrokeStyle,
     fonts: Fonts,
     scale: f32,
+    /// Width of the expanded view being drawn (normal or wide).
+    width: Cell<f32>,
 }
 
 impl Renderer {
@@ -173,7 +229,8 @@ impl Renderer {
             )?
         };
         let icons = |size: f32| TextStyle { family: font::ICONS, weight: 400, size, line_height: size };
-        let f = |style: TextStyle, tabular: bool| make_font(&dwrite, style, tabular, scale);
+        let f = |style: TextStyle, tabular: bool| make_font(&dwrite, style, tabular, false, scale);
+        let wrapped = |style: TextStyle| make_font(&dwrite, style, false, true, scale);
         let fonts = Fonts {
             eyebrow: f(typography::EYEBROW, false)?,
             value: f(typography::VALUE, true)?,
@@ -188,8 +245,21 @@ impl Renderer {
             icon_tile: f(icons(icon::TILE), false)?,
             icon_tile_compact: f(icons(icon::TILE_COMPACT), false)?,
             icon_trailing: f(icons(icon::TRAILING), false)?,
+            card_text: wrapped(typography::CARD_TEXT)?,
+            card_code: wrapped(typography::CARD_CODE)?,
+            card_label: f(typography::CARD_LABEL, false)?,
+            card_title: wrapped(typography::CARD_TITLE)?,
+            tab: f(typography::TAB, false)?,
+            tab_count: f(typography::TAB, true)?,
+            search: f(typography::SEARCH, false)?,
+            note: f(typography::NOTE, false)?,
+            icon_search: f(icons(icon::SEARCH), false)?,
+            icon_star: f(icons(icon::STAR), false)?,
+            icon_pager: f(icons(icon::PAGER), false)?,
+            lyric: f(typography::LYRIC, false)?,
+            pager: f(typography::PAGER, true)?,
         };
-        Ok(Self { graphics, factory, dwrite, wic, images: HashMap::new(), tabular, round, fonts, scale })
+        Ok(Self { graphics, factory, dwrite, wic, images: HashMap::new(), tabular, round, fonts, scale, width: Cell::new(island::expanded::WIDTH) })
     }
 
     pub fn surface(&self, dips: (f32, f32)) -> Result<CompositionDrawingSurface> {
@@ -221,6 +291,16 @@ impl Renderer {
             self.images.insert(id, Decoded::Bitmap(bitmap));
         }
         Ok(())
+    }
+
+    /// Drops decoded images the latest snapshot no longer shows; the hub forgets having
+    /// sent them by the same rule (`panel::referenced`), so it sends them again if needed.
+    pub fn has_image(&self, id: ImageId) -> bool {
+        self.images.contains_key(&id)
+    }
+
+    pub fn retain_images(&mut self, keep: &HashSet<ImageId>) {
+        self.images.retain(|id, _| keep.contains(id));
     }
 
     /// Draws the compact presentation centred in its surface. Both sides get the same
@@ -280,15 +360,28 @@ impl Renderer {
 
     /// Draws the expanded presentation and returns its layout: height, pressable regions,
     /// and where live bars go (the pill draws those).
-    pub fn draw_expanded(&self, surface: &CompositionDrawingSurface, view: Option<&ExpandedView>, accent: Color) -> Result<ExpandedLayout> {
+    pub fn draw_expanded(&self, surface: &CompositionDrawingSurface, view: Option<&ExpandedView>, accent: Color, with: &Interaction) -> Result<ExpandedLayout> {
         let mut height = island::expanded::MIN_HEIGHT;
         let mut hits = Vec::new();
         let mut bars = None;
+        let mut width = island::expanded::WIDTH;
         self.paint(surface, |rt| {
             let Some(view) = view else { return Ok(()) };
-            let w = island::expanded::WIDTH;
+            let w = if view.wide { island::expanded::WIDE_WIDTH } else { island::expanded::WIDTH };
+            width = w;
+            self.width.set(w);
+            // Normal views sit centred in the wide surface.
+            let dx = (EXPANDED_SURFACE.0 - w) / 2.0;
+            unsafe {
+                let mut transform = Matrix3x2::default();
+                rt.GetTransform(&mut transform);
+                rt.SetTransform(&Matrix3x2 { M31: transform.M31 + dx * self.scale, ..transform });
+            }
             let inset = island::expanded::INSET;
             let gap = island::expanded::COLUMN_GAP;
+            if view.tint {
+                self.wash(rt, w, accent)?;
+            }
 
             // A lone row of glyph buttons belongs beside the hero, not under it.
             let inline: Option<&[Button]> = match view.rows.as_slice() {
@@ -315,10 +408,30 @@ impl Renderer {
             };
             let detail_h = view.detail.as_ref().map_or(0.0, |_| line_gap + self.fonts.detail.style.line_height);
             let text_h = eyebrow_h + hero_h + detail_h;
-            let header_h = lh.max(th).max(text_h);
-            let mid = inset + header_h / 2.0;
+            // A view of only rows (e.g. clipboard cards) has no header at all.
+            let headless = matches!(view.leading, Element::Empty)
+                && matches!(view.trailing, Element::Empty)
+                && inline.is_none()
+                && view.eyebrow.is_none()
+                && view.detail.is_none()
+                && view.pager.is_none()
+                && matches!(&view.headline, Headline::Text(t) if t.is_empty());
+            let header_h = if headless { 0.0 } else { lh.max(th).max(text_h) };
+            // The leading tile sits one inset from the top as from the left, and what's at
+            // the right shares its centre line. Text is centred on it when it fits beside
+            // it, and starts at the inset when it's taller.
+            let (mid, text_top) = if lh > 0.0 {
+                let mid = inset + lh.max(th) / 2.0;
+                (mid, if text_h <= lh { mid - text_h / 2.0 } else { inset })
+            } else {
+                let mid = inset + header_h / 2.0;
+                (mid, mid - text_h / 2.0)
+            };
 
             self.element(rt, &view.leading, Slot::Leading, inset, mid, Align::Start, accent)?;
+            if let Some(open) = view.open.as_deref().filter(|_| lw > 0.0) {
+                hits.push(Hit::new(inset, mid - lh / 2.0, inset + lw, mid + lh / 2.0, open));
+            }
             bars = match (&view.leading, &view.trailing, inline) {
                 (Element::Bars { live }, _, _) => Some((inset, mid, *live)),
                 (_, Element::Bars { live }, None) => Some((w - inset - tw, mid, *live)),
@@ -336,18 +449,28 @@ impl Renderer {
                 None => self.element(rt, &view.trailing, Slot::Trailing, w - inset, mid, Align::End, accent)?,
             }
 
+            // The source switcher sits at the top right, on the first line of text, which
+            // makes room for it.
+            let first_line = if view.eyebrow.is_some() { self.fonts.eyebrow.style.line_height } else { hero_h };
+            let first_w = match &view.pager {
+                Some(pager) => self.pager(rt, pager, w - inset, text_top + first_line / 2.0, &mut hits)? - space::SM - text_left,
+                None => text_w,
+            };
+
             // Text column: eyebrow (accent) → hero (primary) → detail (secondary).
-            let mut y = mid - text_h / 2.0;
+            let mut y = text_top;
+            let mut line_w = first_w.min(text_w);
             if let Some(eyebrow) = &view.eyebrow {
-                self.text(rt, eyebrow, &self.fonts.eyebrow, text_left, y, text_w, Align::Start, accent)?;
+                self.text(rt, eyebrow, &self.fonts.eyebrow, text_left, y, line_w, Align::Start, accent)?;
                 y += eyebrow_h;
+                line_w = text_w;
             }
             match &view.headline {
-                Headline::Value(s) => self.text(rt, s, &self.fonts.value, text_left, y, text_w, Align::Start, color::label::PRIMARY)?,
-                Headline::Text(s) => self.text(rt, s, &self.fonts.headline, text_left, y, text_w, Align::Start, color::label::PRIMARY)?,
+                Headline::Value(s) => self.text(rt, s, &self.fonts.value, text_left, y, line_w, Align::Start, color::label::PRIMARY)?,
+                Headline::Text(s) => self.text(rt, s, &self.fonts.headline, text_left, y, line_w, Align::Start, color::label::PRIMARY)?,
                 Headline::Code(s) => {
                     let (px, py) = (component::chip::PADDING_X, component::chip::PADDING_Y);
-                    let chip_w = (self.text_width(s, &self.fonts.code)? + 2.0 * px).min(text_w);
+                    let chip_w = (self.text_width(s, &self.fonts.code)? + 2.0 * px).min(line_w);
                     unsafe { self.round_rect(rt, text_left, y, text_left + chip_w, y + hero_h, radius::CHIP, color::fill::TERTIARY)? };
                     self.text(rt, s, &self.fonts.code, text_left + px, y + py, chip_w - 2.0 * px, Align::Start, color::label::PRIMARY)?;
                 }
@@ -357,54 +480,102 @@ impl Renderer {
                 self.text(rt, detail, &self.fonts.detail, text_left, y + line_gap, text_w, Align::Start, color::label::SECONDARY)?;
             }
 
+            // Where the timeline is now as shown (a drag's preview or a held seek win), for
+            // the bar and the lyrics.
+            let now = reui_protocol::unix_ms();
+            let shown_at = |position_ms: u64, length_ms: u64, playing: bool, at_unix_ms: u64, rate: f32| {
+                let reported = || Row::timeline_position(position_ms, length_ms, playing, at_unix_ms, rate, now);
+                with.scrub.or_else(|| with.hold.map(|h| h.position(length_ms, playing, rate, now))).unwrap_or_else(reported).min(length_ms)
+            };
+            let track_at = rows.iter().find_map(|r| match r {
+                Row::Timeline { position_ms, length_ms, playing, at_unix_ms, rate, .. } if *length_ms > 0 => Some(shown_at(*position_ms, *length_ms, *playing, *at_unix_ms, *rate)),
+                _ => None,
+            });
+
             // Full-width rows. A progress bar with times followed by icon-only controls shares
-            // one line under the bar: times at the ends, controls in the otherwise empty middle.
+            // one line under the bar when the controls fit between the times; otherwise the
+            // times flank the bar.
             let mut y = inset + header_h;
             let mut i = 0;
             while i < rows.len() {
-                y += if i == 0 { island::expanded::SECTION_GAP } else { island::expanded::ROW_GAP };
-                let progress = match &rows[i] {
-                    Row::Progress { fraction, leading, trailing } => Some((*fraction, leading.clone(), trailing.clone())),
-                    Row::Timeline { position_ms, length_ms, playing, at_unix_ms, seekable } => {
-                        let at = Row::timeline_position(*position_ms, *length_ms, *playing, *at_unix_ms, reui_protocol::unix_ms());
-                        if *seekable {
-                            // Generous touch target around the thin bar.
-                            let (l, r) = (inset, w - inset);
-                            let pad = component::seek::HIT_PAD;
-                            let bar = component::progress::HEIGHT;
-                            hits.push(Hit { left: l, top: y - pad, right: r, bottom: y + bar + pad, action: "seek".into(), seek: Some((l, r, *length_ms)) });
-                        }
-                        Some((at as f32 / (*length_ms).max(1) as f32, Some(clock(at)), Some(format!("-{}", clock(length_ms - at)))))
+                y += match i {
+                    0 if headless => 0.0,
+                    0 => island::expanded::SECTION_GAP,
+                    _ => island::expanded::ROW_GAP,
+                };
+                let meter = match &rows[i] {
+                    Row::Progress { fraction, leading, trailing } => Some(Meter { fraction: Some(*fraction), leading: leading.clone(), trailing: trailing.clone(), seek: None }),
+                    // Live: no bar, just a quiet fact where the times would be.
+                    Row::Timeline { length_ms: 0, .. } => Some(Meter { fraction: None, leading: Some("LIVE".into()), trailing: None, seek: None }),
+                    Row::Timeline { position_ms, length_ms, playing, at_unix_ms, seekable, rate } => {
+                        let at = shown_at(*position_ms, *length_ms, *playing, *at_unix_ms, *rate);
+                        Some(Meter {
+                            fraction: Some(at as f32 / *length_ms as f32),
+                            leading: Some(clock(at)),
+                            trailing: Some(format!("-{}", clock_left(length_ms - at))),
+                            seek: seekable.then_some(*length_ms),
+                        })
                     }
-                    Row::Buttons(_) => None,
+                    Row::Buttons(_) | Row::Items(_) | Row::Search { .. } | Row::Tabs(_) | Row::Note(_) | Row::Slider { .. } | Row::Lyrics(_) => None,
                 };
                 let controls = match rows.get(i + 1) {
                     Some(Row::Buttons(b)) if b.iter().all(|b| matches!(b.content, ButtonContent::Glyph(_))) => Some(b),
                     _ => None,
                 };
-                match (progress, controls) {
-                    (Some((fraction, leading, trailing)), Some(buttons)) if leading.is_some() || trailing.is_some() => {
-                        y += self.bar(rt, fraction, y, accent)? + space::SM;
+                let thumb = with.thumb == Some(Thumb::Seek);
+                match (meter, controls) {
+                    (Some(m), Some(buttons)) if m.has_times() && self.fits_between(buttons, &m)? => {
+                        if let Some(fraction) = m.fraction {
+                            y += self.meter(rt, (inset, w - inset), y, fraction, m.seek, thumb, accent, &mut hits)? + space::SM;
+                        }
                         let row_h = self.button_row(rt, buttons, y, accent, &mut hits)?;
-                        self.captions(rt, leading.as_deref(), trailing.as_deref(), y + row_h / 2.0)?;
+                        self.captions(rt, m.leading.as_deref(), m.trailing.as_deref(), y + row_h / 2.0)?;
                         y += row_h;
                         i += 2;
                         continue;
                     }
-                    (Some((fraction, leading, trailing)), _) => {
-                        y += self.bar(rt, fraction, y, accent)?;
-                        if leading.is_some() || trailing.is_some() {
-                            y += space::SM;
+                    (Some(m @ Meter { fraction: Some(fraction), .. }), Some(_)) if m.has_times() => {
+                        // Times at the bar's ends, on its line.
+                        let line = self.fonts.caption.style.line_height;
+                        let lead = self.caption_width(m.leading.as_deref())?;
+                        let trail = self.caption_width(m.trailing.as_deref())?;
+                        let span = (inset + lead + space::SM, w - inset - trail - space::SM);
+                        self.meter(rt, span, y + (line - component::progress::HEIGHT) / 2.0, fraction, m.seek, thumb, accent, &mut hits)?;
+                        self.captions(rt, m.leading.as_deref(), m.trailing.as_deref(), y + line / 2.0)?;
+                        y += line;
+                    }
+                    (Some(m), _) => {
+                        if let Some(fraction) = m.fraction {
+                            y += self.meter(rt, (inset, w - inset), y, fraction, m.seek, thumb, accent, &mut hits)?;
+                            if m.has_times() {
+                                y += space::SM;
+                            }
+                        }
+                        if m.has_times() {
                             let line = self.fonts.caption.style.line_height;
-                            self.captions(rt, leading.as_deref(), trailing.as_deref(), y + line / 2.0)?;
+                            self.captions(rt, m.leading.as_deref(), m.trailing.as_deref(), y + line / 2.0)?;
                             y += line;
                         }
                     }
-                    (None, _) => {
-                        if let Row::Buttons(buttons) = &rows[i] {
-                            y += self.button_row(rt, buttons, y, accent, &mut hits)?;
+                    (None, _) => match &rows[i] {
+                        Row::Buttons(buttons) => y += self.button_row(rt, buttons, y, accent, &mut hits)?,
+                        Row::Items(items) => y += self.cards(rt, items, y, accent, with, &mut hits)?,
+                        Row::Search { query, buttons } => y += self.search(rt, with.query.unwrap_or(query), with.keyboard, buttons, y, accent, &mut hits)?,
+                        Row::Tabs(tabs) => y += self.tabs(rt, tabs, y, &mut hits)?,
+                        // Standing in for the cards under a search field, it keeps their
+                        // height, so the panel doesn't jump while typing.
+                        Row::Note(text) => {
+                            let searchable = rows.iter().any(|r| matches!(r, Row::Search { .. }));
+                            y += self.note(rt, text, y, if searchable { component::card::HEIGHT } else { self.fonts.note.style.line_height })?
                         }
-                    }
+                        Row::Slider { leading, value, action, trailing } => {
+                            let value = with.slider.unwrap_or(*value);
+                            let thumb = with.thumb == Some(Thumb::Slider);
+                            y += self.slider(rt, leading, value, action, trailing.as_ref(), y, thumb, accent, &mut hits)?
+                        }
+                        Row::Lyrics(lines) => y += self.lyrics(rt, lines, track_at, y)?,
+                        Row::Progress { .. } | Row::Timeline { .. } => {}
+                    },
                 }
                 i += 1;
             }
@@ -414,27 +585,173 @@ impl Renderer {
                 eprintln!("island: expanded content is {natural} tall, over max-height {}", island::expanded::MAX_HEIGHT);
             }
             height = natural.clamp(island::expanded::MIN_HEIGHT, island::expanded::MAX_HEIGHT);
+            // Hits and bar positions are in surface coordinates.
+            for hit in hits.iter_mut() {
+                hit.left += dx;
+                hit.right += dx;
+                if let Some((l, r, length)) = hit.seek {
+                    hit.seek = Some((l + dx, r + dx, length));
+                }
+                if let Some((l, r)) = hit.slider {
+                    hit.slider = Some((l + dx, r + dx));
+                }
+            }
+            bars = bars.map(|(x, mid, live)| (x + dx, mid, live));
             Ok(())
         })?;
-        Ok(ExpandedLayout { height, hits, bars })
+        Ok(ExpandedLayout { width, height, hits, bars })
     }
 
-    /// The full-width progress bar; returns its height.
-    fn bar(&self, rt: &ID2D1RenderTarget, fraction: f32, y: f32, accent: Color) -> Result<f32> {
-        let inset = island::expanded::INSET;
-        let (l, r) = (inset, island::expanded::WIDTH - inset);
+    /// A bar from `span.0` to `span.1` at `y`: track, accent fill, and a thumb at the fill's
+    /// end while hovered or dragged. A seekable one gets a generous hit around it. Returns
+    /// its height.
+    #[allow(clippy::too_many_arguments)]
+    fn meter(&self, rt: &ID2D1RenderTarget, span: (f32, f32), y: f32, fraction: f32, seek: Option<u64>, thumb: bool, accent: Color, hits: &mut Vec<Hit>) -> Result<f32> {
+        let (l, r) = span;
         let h = component::progress::HEIGHT;
+        let end = l + (r - l) * fraction.clamp(0.0, 1.0);
         unsafe {
             self.round_rect(rt, l, y, r, y + h, h / 2.0, color::fill::TRACK)?;
-            self.round_rect(rt, l, y, l + (r - l) * fraction.clamp(0.0, 1.0), y + h, h / 2.0, accent)?;
+            self.round_rect(rt, l, y, end, y + h, h / 2.0, accent)?;
+        }
+        if let Some(length) = seek {
+            if thumb {
+                self.thumb(rt, end, y + h / 2.0)?;
+            }
+            let pad = component::seek::HIT_PAD;
+            hits.push(Hit { seek: Some((l, r, length)), ..Hit::new(l, y - pad, r, y + h + pad, "seek") });
         }
         Ok(h)
+    }
+
+    /// The round handle of a seekable bar, centred on (`x`, `mid`).
+    fn thumb(&self, rt: &ID2D1RenderTarget, x: f32, mid: f32) -> Result<()> {
+        let r = component::thumb::SIZE / 2.0 * self.scale;
+        let circle = D2D1_ELLIPSE { point: self.point(x, mid), radiusX: r, radiusY: r };
+        unsafe { rt.FillEllipse(&circle, &self.brush(rt, color::label::PRIMARY)?) };
+        Ok(())
+    }
+
+    /// The accent washed in from the top-left corner, fading out by `tint-extent` of the
+    /// width (a gradient, no blur). Drawn over the whole surface; the pill's shape clips it.
+    fn wash(&self, rt: &ID2D1RenderTarget, w: f32, accent: Color) -> Result<()> {
+        let radius = island::expanded::TINT_EXTENT * w * self.scale;
+        let a = opacity::TINT_WASH;
+        unsafe {
+            // A softened falloff, so the wash has no visible edge.
+            let stops = [
+                D2D1_GRADIENT_STOP { position: 0.0, color: d2d(accent.with_alpha(a)) },
+                D2D1_GRADIENT_STOP { position: 0.45, color: d2d(accent.with_alpha(a * 0.5)) },
+                D2D1_GRADIENT_STOP { position: 1.0, color: d2d(accent.with_alpha(0.0)) },
+            ];
+            let collection = rt.CreateGradientStopCollection(&stops, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP)?;
+            let props = D2D1_RADIAL_GRADIENT_BRUSH_PROPERTIES { center: self.point(0.0, 0.0), gradientOriginOffset: Vector2::new(0.0, 0.0), radiusX: radius, radiusY: radius };
+            let brush = rt.CreateRadialGradientBrush(&props, None, &collection)?;
+            rt.FillRectangle(&self.rect(0.0, 0.0, w, EXPANDED_SURFACE.1), &brush);
+        }
+        Ok(())
+    }
+
+    /// "‹ 1/2 ›" ending at `right`, centred on `mid`: quiet tabular text between two chevron
+    /// targets, the whole of it a wheel target. Returns its left edge.
+    fn pager(&self, rt: &ID2D1RenderTarget, pager: &Pager, right: f32, mid: f32, hits: &mut Vec<Hit>) -> Result<f32> {
+        let label = format!("{}/{}", pager.index + 1, pager.count);
+        let font = &self.fonts.pager;
+        let label_w = self.text_width(&label, font)?;
+        let (hit, gap) = (component::pager::HIT, component::pager::GAP);
+        let glyph = icon::PAGER;
+        let (top, bottom) = (mid - hit / 2.0, mid + hit / 2.0);
+        let next_l = right - hit;
+        let label_l = next_l - gap - label_w;
+        let prev_l = label_l - gap - hit;
+        let ink = color::label::SECONDARY;
+        self.text(rt, "\u{E76B}", &self.fonts.icon_pager, prev_l, mid - glyph / 2.0, hit, Align::Center, ink)?;
+        self.text(rt, &label, font, label_l, mid - font.style.line_height / 2.0, label_w + 1.0, Align::Start, ink)?;
+        self.text(rt, "\u{E76C}", &self.fonts.icon_pager, next_l, mid - glyph / 2.0, hit, Align::Center, ink)?;
+        hits.push(Hit { pager: true, ..Hit::new(prev_l, top, prev_l + hit, bottom, &pager.prev) });
+        hits.push(Hit { pager: true, ..Hit::new(next_l, top, right, bottom, &pager.next) });
+        hits.push(Hit { pager: true, ..Hit::new(prev_l, top, right, bottom, "") });
+        Ok(prev_l)
+    }
+
+    /// Volume and the like: the leading toggle (mute), the bar, and the trailing menu button
+    /// (output device). Returns the row's height.
+    #[allow(clippy::too_many_arguments)]
+    fn slider(&self, rt: &ID2D1RenderTarget, leading: &Button, value: f32, action: &str, trailing: Option<&Menu>, y: f32, thumb: bool, accent: Color, hits: &mut Vec<Hit>) -> Result<f32> {
+        let h = component::slider::HEIGHT;
+        let gap = component::slider::GAP;
+        let inset = island::expanded::INSET;
+        let (mut l, mut r) = (inset, self.width.get() - inset);
+        self.button(rt, leading, l, y, h, h, accent, hits)?;
+        l += h + gap;
+        if let Some(menu) = trailing {
+            let button = Button { action: String::new(), content: menu.content.clone(), role: ButtonRole::Plain };
+            self.button(rt, &button, r - h, y, h, h, accent, hits)?;
+            if let Some(hit) = hits.last_mut() {
+                hit.menu = true;
+            }
+            r -= h + gap;
+        }
+        let bar = component::progress::HEIGHT;
+        let top = y + (h - bar) / 2.0;
+        let end = l + (r - l) * value.clamp(0.0, 1.0);
+        unsafe {
+            self.round_rect(rt, l, top, r, top + bar, bar / 2.0, color::fill::TRACK)?;
+            self.round_rect(rt, l, top, end, top + bar, bar / 2.0, accent)?;
+        }
+        if thumb {
+            self.thumb(rt, end, y + h / 2.0)?;
+        }
+        // The whole row height, and a little past the ends so the extremes are easy to hit.
+        let reach = component::thumb::SIZE / 2.0;
+        hits.push(Hit { slider: Some((l, r)), ..Hit::new(l - reach, y, r + reach, y + h, action) });
+        Ok(h)
+    }
+
+    /// The line being sung (primary) and the next one (secondary), centred; an empty line
+    /// (an instrumental gap) shows nothing. Always the same height, so lines changing never
+    /// resize the card.
+    fn lyrics(&self, rt: &ID2D1RenderTarget, lines: &[LyricLine], position: Option<u64>, y: f32) -> Result<f32> {
+        let font = &self.fonts.lyric;
+        let line = font.style.line_height;
+        let count = component::lyrics::LINES.max(1.0) as usize;
+        let inset = island::expanded::INSET;
+        let width = self.width.get() - 2.0 * inset;
+        if let Some(position) = position {
+            let current = music::current_line(lines, position);
+            let next = current.map_or(0, |c| c + 1);
+            let shown = [current.map(|c| (c, color::label::PRIMARY)), Some((next, color::label::SECONDARY))];
+            for (k, (index, ink)) in shown.into_iter().flatten().take(count).enumerate() {
+                if let Some(text) = lines.get(index).map(|l| l.text.trim()).filter(|t| !t.is_empty()) {
+                    self.text(rt, text, font, inset, y + k as f32 * line, width, Align::Center, ink)?;
+                }
+            }
+        }
+        Ok(line * count as f32)
+    }
+
+    /// Do the times fit at the ends of a row of these glyph controls?
+    fn fits_between(&self, buttons: &[Button], meter: &Meter) -> Result<bool> {
+        let n = buttons.len() as f32;
+        let group = n * component::button::TRANSPORT + (n - 1.0).max(0.0) * component::button::TRANSPORT_GAP;
+        let free = (self.width.get() - 2.0 * island::expanded::INSET - group) / 2.0;
+        let widest = self.caption_width(meter.leading.as_deref())?.max(self.caption_width(meter.trailing.as_deref())?);
+        Ok(widest + space::SM <= free)
+    }
+
+    /// Width a caption needs, with every digit counted as the widest so a ticking time
+    /// doesn't move what's next to it (tabular figures make that every digit).
+    fn caption_width(&self, text: Option<&str>) -> Result<f32> {
+        match text {
+            Some(t) => self.text_width(&t.replace(|c: char| c.is_ascii_digit(), "0"), &self.fonts.caption),
+            None => Ok(0.0),
+        }
     }
 
     /// Elapsed / remaining times at the two ends of the bar, centred on `mid`.
     fn captions(&self, rt: &ID2D1RenderTarget, leading: Option<&str>, trailing: Option<&str>, mid: f32) -> Result<()> {
         let inset = island::expanded::INSET;
-        let (l, r) = (inset, island::expanded::WIDTH - inset);
+        let (l, r) = (inset, self.width.get() - inset);
         let top = mid - self.fonts.caption.style.line_height / 2.0;
         if let Some(text) = leading {
             self.text(rt, text, &self.fonts.caption, l, top, (r - l) / 2.0, Align::Start, color::label::TERTIARY)?;
@@ -449,7 +766,7 @@ impl Renderer {
     /// row equal-width capsules across the full width.
     fn button_row(&self, rt: &ID2D1RenderTarget, buttons: &[Button], y: f32, accent: Color, hits: &mut Vec<Hit>) -> Result<f32> {
         let n = buttons.len() as f32;
-        let w = island::expanded::WIDTH;
+        let w = self.width.get();
         let inset = island::expanded::INSET;
         if buttons.iter().all(|b| matches!(b.content, ButtonContent::Glyph(_))) {
             let size = component::button::TRANSPORT;
@@ -488,7 +805,7 @@ impl Renderer {
                 self.text(rt, t, &self.fonts.button, x, y + (h - line) / 2.0, w, Align::Center, ink)?;
             }
         }
-        hits.push(Hit { left: x, top: y, right: x + w, bottom: y + h, action: button.action.clone(), seek: None });
+        hits.push(Hit::new(x, y, x + w, y + h, &button.action));
         Ok(())
     }
 
@@ -573,30 +890,16 @@ impl Renderer {
                     }
                 }
                 Art::Image(id) => match self.images.get(id) {
-                    Some(Decoded::Bitmap(image)) => {
-                        // Cover-fit: centre-crop to a square, then scale onto the shape.
-                        let bitmap = rt.CreateBitmapFromWicBitmap(image, None)?;
-                        let D2D_SIZE_F { width: iw, height: ih } = bitmap.GetSize();
-                        let side = iw.min(ih);
-                        let k = (r.right - r.left) / side;
-                        let brush = rt.CreateBitmapBrush(
-                            &bitmap,
-                            Some(&D2D1_BITMAP_BRUSH_PROPERTIES {
-                                extendModeX: D2D1_EXTEND_MODE_CLAMP,
-                                extendModeY: D2D1_EXTEND_MODE_CLAMP,
-                                interpolationMode: D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
-                            }),
-                            None,
-                        )?;
-                        brush.SetTransform(&Matrix3x2 {
-                            M11: k,
-                            M12: 0.0,
-                            M21: 0.0,
-                            M22: k,
-                            M31: r.left - (iw - side) / 2.0 * k,
-                            M32: r.top - (ih - side) / 2.0 * k,
-                        });
-                        rt.FillRoundedRectangle(&shape, &brush);
+                    Some(Decoded::Bitmap(_)) => {
+                        self.cover(rt, *id, &shape)?;
+                        // A hairline just inside the edge, so a cover on black still reads
+                        // as a tile on the black island.
+                        let inner = D2D1_ROUNDED_RECT {
+                            rect: D2D_RECT_F { left: r.left + 0.5, top: r.top + 0.5, right: r.right - 0.5, bottom: r.bottom - 0.5 },
+                            radiusX: (shape.radiusX - 0.5).max(0.0),
+                            radiusY: (shape.radiusY - 0.5).max(0.0),
+                        };
+                        rt.DrawRoundedRectangle(&inner, &self.brush(rt, color::label::PRIMARY.with_alpha(opacity::ART_STROKE))?, 1.0, None);
                     }
                     Some(Decoded::Svg(_)) => {
                         rt.FillRoundedRectangle(&shape, &self.brush(rt, color::fill::TERTIARY)?);
@@ -607,6 +910,299 @@ impl Renderer {
                     None => rt.FillRoundedRectangle(&shape, &self.brush(rt, color::fill::TERTIARY)?),
                 },
             }
+        }
+        Ok(())
+    }
+
+    /// Fills `shape` with an image, cover-fitted (centre-cropped to the shape's aspect).
+    fn cover(&self, rt: &ID2D1RenderTarget, id: ImageId, shape: &D2D1_ROUNDED_RECT) -> Result<()> {
+        let Some(Decoded::Bitmap(image)) = self.images.get(&id) else { return Ok(()) };
+        let r = shape.rect;
+        unsafe {
+            let bitmap = rt.CreateBitmapFromWicBitmap(image, None)?;
+            let D2D_SIZE_F { width: iw, height: ih } = bitmap.GetSize();
+            let (w, h) = (r.right - r.left, r.bottom - r.top);
+            let k = (w / iw).max(h / ih);
+            let brush = rt.CreateBitmapBrush(
+                &bitmap,
+                Some(&D2D1_BITMAP_BRUSH_PROPERTIES {
+                    extendModeX: D2D1_EXTEND_MODE_CLAMP,
+                    extendModeY: D2D1_EXTEND_MODE_CLAMP,
+                    interpolationMode: D2D1_BITMAP_INTERPOLATION_MODE_LINEAR,
+                }),
+                None,
+            )?;
+            brush.SetTransform(&Matrix3x2 { M11: k, M12: 0.0, M21: 0.0, M22: k, M31: r.left + (w - iw * k) / 2.0, M32: r.top + (h - ih * k) / 2.0 });
+            rt.FillRoundedRectangle(shape, &brush);
+        }
+        Ok(())
+    }
+
+    /// A row of rich preview cards; returns its height. Four across when they fit, else four
+    /// and a half, scrolled by `with.scroll` and clipped at the panel's edges; only cards in
+    /// view are drawn and hit-tested. Each card carries its own footer (source app icon,
+    /// age, one fact), so nothing sits under the cards.
+    fn cards(&self, rt: &ID2D1RenderTarget, items: &[Item], y: f32, accent: Color, with: &Interaction, hits: &mut Vec<Hit>) -> Result<f32> {
+        let w = self.width.get();
+        let row = CardRow::new(w, items.len());
+        let pad = component::card::PADDING;
+        let footer = component::card::FOOTER;
+        let cw = row.card_width();
+        let ch = component::card::HEIGHT;
+        let s = self.scale;
+        let scroll = row.clamp(with.scroll);
+        let ring = component::card::RING_GAP + component::card::RING_WIDTH;
+        // Cut at the content inset, not the surface edge: the pill's corners curve in there.
+        let inset = island::expanded::INSET;
+        unsafe { rt.PushAxisAlignedClip(&self.rect(inset - ring, y - ring, w - inset + ring, y + ch + ring), D2D1_ANTIALIAS_MODE_ALIASED) };
+        let result = (|| -> Result<()> {
+            for i in row.visible(scroll) {
+                let item = &items[i];
+                let l = row.left(i, scroll);
+                let (r, b) = (l + cw, y + ch);
+                let radius = component::card::RADIUS * s;
+                let shape = D2D1_ROUNDED_RECT { rect: self.rect(l, y, r, b), radiusX: radius, radiusY: radius };
+                let body = (l + pad, y + pad, cw - 2.0 * pad, ch - footer - 2.0 * pad);
+                let well = |tint: Color| unsafe {
+                    rt.FillRoundedRectangle(&shape, &self.brush(rt, tint)?);
+                    Ok::<(), windows::core::Error>(())
+                };
+                // Footer ink: light over images and dark swatches, quiet over wells.
+                let mut on_media = false;
+                match &item.preview {
+                    Preview::Image(id) => {
+                        if matches!(self.images.get(id), Some(Decoded::Bitmap(_))) {
+                            // Behind transparent images, so the card keeps its shape.
+                            well(color::fill::TERTIARY)?;
+                            self.cover(rt, *id, &shape)?;
+                            self.scrim(rt, &shape, b - footer - pad * 2.0, b)?;
+                            on_media = true;
+                        } else {
+                            // Bytes not here yet: the type's glyph, so the card isn't an empty well.
+                            well(color::fill::TERTIARY)?;
+                            let g = icon::TILE;
+                            self.text(rt, "\u{EB9F}", &self.fonts.icon_tile, l, body.1 + (body.3 - g) / 2.0, cw, Align::Center, color::label::TERTIARY)?;
+                        }
+                    }
+                    Preview::Text(text) => {
+                        well(color::fill::TERTIARY)?;
+                        self.text_block(rt, text, &self.fonts.card_text, body.0, body.1, body.2, body.3, color::label::PRIMARY)?;
+                    }
+                    Preview::Code(text) => {
+                        well(color::fill::TERTIARY)?;
+                        self.text_block(rt, text, &self.fonts.card_code, body.0, body.1, body.2, body.3, color::label::PRIMARY)?;
+                    }
+                    Preview::Color(rgb) => {
+                        let swatch = rgb_color(*rgb);
+                        well(swatch)?;
+                        let light = 0.2126 * swatch.r + 0.7152 * swatch.g + 0.0722 * swatch.b > 0.55;
+                        let ink = if light { color::label::ON_ACCENT } else { color::label::PRIMARY };
+                        let Rgb(cr, cg, cb) = *rgb;
+                        self.text(rt, &format!("#{cr:02X}{cg:02X}{cb:02X}"), &self.fonts.card_label, body.0, body.1, body.2, Align::Start, ink)?;
+                        on_media = !light;
+                    }
+                    Preview::Link { host, path, title, image, .. } => {
+                        well(color::fill::TERTIARY)?;
+                        let mut text_top = body.1;
+                        if let Some(id) = image.filter(|id| matches!(self.images.get(id), Some(Decoded::Bitmap(_)))) {
+                            // The page image across the top, rounded only where the card is.
+                            let media_b = y + ch * component::card::MEDIA;
+                            unsafe { rt.PushAxisAlignedClip(&self.rect(l, y, r, media_b), D2D1_ANTIALIAS_MODE_ALIASED) };
+                            self.cover(rt, id, &shape)?;
+                            unsafe { rt.PopAxisAlignedClip() };
+                            text_top = media_b + pad * 0.75;
+                        } else {
+                            self.text(rt, "\u{E774}", &self.fonts.icon_compact, body.0, body.1, icon::COMPACT, Align::Start, accent)?;
+                            text_top += icon::COMPACT + pad * 0.5;
+                        }
+                        // The site goes in the footer (the module sends it as the card's fact).
+                        let heading = title.clone().unwrap_or_else(|| format!("{host}{path}"));
+                        self.text_block(rt, &heading, &self.fonts.card_title, body.0, text_top, body.2, b - footer - pad * 0.5 - text_top, color::label::PRIMARY)?;
+                    }
+                    Preview::Files { name, .. } => {
+                        well(color::fill::TERTIARY)?;
+                        self.text(rt, "\u{E8A5}", &self.fonts.icon_tile, body.0, body.1, icon::TILE, Align::Start, accent)?;
+                        let name_top = body.1 + icon::TILE + pad * 0.75;
+                        self.text_block(rt, name, &self.fonts.card_title, body.0, name_top, body.2, body.1 + body.3 - name_top, color::label::PRIMARY)?;
+                    }
+                }
+                self.card_footer(rt, item, l, b - footer - pad * 0.25, cw, on_media)?;
+                if with.keyboard && i == with.selected {
+                    // Concentric with the card: its radius grows by exactly the ring's offset.
+                    let out = component::card::RING_GAP + component::card::RING_WIDTH / 2.0;
+                    let rr = (component::card::RADIUS + out) * s;
+                    let ring = D2D1_ROUNDED_RECT { rect: self.rect(l - out, y - out, r + out, b + out), radiusX: rr, radiusY: rr };
+                    unsafe { rt.DrawRoundedRectangle(&ring, &self.brush(rt, accent)?, component::card::RING_WIDTH * s, None) };
+                }
+                hits.push(Hit { card: Some(i), ..Hit::new(l.max(0.0), y, r.min(w), b, &item.action) });
+            }
+            Ok(())
+        })();
+        unsafe { rt.PopAxisAlignedClip() };
+        result?;
+        Ok(ch)
+    }
+
+    /// Source app icon, age, a star when pinned, and one fact on the right, inside the
+    /// bottom of a card. The age keeps its width; the fact ellipsises in what's left.
+    fn card_footer(&self, rt: &ID2D1RenderTarget, item: &Item, l: f32, top: f32, w: f32, on_media: bool) -> Result<()> {
+        let pad = component::card::PADDING;
+        let icon = component::card::ICON;
+        let mid = top + component::card::FOOTER / 2.0;
+        let (ink, quiet) = if on_media { (color::label::PRIMARY, color::label::PRIMARY.with_alpha(0.75)) } else { (color::label::SECONDARY, color::label::TERTIARY) };
+        let mut x = l + pad;
+        let right = l + w - pad;
+        if let Some(id) = item.icon.filter(|id| matches!(self.images.get(id), Some(Decoded::Bitmap(_)))) {
+            let r = icon * 0.25 * self.scale;
+            let shape = D2D1_ROUNDED_RECT { rect: self.rect(x, mid - icon / 2.0, x + icon, mid + icon / 2.0), radiusX: r, radiusY: r };
+            self.cover(rt, id, &shape)?;
+            x += icon + pad * 0.5;
+        }
+        let line = self.fonts.caption.style.line_height;
+        let age_w = self.text_width(&item.age, &self.fonts.caption)?.min((right - x).max(0.0));
+        self.text(rt, &item.age, &self.fonts.caption, x, mid - line / 2.0, age_w, Align::Start, ink)?;
+        x += age_w;
+        if item.pinned {
+            let star = icon::STAR;
+            x += pad * 0.5;
+            self.text(rt, "\u{E735}", &self.fonts.icon_star, x, mid - star / 2.0, star, Align::Center, ink)?;
+            x += star;
+        }
+        if let Some(meta) = &item.meta {
+            let from = x + pad * 0.75;
+            if right > from {
+                self.text(rt, meta, &self.fonts.caption, from, mid - line / 2.0, right - from, Align::End, quiet)?;
+            }
+        }
+        Ok(())
+    }
+
+    /// The search field (magnifier, text or the quiet placeholder, a steady caret while
+    /// the panel has the keyboard) with its icon buttons at the right; returns its height.
+    #[allow(clippy::too_many_arguments)]
+    fn search(&self, rt: &ID2D1RenderTarget, text: &str, caret: bool, buttons: &[Button], y: f32, accent: Color, hits: &mut Vec<Hit>) -> Result<f32> {
+        let h = component::search::HEIGHT;
+        let pad = component::search::PADDING;
+        let inset = island::expanded::INSET;
+        let mut right = self.width.get() - inset;
+        for button in buttons.iter().rev() {
+            let bw = match &button.content {
+                ButtonContent::Glyph(_) => h,
+                ButtonContent::Text(t) => self.text_width(t, &self.fonts.button)? + 2.0 * pad,
+            };
+            right -= bw;
+            self.button(rt, button, right, y, bw, h, accent, hits)?;
+            right -= component::search::BUTTON_GAP;
+        }
+        unsafe { self.round_rect(rt, inset, y, right, y + h, radius::CONCENTRIC.min(h / 2.0), color::fill::TERTIARY)? };
+        let glyph = icon::SEARCH;
+        self.text(rt, "\u{E721}", &self.fonts.icon_search, inset + pad, y + (h - glyph) / 2.0, glyph, Align::Center, color::label::SECONDARY)?;
+        let left = inset + pad + glyph + space::SM;
+        let avail = (right - pad - left).max(0.0);
+        let line = self.fonts.search.style.line_height;
+        let top = y + (h - line) / 2.0;
+        let mut end = left;
+        if text.is_empty() {
+            self.text(rt, "Search", &self.fonts.search, left, top, avail, Align::Start, color::label::TERTIARY)?;
+        } else {
+            // Long queries show their end, where the typing is.
+            let tw = self.text_width(text, &self.fonts.search)?;
+            let x = if tw > avail { left + avail - tw } else { left };
+            unsafe { rt.PushAxisAlignedClip(&self.rect(left, y, left + avail + component::search::CARET, y + h), D2D1_ANTIALIAS_MODE_ALIASED) };
+            let drawn = self.text(rt, text, &self.fonts.search, x, top, tw + 1.0, Align::Start, color::label::PRIMARY);
+            unsafe { rt.PopAxisAlignedClip() };
+            drawn?;
+            end = x + tw;
+        }
+        if caret {
+            let ch = line * 0.9;
+            let x = (end * self.scale).round() / self.scale;
+            unsafe { self.round_rect(rt, x, y + (h - ch) / 2.0, x + component::search::CARET, y + (h + ch) / 2.0, component::search::CARET / 2.0, accent)? };
+        }
+        Ok(h)
+    }
+
+    /// Filter tabs: "Label count" capsules, the selected one filled. When they're wider than
+    /// the panel the row slides to keep the selected one in view, clipped at the edges.
+    fn tabs(&self, rt: &ID2D1RenderTarget, tabs: &[Tab], y: f32, hits: &mut Vec<Hit>) -> Result<f32> {
+        let h = component::tabs::HEIGHT;
+        let pad = component::tabs::PADDING;
+        let gap = component::tabs::GAP;
+        let inset = island::expanded::INSET;
+        let w = self.width.get();
+        let mut sizes = Vec::with_capacity(tabs.len());
+        for tab in tabs {
+            let label = self.text_width(&tab.label, &self.fonts.tab)?;
+            let count = self.text_width(&tab.count.to_string(), &self.fonts.tab_count)?;
+            sizes.push((label, count, pad + label + component::tabs::COUNT_GAP + count + pad));
+        }
+        let widths: Vec<f32> = sizes.iter().map(|s| s.2).collect();
+        let offset = panel::tabs_offset(&widths, gap, tabs.iter().position(|t| t.selected), w - 2.0 * inset);
+        let line = self.fonts.tab.style.line_height;
+        let top = y + (h - line) / 2.0;
+        unsafe { rt.PushAxisAlignedClip(&self.rect(inset, y, w - inset, y + h), D2D1_ANTIALIAS_MODE_ALIASED) };
+        let result = (|| -> Result<()> {
+            let mut x = inset - offset;
+            for (tab, (label_w, count_w, tw)) in tabs.iter().zip(sizes) {
+                if x + tw > 0.0 && x < w {
+                    let (fill, ink, quiet) = if tab.selected {
+                        (color::label::PRIMARY, color::label::ON_ACCENT, color::label::ON_ACCENT.with_alpha(0.5))
+                    } else {
+                        (color::fill::TERTIARY, color::label::SECONDARY, color::label::TERTIARY)
+                    };
+                    unsafe { self.round_rect(rt, x, y, x + tw, y + h, h / 2.0, fill)? };
+                    self.text(rt, &tab.label, &self.fonts.tab, x + pad, top, label_w + 1.0, Align::Start, ink)?;
+                    self.text(rt, &tab.count.to_string(), &self.fonts.tab_count, x + tw - pad - count_w, top, count_w + 1.0, Align::Start, quiet)?;
+                    hits.push(Hit::new(x.max(0.0), y, (x + tw).min(w), y + h, &tab.action));
+                }
+                x += tw + gap;
+            }
+            Ok(())
+        })();
+        unsafe { rt.PopAxisAlignedClip() };
+        result?;
+        Ok(h)
+    }
+
+    /// One quiet centred line in a row `height` tall.
+    fn note(&self, rt: &ID2D1RenderTarget, text: &str, y: f32, height: f32) -> Result<f32> {
+        let inset = island::expanded::INSET;
+        let line = self.fonts.note.style.line_height;
+        self.text(rt, text, &self.fonts.note, inset, y + (height - line) / 2.0, self.width.get() - 2.0 * inset, Align::Center, color::label::TERTIARY)?;
+        Ok(height)
+    }
+
+    /// A dark gradient over the bottom of a card so the footer reads on any image.
+    fn scrim(&self, rt: &ID2D1RenderTarget, shape: &D2D1_ROUNDED_RECT, from: f32, to: f32) -> Result<()> {
+        let s = self.scale;
+        unsafe {
+            let stops = [
+                D2D1_GRADIENT_STOP { position: 0.0, color: D2D1_COLOR_F { r: 0.0, g: 0.0, b: 0.0, a: 0.0 } },
+                D2D1_GRADIENT_STOP { position: 1.0, color: D2D1_COLOR_F { r: 0.0, g: 0.0, b: 0.0, a: 0.7 } },
+            ];
+            let collection = rt.CreateGradientStopCollection(&stops, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP)?;
+            let props = D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES { startPoint: Vector2::new(0.0, from * s), endPoint: Vector2::new(0.0, to * s) };
+            let brush = rt.CreateLinearGradientBrush(&props, None, &collection)?;
+            rt.PushAxisAlignedClip(&D2D_RECT_F { left: shape.rect.left, top: from * s, right: shape.rect.right, bottom: shape.rect.bottom }, D2D1_ANTIALIAS_MODE_ALIASED);
+            rt.FillRoundedRectangle(shape, &brush);
+            rt.PopAxisAlignedClip();
+        }
+        Ok(())
+    }
+
+    /// Wrapped text in whole lines only, the last one ellipsised if it doesn't all fit.
+    #[allow(clippy::too_many_arguments)]
+    fn text_block(&self, rt: &ID2D1RenderTarget, text: &str, font: &Font, left: f32, top: f32, width: f32, height: f32, color: Color) -> Result<()> {
+        let line = font.style.line_height;
+        let height = (height / line).floor() * line;
+        if height < line {
+            return Ok(());
+        }
+        let wide = utf16_prefix(text, 600);
+        unsafe {
+            let layout = self.dwrite.CreateTextLayout(&wide, &font.format, width * self.scale, height * self.scale)?;
+            layout.SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM, font.style.line_height * self.scale, font.style.line_height * 0.8 * self.scale)?;
+            rt.DrawTextLayout(self.point(left, top), &layout, &self.brush(rt, color)?, D2D1_DRAW_TEXT_OPTIONS_CLIP | D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
         }
         Ok(())
     }
@@ -760,6 +1356,21 @@ impl Renderer {
     }
 }
 
+/// A bar row as drawn: progress, a timeline, or a live stream (no bar, a fact instead).
+struct Meter {
+    fraction: Option<f32>,
+    leading: Option<String>,
+    trailing: Option<String>,
+    /// The track length, when the bar seeks.
+    seek: Option<u64>,
+}
+
+impl Meter {
+    fn has_times(&self) -> bool {
+        self.leading.is_some() || self.trailing.is_some()
+    }
+}
+
 #[derive(Clone, Copy)]
 enum Align {
     Start,
@@ -786,6 +1397,19 @@ fn fit_svg(text: &str) -> String {
     format!("{}{}{}", &text[..start], fitted, &text[start + len..])
 }
 
+/// At most `max` UTF-16 units of `text`, never ending in half a surrogate pair (an emoji
+/// cut in two draws as a box).
+fn utf16_prefix(text: &str, max: usize) -> Vec<u16> {
+    let mut wide: Vec<u16> = text.encode_utf16().take(max + 1).collect();
+    if wide.len() > max {
+        wide.truncate(max);
+        if wide.last().is_some_and(|u| (0xD800..0xDC00).contains(u)) {
+            wide.pop();
+        }
+    }
+    wide
+}
+
 /// 83_000 → "1:23", 3_723_000 → "1:02:03".
 fn clock(ms: u64) -> String {
     let s = ms / 1000;
@@ -793,6 +1417,11 @@ fn clock(ms: u64) -> String {
         0 => format!("{}:{:02}", s / 60, s % 60),
         h => format!("{h}:{:02}:{:02}", s / 60 % 60, s % 60),
     }
+}
+
+/// Time left, rounded up so elapsed + left add up to the length (0:10 and -3:10 of 3:20).
+fn clock_left(ms: u64) -> String {
+    clock(ms.div_ceil(1000) * 1000)
 }
 
 pub fn bars_width() -> f32 {
@@ -853,6 +1482,10 @@ fn tone_color(tone: Tone, accent: Color) -> Color {
 }
 
 pub fn rgb(Rgb(r, g, b): Rgb) -> Color {
+    rgb_color(Rgb(r, g, b))
+}
+
+fn rgb_color(Rgb(r, g, b): Rgb) -> Color {
     Color::from_rgb8(r, g, b)
 }
 
@@ -860,7 +1493,8 @@ fn d2d(c: Color) -> D2D1_COLOR_F {
     D2D1_COLOR_F { r: c.r, g: c.g, b: c.b, a: c.a }
 }
 
-fn make_font(dwrite: &IDWriteFactory, style: TextStyle, tabular: bool, scale: f32) -> Result<Font> {
+/// `wrap`: multi-line text, top-aligned, ellipsised on the last line that fits.
+fn make_font(dwrite: &IDWriteFactory, style: TextStyle, tabular: bool, wrap: bool, scale: f32) -> Result<Font> {
     unsafe {
         let format = dwrite.CreateTextFormat(
             &HSTRING::from(style.family),
@@ -871,8 +1505,13 @@ fn make_font(dwrite: &IDWriteFactory, style: TextStyle, tabular: bool, scale: f3
             style.size * scale,
             w!("en-us"),
         )?;
-        format.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP)?;
-        format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
+        if wrap {
+            format.SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP)?;
+            format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_NEAR)?;
+        } else {
+            format.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP)?;
+            format.SetParagraphAlignment(DWRITE_PARAGRAPH_ALIGNMENT_CENTER)?;
+        }
         let sign = dwrite.CreateEllipsisTrimmingSign(&format)?;
         let trimming = DWRITE_TRIMMING { granularity: DWRITE_TRIMMING_GRANULARITY_CHARACTER, delimiter: 0, delimiterCount: 0 };
         format.SetTrimming(&trimming, &sign)?;
@@ -899,10 +1538,18 @@ mod tests {
 
     #[test]
     fn clicking_a_seekable_bar_seeks_proportionally() {
-        let hit = super::Hit { left: 20.0, top: 0.0, right: 400.0, bottom: 10.0, action: "seek".into(), seek: Some((20.0, 400.0, 200_000)) };
+        let hit = super::Hit { seek: Some((20.0, 400.0, 200_000)), ..super::Hit::new(20.0, 0.0, 400.0, 10.0, "seek") };
         assert_eq!(hit.action_at(210.0), "seek:100000");
         assert_eq!(hit.action_at(0.0), "seek:0");
         assert_eq!(hit.action_at(999.0), "seek:200000");
+    }
+
+    #[test]
+    fn truncation_never_splits_a_surrogate_pair() {
+        let text = "ab\u{1F600}c";
+        assert_eq!(super::utf16_prefix(text, 3), vec![0x61, 0x62]);
+        assert_eq!(super::utf16_prefix(text, 4).len(), 4);
+        assert_eq!(super::utf16_prefix(text, 99).len(), 5);
     }
 
     #[test]

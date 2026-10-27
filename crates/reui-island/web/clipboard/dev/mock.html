@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="color-scheme" content="dark">
+<title>Clipboard (mock)</title>
+<link rel="stylesheet" href="../app.css">
+<style>
+  /* Dev only: message log, shown with ?log=1 */
+  #mocklog {
+    position: fixed; right: 8px; bottom: 8px; z-index: 100;
+    width: 360px; max-height: 40vh; overflow: auto;
+    margin: 0; padding: 8px 10px;
+    border-radius: 10px;
+    background: rgb(20 20 24 / .95); color: #9fe3a3;
+    box-shadow: 0 0 0 1px rgb(255 255 255 / .1);
+    font: 11px/15px "Cascadia Mono", Consolas, monospace;
+    white-space: pre-wrap; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script src="mock.js"></script>
+<script src="../app.js"></script>
+</body>
+</html>

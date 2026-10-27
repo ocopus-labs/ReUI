@@ -3,9 +3,24 @@
 //! never constructed, so its adapters never run.
 
 pub mod agent;
+mod audio;
 mod artwork;
+pub mod clipboard;
+mod clipboard_panel;
+mod clipboard_settings;
+mod clipboard_store;
+mod clipboard_view;
+mod link;
+mod secrets;
+mod clipboard_os;
 pub mod demo;
 pub mod media;
+mod media_settings;
+mod lyrics;
+mod ocr;
+mod player;
+mod sessions;
+mod transform;
 mod usage;
 
 use std::future::Future;
@@ -23,5 +38,33 @@ pub fn start(hub: &Hub, modules: Vec<Box<dyn Module>>) {
         let ctx = hub.context(module.name());
         println!("module started: {}", module.name());
         tokio::spawn(module.run(ctx));
+    }
+}
+
+/// A module body borrowing its context, so it can be run again after it fails.
+pub type Body<'a, E> = Pin<Box<dyn Future<Output = Result<(), E>> + Send + 'a>>;
+
+/// Runs a module body and starts it again (after 1 s, backing off to 30 s) when it returns
+/// an error or panics, so one bad event from an OS API never ends a feature until the hub
+/// restarts. `Ok` means the hub is shutting down.
+pub async fn supervise<E: std::fmt::Display>(name: &str, ctx: &mut ModuleContext, mut body: impl for<'a> FnMut(&'a mut ModuleContext) -> Body<'a, E>) {
+    use std::panic::{catch_unwind, AssertUnwindSafe};
+    use std::task::Poll;
+    let mut wait = std::time::Duration::from_secs(1);
+    loop {
+        let mut run = body(ctx);
+        let outcome = std::future::poll_fn(|cx| match catch_unwind(AssertUnwindSafe(|| run.as_mut().poll(cx))) {
+            Ok(Poll::Ready(result)) => Poll::Ready(result.map_err(|e| e.to_string())),
+            Ok(Poll::Pending) => Poll::Pending,
+            Err(_) => Poll::Ready(Err("panicked".to_string())),
+        })
+        .await;
+        drop(run);
+        match outcome {
+            Ok(()) => return,
+            Err(e) => eprintln!("{name}: stopped ({e}); restarting in {}s", wait.as_secs()),
+        }
+        tokio::time::sleep(wait).await;
+        wait = (wait * 2).min(std::time::Duration::from_secs(30));
     }
 }
