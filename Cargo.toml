@@ -1,0 +1,24 @@
+[workspace]
+resolver = "2"
+members = ["crates/reui-design", "crates/reui-protocol", "crates/reui-hub", "crates/reui-island", "crates/reui-bridge"]
+exclude = ["spikes"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[workspace.dependencies]
+reui-design = { path = "crates/reui-design" }
+reui-protocol = { path = "crates/reui-protocol" }
+anyhow = "1.0.104"
+postcard = { version = "1.1", features = ["use-std"] }
+serde = { version = "1.0.228", features = ["derive"] }
+tokio = { version = "1.53", default-features = false }
+windows = "0.62.2"
+windows-numerics = "0.3.1"
+
+[profile.release]
+lto = true
+codegen-units = 1
+panic = "abort"

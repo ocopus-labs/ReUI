@@ -1,0 +1,8 @@
+# Build output
+/target/
+/spikes/*/target/
+
+# Per-machine Claude Code settings (ReUI's hooks point at this machine's paths)
+/.claude/settings.local.json
+*.reui-backup
+*.reui-tmp
