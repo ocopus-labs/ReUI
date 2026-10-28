@@ -3,6 +3,12 @@
 //! material runs edge to edge; DWM still gives it rounded corners, a shadow, snapping and
 //! the dark border. We answer hit-testing for the resize edges and the drag band. Per-monitor
 //! DPI v2: every size scales with the monitor it's on.
+//!
+//! The message loop draws: when the app has something to show (a change, or motion in
+//! flight) it waits on the swap chain's frame-latency object as well as on messages, and
+//! draws a frame each time the display can take one. At rest it only waits for messages.
+//! The window has no redirection bitmap (the swap chain is its only content), and resizing
+//! draws straight away, so the edges never show stale or stretched pixels.
 
 use std::cell::RefCell;
 
@@ -12,6 +18,7 @@ use windows::Win32::Foundation::*;
 use windows::Win32::Graphics::Dwm::*;
 use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
+use windows::Win32::System::Threading::{WaitForSingleObjectEx, INFINITE};
 use windows::Win32::UI::Controls::MARGINS;
 use windows::Win32::UI::HiDpi::*;
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
@@ -36,16 +43,6 @@ fn with_app<R>(f: impl FnOnce(&mut App) -> R) -> Option<R> {
     APP.with(|cell| cell.try_borrow_mut().ok().and_then(|mut app| app.as_mut().map(f)))
 }
 
-/// The pointer in client DIPs.
-pub fn cursor(hwnd: HWND, scale: f32) -> Option<(f32, f32)> {
-    let mut pt = POINT::default();
-    unsafe {
-        GetCursorPos(&mut pt).ok()?;
-        _ = ScreenToClient(hwnd, &mut pt);
-    }
-    Some((pt.x as f32 / scale, pt.y as f32 / scale))
-}
-
 fn dpi_of(hwnd: HWND) -> u32 {
     unsafe { GetDpiForWindow(hwnd) }.max(96)
 }
@@ -63,7 +60,9 @@ fn animations_enabled() -> bool {
     enabled.as_bool()
 }
 
-pub fn create(state: State, page: Page) -> Result<HWND> {
+/// Opens the window (`visible`: shown and brought to the front; otherwise it stays hidden,
+/// for screenshots).
+pub fn create(state: State, page: Page, visible: bool) -> Result<HWND> {
     let class = if state.paths.sandbox { SANDBOX_CLASS } else { CLASS };
     unsafe {
         let instance = GetModuleHandleW(None)?;
@@ -72,7 +71,6 @@ pub fn create(state: State, page: Page) -> Result<HWND> {
             lpfnWndProc: Some(wndproc),
             hInstance: instance.into(),
             hCursor: LoadCursorW(None, IDC_ARROW)?,
-            hbrBackground: HBRUSH(GetStockObject(BLACK_BRUSH).0),
             hIcon: LoadIconW(None, IDI_APPLICATION)?,
             lpszClassName: class,
             ..Default::default()
@@ -94,7 +92,7 @@ pub fn create(state: State, page: Page) -> Result<HWND> {
         let h = ((s::window::HEIGHT * scale) as i32).min(work.bottom - work.top);
         let x = work.left + (work.right - work.left - w) / 2;
         let y = work.top + (work.bottom - work.top - h) / 2;
-        let hwnd = CreateWindowExW(WINDOW_EX_STYLE::default(), class, w!("ReUI Settings"), WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, x, y, w, h, None, None, Some(instance.into()), None)?;
+        let hwnd = CreateWindowExW(WS_EX_NOREDIRECTIONBITMAP, class, w!("ReUI Settings"), WS_OVERLAPPEDWINDOW | WS_CLIPCHILDREN, x, y, w, h, None, None, Some(instance.into()), None)?;
 
         let dark = BOOL(1);
         _ = DwmSetWindowAttribute(hwnd, DWMWA_USE_IMMERSIVE_DARK_MODE, &dark as *const _ as *const _, 4);
@@ -112,8 +110,10 @@ pub fn create(state: State, page: Page) -> Result<HWND> {
         let mut rc = RECT::default();
         _ = GetClientRect(hwnd, &mut rc);
         with_app(|app| app.resize(rc.right as u32, rc.bottom as u32));
-        _ = ShowWindow(hwnd, SW_SHOWNORMAL);
-        _ = SetForegroundWindow(hwnd);
+        if visible {
+            _ = ShowWindow(hwnd, SW_SHOWNORMAL);
+            _ = SetForegroundWindow(hwnd);
+        }
         Ok(hwnd)
     }
 }
@@ -125,14 +125,55 @@ fn colorref(c: reui_design::Color) -> COLORREF {
 
 pub fn run() {
     let mut msg = MSG::default();
-    unsafe {
-        while GetMessageW(&mut msg, None, 0, 0).as_bool() {
-            _ = TranslateMessage(&msg);
-            DispatchMessageW(&msg);
+    'running: loop {
+        unsafe {
+            while PeekMessageW(&mut msg, None, 0, 0, PM_REMOVE).as_bool() {
+                if msg.message == WM_QUIT {
+                    break 'running;
+                }
+                _ = TranslateMessage(&msg);
+                DispatchMessageW(&msg);
+            }
+        }
+        let (needs, waitable) = with_app(|app| (app.needs_frame(), app.waitable())).unwrap_or((false, None));
+        match (needs, waitable) {
+            // The first frame makes the swap chain.
+            (true, None) => _ = with_app(|app| app.frame()),
+            (true, Some(handle)) => {
+                // Input first: a frame only when the display can take one.
+                let woke = unsafe { MsgWaitForMultipleObjectsEx(Some(&[handle]), INFINITE, QS_ALLINPUT, MWMO_INPUTAVAILABLE) };
+                if woke == WAIT_OBJECT_0 {
+                    with_app(|app| app.frame());
+                }
+            }
+            (false, _) => unsafe {
+                _ = WaitMessage();
+            },
         }
     }
     keys::stop();
     APP.with(|cell| cell.borrow_mut().take());
+}
+
+/// `--shots`: every page drawn offscreen into `dir`, without showing the window.
+pub fn shots(state: State, dir: &std::path::Path) -> Result<()> {
+    create(state, Page::General, false)?;
+    let done = APP.with(|cell| cell.borrow_mut().as_mut().map(|app| crate::shots::run(app, dir)));
+    keys::stop();
+    APP.with(|cell| cell.borrow_mut().take());
+    done.unwrap_or(Ok(()))
+}
+
+/// Draws now, outside the loop's pacing (the system asked: resizing, uncovering).
+fn paint_now() {
+    with_app(|app| {
+        if let Some(handle) = app.waitable() {
+            unsafe { _ = WaitForSingleObjectEx(handle, 50, true) };
+        }
+        app.invalidate();
+        crate::perf::reason("paint");
+        app.frame();
+    });
 }
 
 /// Brings an already-open Settings window to the front.
@@ -215,6 +256,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             let (w, h) = ((lparam.0 & 0xffff) as u32, ((lparam.0 >> 16) & 0xffff) as u32);
             if w > 0 && h > 0 {
                 with_app(|app| app.resize(w, h));
+                paint_now();
             }
             LRESULT(0)
         }
@@ -222,8 +264,8 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         WM_PAINT => {
             let mut ps = PAINTSTRUCT::default();
             BeginPaint(hwnd, &mut ps);
-            with_app(|app| app.paint());
             _ = EndPaint(hwnd, &ps);
+            paint_now();
             LRESULT(0)
         }
         WM_MOUSEMOVE => {
@@ -260,6 +302,17 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             let delta = ((wparam.0 >> 16) & 0xffff) as i16;
             with_app(|app| app.wheel(delta));
             LRESULT(0)
+        }
+        WM_SYSKEYDOWN => {
+            if with_app(|app| app.sys_key(wparam.0 as u32)).unwrap_or(false) {
+                return LRESULT(0);
+            }
+            DefWindowProcW(hwnd, msg, wparam, lparam)
+        }
+        WM_XBUTTONUP => {
+            let button = ((wparam.0 >> 16) & 0xffff) as u16;
+            with_app(|app| app.x_button(button));
+            LRESULT(1)
         }
         WM_KEYDOWN => {
             let shift = GetKeyState(VK_SHIFT.0 as i32) < 0;

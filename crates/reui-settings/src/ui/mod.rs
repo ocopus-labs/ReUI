@@ -2,7 +2,34 @@
 //! rows), and a row is a title, one quiet line and the controls it groups at its right.
 //! Pages build this from the settings; [`layout`] places it; `render` draws it.
 
+pub mod chrome;
+pub mod icons;
 pub mod layout;
+
+use reui_design::Color;
+
+/// A coloured icon tile: a Segoe Fluent Icons glyph in white on a rounded square of the
+/// colour (sidebar, header card, important rows), or one of the marks drawn as they are.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum Icon {
+    Glyph(char, Color),
+    /// ReUI's mark: a light screen with the black island at its top.
+    Mark,
+    /// The Claude logo (design/assets/agents/claude.svg) on a dark tile.
+    Claude,
+}
+
+/// Which feature's island a header card shows.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Preview {
+    /// The resting pill.
+    Idle,
+    Music,
+    Clipboard,
+    Levels,
+    Devices,
+    Agents,
+}
 
 /// A control's identity: its row and its place among the row's controls.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
@@ -75,11 +102,13 @@ pub struct Row {
     pub enabled: bool,
     /// No well: just its controls (the welcome's Next / Done).
     pub bare: bool,
+    /// A leading icon tile, for the rows that lead somewhere or matter most.
+    pub icon: Option<Icon>,
 }
 
 impl Row {
     pub fn new(id: &str, title: &str) -> Self {
-        Self { id: id.into(), title: title.into(), detail: None, tone: Tone::Secondary, mono: false, parts: Vec::new(), enabled: true, bare: false }
+        Self { id: id.into(), title: title.into(), detail: None, tone: Tone::Secondary, mono: false, parts: Vec::new(), enabled: true, bare: false, icon: None }
     }
 
     pub fn detail(mut self, detail: impl Into<String>) -> Self {
@@ -102,6 +131,11 @@ impl Row {
         self
     }
 
+    pub fn icon(mut self, icon: Icon) -> Self {
+        self.icon = Some(icon);
+        self
+    }
+
     pub fn bare(mut self) -> Self {
         self.bare = true;
         self
@@ -115,11 +149,13 @@ impl Row {
 
 #[derive(Clone, Debug, PartialEq)]
 pub enum Block {
-    /// The page's title (the hero) and its one paragraph, with an optional eyebrow above
-    /// ("Step 1 of 3").
-    Intro { eyebrow: Option<String>, title: String, body: Option<String> },
-    /// Rows in one well, with an optional eyebrow above.
-    Group { label: Option<String>, rows: Vec<Row> },
+    /// The page's header card: its icon, title (the hero) and one paragraph, with an
+    /// optional eyebrow above the title ("Step 1 of 3"), the feature's island above it all,
+    /// and the feature's on/off row at its right (only that row's controls and its quiet
+    /// line show).
+    Intro { eyebrow: Option<String>, title: String, body: Option<String>, icon: Option<Icon>, preview: Option<Preview>, row: Option<Row> },
+    /// Rows in one container, with an optional section header above and a footnote under.
+    Group { label: Option<String>, rows: Vec<Row>, footer: Option<String> },
     /// Big tabular figures with a caption each (About's idle cost), in a well.
     Figures { label: Option<String>, items: Vec<(String, String)> },
     /// A title and wrapped plain text in a well (release notes, What's new); `accent`
@@ -128,7 +164,12 @@ pub enum Block {
 }
 
 pub fn group(label: &str, rows: Vec<Row>) -> Block {
-    Block::Group { label: (!label.is_empty()).then(|| label.to_string()), rows }
+    Block::Group { label: (!label.is_empty()).then(|| label.to_string()), rows, footer: None }
+}
+
+/// A group with a footnote under its container.
+pub fn footed(label: &str, rows: Vec<Row>, footer: &str) -> Block {
+    Block::Group { label: (!label.is_empty()).then(|| label.to_string()), rows, footer: Some(footer.to_string()) }
 }
 
 pub fn button(label: &str, role: Role) -> Part {
@@ -146,12 +187,18 @@ pub enum Act {
     Value(f32),
 }
 
-/// What the pointer is over.
-#[derive(Clone, Debug, Default, PartialEq)]
+/// What the pointer is over. Also the key of a hover fill's eased amount.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub enum Hover {
     #[default]
     None,
+    /// The sidebar's nth visible page.
     Nav(usize),
+    /// The ReUI row at the top of the sidebar (opens About).
+    Account,
+    Search,
+    /// 0 back, 1 forward.
+    History(usize),
     /// 0 minimise, 1 close.
     Caption(usize),
     /// A control, and which of its cells (segment) if any.
@@ -163,6 +210,8 @@ pub enum Hover {
 /// Where the keyboard is.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Focus {
+    /// The sidebar's search field (typing filters the pages).
+    Search,
     /// The nav list (arrows switch pages).
     Nav,
     Part(Target),

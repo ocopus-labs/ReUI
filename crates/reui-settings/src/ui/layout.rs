@@ -1,23 +1,44 @@
-//! Where everything goes, in DIPs, from the tokens. Pure: text is measured through
+//! Where the page's pieces go, in DIPs, from the tokens. Pure: text is measured through
 //! [`Measure`], so the maths is tested without DirectWrite. Page coordinates: x from the
-//! page column's left edge, y from the window's top with the page unscrolled.
+//! page column's left edge, y from the window's top with the page unscrolled. The window
+//! around the page (sidebar, toolbar, scrollbar) is in [`super::chrome`].
 
-use reui_design::tokens::{component, settings as s};
+use reui_design::tokens::prefs as s;
 
-use super::{Block, Part, Row, Target};
+use super::{Block, Part, Preview, Row, Target};
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Font {
-    Title,
-    Intro,
+    Toolbar,
+    Hero,
+    HeroBody,
     Label,
     RowTitle,
     RowDetail,
+    Footnote,
     Nav,
     Control,
     Field,
     Mono,
     Figure,
+    Account,
+    AccountDetail,
+    /// The island's own type, for the previews (drawn scaled).
+    Island(IslandFont),
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub enum IslandFont {
+    Eyebrow,
+    Headline,
+    Detail,
+    Compact,
+    Caption,
+    Button,
+    Code,
+    Tab,
+    CardText,
+    CardLabel,
 }
 
 pub trait Measure {
@@ -40,12 +61,21 @@ impl Rect {
         Self { l, t, r, b }
     }
 
+    /// `w` × `h` at (`l`, `t`).
+    pub fn at(l: f32, t: f32, w: f32, h: f32) -> Self {
+        Self { l, t, r: l + w, b: t + h }
+    }
+
     pub fn w(&self) -> f32 {
         self.r - self.l
     }
 
     pub fn h(&self) -> f32 {
         self.b - self.t
+    }
+
+    pub fn mid_y(&self) -> f32 {
+        (self.t + self.b) / 2.0
     }
 
     pub fn contains(&self, x: f32, y: f32) -> bool {
@@ -64,13 +94,20 @@ impl Rect {
 /// A placed block piece, for drawing.
 #[derive(Clone, Debug, PartialEq)]
 pub enum Shape {
-    Intro { block: usize, eyebrow: Option<Rect>, title: Rect, body: Option<Rect> },
-    /// A text well: the well, its title line and its wrapped body.
-    Text { block: usize, rect: Rect, title: Rect, body: Rect },
+    /// The header card: the island stage across its top (feature pages), the icon tile, the
+    /// eyebrow, title and paragraph beside it, and the on/off row's quiet line.
+    Header { block: usize, rect: Rect, stage: Option<Rect>, icon: Rect, eyebrow: Option<Rect>, title: Rect, body: Option<Rect>, note: Option<Rect> },
+    /// A group's container.
+    Container { block: usize, rect: Rect },
+    /// A section header above a container.
     Label { block: usize, rect: Rect },
-    /// A row's well: corner radii at the top and bottom (outer or inner), and where its text
-    /// may go.
-    Row { block: usize, row: usize, rect: Rect, top: f32, bottom: f32, text: Rect },
+    /// A footnote under a container.
+    Footer { block: usize, rect: Rect },
+    /// A row inside its container: where its text and leading icon go, and whether a
+    /// hairline separates it from the row above.
+    Row { block: usize, row: usize, rect: Rect, text: Rect, icon: Option<Rect>, separator: bool },
+    /// A text container: its title line and wrapped body.
+    Text { block: usize, rect: Rect, title: Rect, body: Rect },
     Figures { block: usize, rect: Rect },
 }
 
@@ -99,133 +136,177 @@ impl Layout {
         self.parts.iter().find(|p| &p.target == target)
     }
 
+    /// The control at (`x`, `y`); small controls take clicks a little outside their edge.
     pub fn hit(&self, x: f32, y: f32) -> Option<&Placed> {
-        self.parts.iter().find(|p| p.interactive && p.enabled && p.rect.contains(x, y))
+        let live = || self.parts.iter().filter(|p| p.interactive && p.enabled);
+        live().find(|p| p.rect.contains(x, y)).or_else(|| live().find(|p| p.rect.inflate(s::control::HIT_PAD).contains(x, y)))
     }
 
     /// Controls in reading order, the ones the keyboard visits.
     pub fn focus_order(&self) -> Vec<Target> {
         self.parts.iter().filter(|p| p.interactive && p.enabled).map(|p| p.target.clone()).collect()
     }
-}
 
-/// Width of the reading left of a slider's bar ("10 %").
-pub const SLIDER_READING: f32 = 44.0;
+    /// The row a control is in (scrolling to a control shows its whole row).
+    pub fn row_of(&self, target: &Target) -> Option<Rect> {
+        let placed = self.part(target)?;
+        self.shapes.iter().find_map(|s| match s {
+            Shape::Row { rect, .. } | Shape::Header { rect, .. } if rect.t <= placed.rect.t && rect.b >= placed.rect.b => Some(*rect),
+            _ => None,
+        })
+    }
+}
 
 pub fn layout(blocks: &[Block], width: f32, m: &impl Measure) -> Layout {
     let mut out = Layout::default();
     let mut y = s::page::TOP;
     for (i, block) in blocks.iter().enumerate() {
         if i > 0 {
-            y += if matches!(blocks[i - 1], Block::Intro { .. }) { s::page::INTRO_AFTER } else { s::page::GROUP_GAP };
+            y += s::page::GROUP_GAP;
         }
-        match block {
-            Block::Intro { eyebrow, body, .. } => {
-                let eyebrow = eyebrow.as_ref().map(|_| {
-                    let h = s::typography::LABEL.line_height;
-                    let rect = Rect::new(0.0, y, width, y + h);
-                    y += h + s::page::LABEL_GAP;
-                    rect
-                });
-                let title_h = s::typography::TITLE.line_height;
-                let title_rect = Rect::new(0.0, y, width, y + title_h);
-                y += title_h;
-                let body = body.as_ref().map(|text| {
-                    y += s::page::INTRO_GAP;
-                    let h = m.height(text, Font::Intro, width);
-                    let rect = Rect::new(0.0, y, width, y + h);
-                    y += h;
-                    rect
-                });
-                out.shapes.push(Shape::Intro { block: i, eyebrow, title: title_rect, body });
+        y = match block {
+            Block::Intro { .. } => header(&mut out, i, block, y, width, m),
+            Block::Group { label, rows, footer } => {
+                y = label_above(&mut out, i, label.is_some(), y, width);
+                let bare = rows.iter().all(|r| r.bare);
+                let top = y;
+                for (j, row) in rows.iter().enumerate() {
+                    y = place_row(&mut out, i, j, row, y, width, m);
+                }
+                if !bare {
+                    // The container goes under its rows.
+                    let at = out.shapes.len() - rows.len();
+                    out.shapes.insert(at, Shape::Container { block: i, rect: Rect::new(0.0, top, width, y) });
+                }
+                match footer {
+                    Some(text) => {
+                        y += s::page::FOOTER_GAP;
+                        let inset = s::page::LABEL_INSET;
+                        let h = m.height(text, Font::Footnote, width - 2.0 * inset);
+                        out.shapes.push(Shape::Footer { block: i, rect: Rect::new(inset, y, width - inset, y + h) });
+                        y + h
+                    }
+                    None => y,
+                }
             }
             Block::Text { label, body, .. } => {
-                if label.is_some() {
-                    let h = s::typography::LABEL.line_height;
-                    out.shapes.push(Shape::Label { block: i, rect: Rect::new(s::row::PADDING, y, width, y + h) });
-                    y += h + s::page::LABEL_GAP;
-                }
-                let inner = (width - 2.0 * s::row::PADDING).max(1.0);
+                y = label_above(&mut out, i, label.is_some(), y, width);
+                let pad = s::group::PADDING;
+                let inner = (width - 2.0 * pad).max(1.0);
                 let title_h = s::typography::ROW_TITLE.line_height;
                 let body_h = m.height(body, Font::RowDetail, inner);
-                let h = 2.0 * s::row::PADDING + title_h + s::row::LINE_GAP + body_h;
-                let rect = Rect::new(0.0, y, width, y + h);
-                let t = y + s::row::PADDING;
-                let title = Rect::new(s::row::PADDING, t, width - s::row::PADDING, t + title_h);
-                let bt = t + title_h + s::row::LINE_GAP;
-                let body = Rect::new(s::row::PADDING, bt, width - s::row::PADDING, bt + body_h);
-                out.shapes.push(Shape::Text { block: i, rect, title, body });
-                y += h;
-            }
-            Block::Group { label, rows } => {
-                if label.is_some() {
-                    let h = s::typography::LABEL.line_height;
-                    out.shapes.push(Shape::Label { block: i, rect: Rect::new(s::row::PADDING, y, width, y + h) });
-                    y += h + s::page::LABEL_GAP;
-                }
-                for (j, row) in rows.iter().enumerate() {
-                    if j > 0 {
-                        y += s::row::GAP;
-                    }
-                    y = place_row(&mut out, i, j, row, rows.len(), y, width, m);
-                }
+                let h = 2.0 * pad + title_h + s::group::LINE_GAP + 2.0 + body_h;
+                let t = y + pad;
+                let title = Rect::new(pad, t, width - pad, t + title_h);
+                let bt = title.b + s::group::LINE_GAP + 2.0;
+                let body = Rect::new(pad, bt, width - pad, bt + body_h);
+                out.shapes.push(Shape::Text { block: i, rect: Rect::new(0.0, y, width, y + h), title, body });
+                y + h
             }
             Block::Figures { label, .. } => {
-                if label.is_some() {
-                    let h = s::typography::LABEL.line_height;
-                    out.shapes.push(Shape::Label { block: i, rect: Rect::new(s::row::PADDING, y, width, y + h) });
-                    y += h + s::page::LABEL_GAP;
-                }
-                let h = s::typography::FIGURE.line_height + s::row::LINE_GAP + s::typography::LABEL.line_height + 2.0 * s::row::PADDING;
+                y = label_above(&mut out, i, label.is_some(), y, width);
+                let h = s::typography::FIGURE.line_height + s::group::LINE_GAP + s::typography::LABEL.line_height + 2.0 * s::group::PADDING;
                 out.shapes.push(Shape::Figures { block: i, rect: Rect::new(0.0, y, width, y + h) });
-                y += h;
+                y + h
             }
-        }
+        };
     }
     out.height = y + s::page::BOTTOM;
     out
 }
 
-#[allow(clippy::too_many_arguments)]
-fn place_row(out: &mut Layout, block: usize, index: usize, row: &Row, count: usize, y: f32, width: f32, m: &impl Measure) -> f32 {
-    let h = if row.detail.is_some() { s::row::HEIGHT } else { s::row::HEIGHT_PLAIN };
+/// The section header, if there is one; returns where the container starts.
+fn label_above(out: &mut Layout, block: usize, label: bool, y: f32, width: f32) -> f32 {
+    if !label {
+        return y;
+    }
+    let h = s::typography::LABEL.line_height;
+    out.shapes.push(Shape::Label { block, rect: Rect::new(s::page::LABEL_INSET, y, width, y + h) });
+    y + h + s::page::LABEL_GAP
+}
+
+fn header(out: &mut Layout, i: usize, block: &Block, y: f32, width: f32, m: &impl Measure) -> f32 {
+    let Block::Intro { eyebrow, body, preview, row, .. } = block else { return y };
+    let pad = s::header::PADDING;
+    let stage = preview.map(|kind| Rect::new(0.0, y, width, y + stage_height(kind)));
+    let top = stage.map_or(y, |r| r.b) + pad;
+    let icon = Rect::at(pad, top, s::header::ICON, s::header::ICON);
+    // The on/off row's controls sit at the right, level with the icon.
+    let mut right = width - pad;
+    let mut placed = Vec::new();
+    if let Some(row) = row {
+        for (k, part) in row.parts.iter().enumerate().rev() {
+            let (w, h, radius, _) = part_size(part, m);
+            let r = Rect::new(right - w, icon.mid_y() - h / 2.0, right, icon.mid_y() + h / 2.0);
+            placed.push(Placed { target: Target::new(&row.id, k), rect: r, radius, cells: Vec::new(), enabled: row.enabled, interactive: part.interactive() });
+            right = r.l - s::control::GAP;
+        }
+        right += s::control::GAP - s::group::CONTROL_GAP;
+    }
+    let left = icon.r + s::header::ICON_GAP;
+    let text_w = (right - left).max(1.0);
+    let gap = s::header::LINE_GAP;
+    let eyebrow_h = eyebrow.as_ref().map_or(0.0, |_| s::typography::LABEL.line_height + gap);
+    let title_h = s::typography::HERO.line_height;
+    let body_h = body.as_ref().map_or(0.0, |text| m.height(text, Font::HeroBody, text_w) + gap);
+    let note_h = row.as_ref().and_then(|r| r.detail.as_ref()).map_or(0.0, |_| s::typography::ROW_DETAIL.line_height + gap);
+    let text_h = eyebrow_h + title_h + body_h + note_h;
+    // Centred on the icon when it fits beside it; otherwise from the icon's top.
+    let mut t = if text_h < icon.h() { icon.mid_y() - text_h / 2.0 } else { icon.t };
+    let eyebrow_rect = eyebrow.as_ref().map(|_| {
+        let r = Rect::at(left, t, text_w, s::typography::LABEL.line_height);
+        t = r.b + gap;
+        r
+    });
+    let title = Rect::at(left, t, text_w, title_h);
+    t = title.b;
+    let body_rect = body.as_ref().map(|_| {
+        let r = Rect::at(left, t + gap, text_w, body_h - gap);
+        t = r.b;
+        r
+    });
+    let note = row.as_ref().and_then(|r| r.detail.as_ref()).map(|_| Rect::at(left, t + gap, text_w, s::typography::ROW_DETAIL.line_height));
+    let bottom = icon.b.max(top + text_h) + pad;
+    out.shapes.push(Shape::Header { block: i, rect: Rect::new(0.0, y, width, bottom), stage, icon, eyebrow: eyebrow_rect, title, body: body_rect, note });
+    placed.reverse();
+    out.parts.extend(placed);
+    bottom
+}
+
+fn place_row(out: &mut Layout, block: usize, index: usize, row: &Row, y: f32, width: f32, m: &impl Measure) -> f32 {
+    let h = if row.detail.is_some() { s::group::ROW_DETAIL } else { s::group::ROW };
     let rect = Rect::new(0.0, y, width, y + h);
-    let outer = s::row::RADIUS;
-    let inner = s::row::INNER_RADIUS;
-    let top = if index == 0 { outer } else { inner };
-    let bottom = if index + 1 == count { outer } else { inner };
     let mid = y + h / 2.0;
-    let mut right = width - s::row::PADDING;
+    let pad = s::group::PADDING;
+    let mut right = width - pad;
     // Right to left, so the first part ends up leftmost.
     let mut placed = Vec::new();
     for (k, part) in row.parts.iter().enumerate().rev() {
         let (w, ph, radius, cells) = part_size(part, m);
         let left = right - w;
         let r = Rect::new(left, mid - ph / 2.0, right, mid + ph / 2.0);
-        let cells = cells.into_iter().map(|(l, cw)| Rect::new(left + l, r.t, left + l + cw, r.b)).collect::<Vec<_>>();
-        let cells = match part {
-            // Cells sit inside the track, inset.
-            Part::Segmented { .. } | Part::Hotkey { .. } => {
-                let inset = if matches!(part, Part::Segmented { .. }) { s::control::SEGMENT_INSET } else { (s::control::HEIGHT - s::control::KEY_HEIGHT) / 2.0 };
-                cells.into_iter().map(|c| Rect::new(c.l, c.t + inset, c.r, c.b - inset)).collect()
-            }
-            _ => cells,
+        let inset = match part {
+            Part::Segmented { .. } => s::control::SEGMENT_INSET,
+            Part::Hotkey { .. } => (s::control::HEIGHT - s::control::KEY_HEIGHT) / 2.0,
+            _ => 0.0,
         };
+        let cells = cells.into_iter().map(|(l, cw)| Rect::new(left + l, r.t + inset, left + l + cw, r.b - inset)).collect();
         placed.push(Placed { target: Target::new(&row.id, k), rect: r, radius, cells, enabled: row.enabled, interactive: part.interactive() });
         right = left - s::control::GAP;
     }
-    let text_right = if row.parts.is_empty() { width - s::row::PADDING } else { right + s::control::GAP - s::row::CONTROL_GAP };
-    let text = Rect::new(s::row::PADDING, y, text_right.max(s::row::PADDING), y + h);
-    out.shapes.push(Shape::Row { block, row: index, rect, top, bottom, text });
+    let text_right = if row.parts.is_empty() { width - pad } else { right + s::control::GAP - s::group::CONTROL_GAP };
+    let icon = row.icon.map(|_| Rect::at(pad, mid - s::group::ICON / 2.0, s::group::ICON, s::group::ICON));
+    let text_left = icon.map_or(pad, |r| r.r + s::group::ICON_GAP);
+    let text = Rect::new(text_left, y, text_right.max(text_left), y + h);
+    out.shapes.push(Shape::Row { block, row: index, rect, text, icon, separator: index > 0 && !row.bare });
     placed.reverse();
     out.parts.extend(placed);
     y + h
 }
 
 /// (width, height, corner radius, cells as (left offset, width)).
-fn part_size(part: &Part, m: &impl Measure) -> (f32, f32, f32, Vec<(f32, f32)>) {
-    let h = s::control::HEIGHT;
-    let pad = s::control::PADDING;
+pub fn part_size(part: &Part, m: &impl Measure) -> (f32, f32, f32, Vec<(f32, f32)>) {
+    let (h, radius, pad) = (s::control::HEIGHT, s::control::RADIUS, s::control::PADDING);
     match part {
         Part::Toggle { .. } => (s::control::TOGGLE_WIDTH, s::control::TOGGLE_HEIGHT, s::control::TOGGLE_HEIGHT / 2.0, Vec::new()),
         Part::Segmented { options, .. } => {
@@ -237,14 +318,14 @@ fn part_size(part: &Part, m: &impl Measure) -> (f32, f32, f32, Vec<(f32, f32)>) 
                 cells.push((x, w));
                 x += w;
             }
-            (x + inset, h, h / 2.0, cells)
+            (x + inset, h, radius, cells)
         }
-        Part::Slider { .. } => (SLIDER_READING + s::control::GAP + s::control::SLIDER_WIDTH, h, h / 2.0, Vec::new()),
-        Part::Button { label, .. } => (m.width(label, Font::Control) + 2.0 * pad, h, h / 2.0, Vec::new()),
+        Part::Slider { .. } => (s::control::SLIDER_READING + s::control::GAP + s::control::SLIDER_WIDTH, h, h / 2.0, Vec::new()),
+        Part::Button { label, .. } => ((m.width(label, Font::Control) + 2.0 * pad).max(64.0), h, radius, Vec::new()),
         Part::Hotkey { caps, recording } => {
             let inset = (h - s::control::KEY_HEIGHT) / 2.0;
             if *recording || caps.is_empty() {
-                return ((m.width("Press keys", Font::Control) + 2.0 * pad).max(120.0), h, h / 2.0, Vec::new());
+                return ((m.width(RECORDING, Font::Control) + 2.0 * pad).max(120.0), h, radius, Vec::new());
             }
             let mut x = inset;
             let mut cells = Vec::new();
@@ -252,95 +333,29 @@ fn part_size(part: &Part, m: &impl Measure) -> (f32, f32, f32, Vec<(f32, f32)>) 
                 if i > 0 {
                     x += s::control::KEY_GAP;
                 }
-                let w = (m.width(cap, Font::Control) + 2.0 * component::chip::PADDING_X).max(s::control::KEY_HEIGHT);
+                let w = (m.width(cap, Font::Control) + 2.0 * s::control::KEY_PADDING).max(s::control::KEY_HEIGHT);
                 cells.push((x, w));
                 x += w;
             }
-            (x + inset, h, h / 2.0, cells)
+            (x + inset, h, radius, cells)
         }
-        Part::Dropdown { label } => (m.width(label, Font::Control) + 2.0 * pad + s::control::GAP + s::icon::CONTROL, h, h / 2.0, Vec::new()),
-        Part::Field { .. } => (200.0, h, h / 2.0, Vec::new()),
+        Part::Dropdown { label } => (m.width(label, Font::Control) + 2.0 * pad + s::control::GAP + s::control::CHEVRONS, h, radius, Vec::new()),
+        Part::Field { .. } => (s::control::FIELD_WIDTH, h, radius, Vec::new()),
         Part::Remove => (s::control::REMOVE, s::control::REMOVE, s::control::REMOVE / 2.0, Vec::new()),
         Part::Value(text) => (m.width(text, Font::RowTitle), h, 0.0, Vec::new()),
     }
 }
 
-/// The page column's width in a window `window_w` wide.
-pub fn column_width(window_w: f32) -> f32 {
-    (window_w - s::nav::WIDTH - 2.0 * s::page::PADDING_X).clamp(0.0, s::page::MAX_WIDTH)
-}
-
-/// The page column's left edge in a window `window_w` wide: after the nav, centred in
-/// the space right of it once the column is at its widest.
-pub fn page_left(window_w: f32) -> f32 {
-    let area = window_w - s::nav::WIDTH;
-    s::nav::WIDTH + ((area - column_width(window_w)) / 2.0).max(s::page::PADDING_X)
-}
-
-/// The nav item capsules, top to bottom, in window coordinates.
-pub fn nav_items(count: usize) -> Vec<Rect> {
-    (0..count)
-        .map(|i| {
-            let t = s::nav::TOP + i as f32 * (s::nav::ITEM_HEIGHT + s::nav::ITEM_GAP);
-            Rect::new(s::nav::INSET, t, s::nav::WIDTH - s::nav::INSET, t + s::nav::ITEM_HEIGHT)
-        })
-        .collect()
-}
-
-/// Minimise and close, in window coordinates.
-pub fn caption_buttons(window_w: f32) -> [Rect; 2] {
-    let size = s::caption::BUTTON;
-    let top = s::caption::INSET;
-    let close_l = window_w - s::caption::INSET - size;
-    let min_l = close_l - s::caption::BUTTON_GAP - size;
-    [Rect::new(min_l, top, min_l + size, top + size), Rect::new(close_l, top, close_l + size, top + size)]
-}
-
-/// How far the page can scroll.
-pub fn max_scroll(content_h: f32, window_h: f32) -> f32 {
-    (content_h - window_h).max(0.0)
-}
-
-/// The scroll that keeps `rect` (page coordinates) in view below the caption, moving as
-/// little as possible.
-pub fn scroll_to_show(scroll: f32, rect: Rect, window_h: f32, max: f32) -> f32 {
-    let margin = s::page::GROUP_GAP;
-    let top = s::caption::HEIGHT + margin;
-    let bottom = window_h - margin;
-    let target = if rect.t - scroll < top {
-        rect.t - top
-    } else if rect.b - scroll > bottom {
-        rect.b - bottom
-    } else {
-        scroll
-    };
-    target.clamp(0.0, max)
-}
-
-/// The scrollbar's thumb (top, length) in window coordinates; `None` when nothing scrolls.
-pub fn scrollbar(scroll: f32, content_h: f32, window_h: f32) -> Option<(f32, f32)> {
-    let max = max_scroll(content_h, window_h);
-    if max <= 0.0 {
-        return None;
+/// A header's island stage: shorter when it only shows compact pills.
+pub fn stage_height(preview: Preview) -> f32 {
+    match preview {
+        Preview::Idle | Preview::Levels => s::header::STAGE_COMPACT,
+        _ => s::header::STAGE,
     }
-    let (track_t, track_h) = track(window_h);
-    let len = (track_h * window_h / content_h).max(s::scrollbar::MIN_LENGTH).min(track_h);
-    Some((track_t + (track_h - len) * (scroll / max), len))
 }
 
-/// The scroll for a thumb dragged to `thumb_top`.
-pub fn scroll_for_thumb(thumb_top: f32, content_h: f32, window_h: f32) -> f32 {
-    let max = max_scroll(content_h, window_h);
-    let Some((_, len)) = scrollbar(0.0, content_h, window_h) else { return 0.0 };
-    let (track_t, track_h) = track(window_h);
-    let travel = (track_h - len).max(1.0);
-    ((thumb_top - track_t) / travel * max).clamp(0.0, max)
-}
-
-fn track(window_h: f32) -> (f32, f32) {
-    let t = s::caption::HEIGHT;
-    (t, (window_h - t - s::scrollbar::MARGIN).max(0.0))
-}
+/// What the shortcut recorder says while it listens.
+pub const RECORDING: &str = "Press keys";
 
 /// A slider's value for a pointer at `x` over its bar (`rect` is the whole part).
 pub fn slider_value(rect: Rect, x: f32) -> f32 {
@@ -348,146 +363,125 @@ pub fn slider_value(rect: Rect, x: f32) -> f32 {
     ((x - l) / (r - l)).clamp(0.0, 1.0)
 }
 
-/// The slider's bar, left and right.
+/// The slider's bar, left and right: inset by half a knob so the knob stays inside.
 pub fn slider_bar(rect: Rect) -> (f32, f32) {
-    let l = rect.l + SLIDER_READING + s::control::GAP;
-    (l, rect.r)
+    let knob = s::control::SLIDER_KNOB / 2.0;
+    (rect.l + s::control::SLIDER_READING + s::control::GAP + knob, rect.r - knob)
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::ui::{button, group, Role};
+    use crate::ui::{button, footed, group, Icon, Role};
 
     /// Every character 7 DIPs wide; text wraps at whole lines of 20.
-    struct Fixed;
+    pub struct Fixed;
 
     impl Measure for Fixed {
         fn width(&self, text: &str, _: Font) -> f32 {
             text.chars().count() as f32 * 7.0
         }
         fn height(&self, text: &str, _: Font, width: f32) -> f32 {
-            ((self.width(text, Font::Intro) / width).ceil().max(1.0)) * 20.0
+            ((self.width(text, Font::HeroBody) / width).ceil().max(1.0)) * 20.0
         }
     }
 
     fn page() -> Vec<Block> {
         vec![
-            Block::Intro { eyebrow: None, title: "Clipboard".into(), body: Some("x".repeat(200)) },
+            Block::Intro { eyebrow: None, title: "Clipboard".into(), body: Some("x".repeat(200)), icon: None, preview: Some(Preview::Clipboard), row: Some(Row::new("clip:enabled", "Clipboard").part(Part::Toggle { on: true })) },
             group("History", vec![
                 Row::new("a", "One").detail("quiet").part(Part::Toggle { on: true }),
-                Row::new("b", "Two").part(button("Open", Role::Secondary)).part(Part::Remove),
+                Row::new("b", "Two").icon(Icon::Mark).part(button("Open", Role::Secondary)).part(Part::Remove),
                 Row::new("c", "Three").part(Part::Value("12 MB".into())).enabled(false).part(button("Go", Role::Primary)),
             ]),
-            group("", vec![Row::new("d", "Four").part(Part::Segmented { options: vec!["A".into(), "BB".into()], selected: 0 })]),
+            footed("", vec![Row::new("d", "Four").part(Part::Segmented { options: vec!["A".into(), "BB".into()], selected: 0 })], "A footnote"),
         ]
     }
 
-    #[test]
-    fn rows_stack_in_wells_with_outer_and_inner_corners() {
-        let l = layout(&page(), 600.0, &Fixed);
-        let rows: Vec<_> = l.shapes.iter().filter_map(|s| if let Shape::Row { rect, top, bottom, .. } = s { Some((*rect, *top, *bottom)) } else { None }).collect();
-        assert_eq!(rows.len(), 4);
-        // Title 34, gap 8, body: 1400 DIPs of text at 600 wraps to 3 lines of 20.
-        let intro_bottom = s::page::TOP + 34.0 + s::page::INTRO_GAP + 60.0;
-        let first = intro_bottom + s::page::INTRO_AFTER + s::typography::LABEL.line_height + s::page::LABEL_GAP;
-        assert_eq!(rows[0].0.t, first);
-        assert_eq!(rows[0].0.h(), s::row::HEIGHT);
-        assert_eq!(rows[1].0.t, rows[0].0.b + s::row::GAP);
-        assert_eq!(rows[1].0.h(), s::row::HEIGHT_PLAIN);
-        assert_eq!((rows[0].1, rows[0].2), (s::row::RADIUS, s::row::INNER_RADIUS));
-        assert_eq!((rows[1].1, rows[1].2), (s::row::INNER_RADIUS, s::row::INNER_RADIUS));
-        assert_eq!((rows[2].1, rows[2].2), (s::row::INNER_RADIUS, s::row::RADIUS));
-        // A group without a label starts right after the gap; alone, it's round all over.
-        assert_eq!(rows[3].0.t, rows[2].0.b + s::page::GROUP_GAP);
-        assert_eq!((rows[3].1, rows[3].2), (s::row::RADIUS, s::row::RADIUS));
-        assert_eq!(l.height, rows[3].0.b + s::page::BOTTOM);
+    fn rows(l: &Layout) -> Vec<(Rect, Rect, Option<Rect>, bool)> {
+        l.shapes.iter().filter_map(|s| if let Shape::Row { rect, text, icon, separator, .. } = s { Some((*rect, *text, *icon, *separator)) } else { None }).collect()
     }
 
     #[test]
-    fn eyebrows_sit_above_the_title_and_text_wells_wrap() {
-        let blocks = vec![
-            Block::Intro { eyebrow: Some("Step 1 of 3".into()), title: "What ReUI shows".into(), body: None },
-            Block::Text { label: Some("What's new".into()), title: "ReUI 0.2.0".into(), body: "y".repeat(200), accent: true },
-        ];
-        let l = layout(&blocks, 600.0, &Fixed);
-        let Shape::Intro { eyebrow: Some(eyebrow), title, .. } = &l.shapes[0] else { panic!("intro first") };
-        assert_eq!(eyebrow.t, s::page::TOP);
-        assert_eq!(title.t, eyebrow.b + s::page::LABEL_GAP);
-        let Some(Shape::Text { rect, title, body, .. }) = l.shapes.iter().find(|s| matches!(s, Shape::Text { .. })) else { panic!("a text well") };
-        assert_eq!(title.t, rect.t + s::row::PADDING);
-        // 1400 DIPs of text in 600 - 2 × padding wraps to 3 lines of 20.
-        assert_eq!(body.h(), 60.0);
-        assert_eq!(rect.b, body.b + s::row::PADDING);
-        assert_eq!(l.height, rect.b + s::page::BOTTOM);
+    fn the_header_card_holds_the_stage_icon_text_and_toggle() {
+        let l = layout(&page(), 600.0, &Fixed);
+        let Shape::Header { rect, stage: Some(stage), icon, title, body: Some(body), .. } = &l.shapes[0] else { panic!("header first") };
+        assert_eq!(rect.t, s::page::TOP);
+        assert_eq!(stage.h(), s::header::STAGE);
+        assert_eq!(icon.t, stage.b + s::header::PADDING);
+        assert_eq!(title.l, icon.r + s::header::ICON_GAP);
+        assert_eq!(body.t, title.b + s::header::LINE_GAP);
+        let toggle = l.part(&Target::new("clip:enabled", 0)).unwrap();
+        assert_eq!(toggle.rect.r, 600.0 - s::header::PADDING);
+        assert_eq!(toggle.rect.mid_y(), icon.mid_y());
+        assert!(title.r <= toggle.rect.l - s::group::CONTROL_GAP);
+        assert_eq!(rect.b, body.b.max(icon.b) + s::header::PADDING);
+    }
+
+    #[test]
+    fn rows_share_one_container_with_hairlines_between_them() {
+        let l = layout(&page(), 600.0, &Fixed);
+        let rows = rows(&l);
+        assert_eq!(rows.len(), 4);
+        let containers: Vec<Rect> = l.shapes.iter().filter_map(|s| if let Shape::Container { rect, .. } = s { Some(*rect) } else { None }).collect();
+        assert_eq!(containers.len(), 2);
+        assert_eq!((containers[0].t, containers[0].b), (rows[0].0.t, rows[2].0.b));
+        assert_eq!(rows[0].0.h(), s::group::ROW_DETAIL);
+        assert_eq!(rows[1].0.t, rows[0].0.b, "no gaps: hairlines separate rows");
+        assert_eq!(rows[1].0.h(), s::group::ROW);
+        assert_eq!(rows.iter().map(|r| r.3).collect::<Vec<_>>(), [false, true, true, false]);
+        // A leading icon pushes the text in.
+        let icon = rows[1].2.unwrap();
+        assert_eq!(icon.l, s::group::PADDING);
+        assert_eq!(rows[1].1.l, icon.r + s::group::ICON_GAP);
+        assert_eq!(rows[0].1.l, s::group::PADDING);
+        let footer = l.shapes.iter().find_map(|s| if let Shape::Footer { rect, .. } = s { Some(*rect) } else { None }).unwrap();
+        assert_eq!(footer.t, containers[1].b + s::page::FOOTER_GAP);
+        assert_eq!(l.height, footer.b + s::page::BOTTOM);
     }
 
     #[test]
     fn controls_sit_right_aligned_and_centred_in_their_row() {
         let l = layout(&page(), 600.0, &Fixed);
         let toggle = l.part(&Target::new("a", 0)).unwrap();
-        assert_eq!(toggle.rect.r, 600.0 - s::row::PADDING);
+        assert_eq!(toggle.rect.r, 600.0 - s::group::PADDING);
         assert_eq!(toggle.rect.w(), s::control::TOGGLE_WIDTH);
         let open = l.part(&Target::new("b", 0)).unwrap();
         let remove = l.part(&Target::new("b", 1)).unwrap();
-        assert_eq!(remove.rect.r, 600.0 - s::row::PADDING);
+        assert_eq!(remove.rect.r, 600.0 - s::group::PADDING);
         assert_eq!(open.rect.r, remove.rect.l - s::control::GAP);
-        assert_eq!(open.rect.w(), 4.0 * 7.0 + 2.0 * s::control::PADDING);
-        assert_eq!((open.rect.t + open.rect.b) / 2.0, (remove.rect.t + remove.rect.b) / 2.0);
+        assert_eq!(open.rect.mid_y(), remove.rect.mid_y());
         let seg = l.part(&Target::new("d", 0)).unwrap();
         assert_eq!(seg.cells.len(), 2);
         assert_eq!(seg.cells[0].l, seg.rect.l + s::control::SEGMENT_INSET);
         assert_eq!(seg.cells[1].r, seg.rect.r - s::control::SEGMENT_INSET);
-        // The row's text stops short of its first control.
-        let text = l.shapes.iter().find_map(|s| if let Shape::Row { row: 1, text, .. } = s { Some(*text) } else { None }).unwrap();
-        assert_eq!(text.r, open.rect.l - s::row::CONTROL_GAP);
+        let text = rows(&l)[1].1;
+        assert_eq!(text.r, open.rect.l - s::group::CONTROL_GAP);
     }
 
     #[test]
     fn the_keyboard_visits_enabled_controls_in_reading_order() {
         let l = layout(&page(), 600.0, &Fixed);
         let order: Vec<(String, usize)> = l.focus_order().into_iter().map(|t| (t.row, t.part)).collect();
-        assert_eq!(order, [("a".into(), 0), ("b".into(), 0), ("b".into(), 1), ("d".into(), 0)]);
+        assert_eq!(order, [("clip:enabled".into(), 0), ("a".into(), 0), ("b".into(), 0), ("b".into(), 1), ("d".into(), 0)]);
         let toggle = l.part(&Target::new("a", 0)).unwrap().rect;
         assert_eq!(l.hit(toggle.l + 1.0, toggle.t + 1.0).map(|p| p.target.clone()), Some(Target::new("a", 0)));
+        // Small controls take clicks just outside their edge.
+        assert_eq!(l.hit(toggle.r + 2.0, toggle.t - 2.0).map(|p| p.target.clone()), Some(Target::new("a", 0)));
         let disabled = l.part(&Target::new("c", 1)).unwrap().rect;
         assert!(l.hit(disabled.l + 1.0, disabled.t + 1.0).is_none());
+        assert_eq!(l.row_of(&Target::new("a", 0)), Some(rows(&l)[0].0));
     }
 
     #[test]
-    fn scrolling_keeps_things_in_view_and_the_thumb_tracks_it() {
-        let (content, window) = (2000.0, 600.0);
-        let max = max_scroll(content, window);
-        assert_eq!(max, 1400.0);
-        assert_eq!(max_scroll(300.0, 600.0), 0.0);
-        // Already visible: unchanged.
-        assert_eq!(scroll_to_show(0.0, Rect::new(0.0, 200.0, 10.0, 260.0), window, max), 0.0);
-        // Below the fold: just enough to bring its bottom in.
-        assert_eq!(scroll_to_show(0.0, Rect::new(0.0, 900.0, 10.0, 964.0), window, max), 964.0 - (window - s::page::GROUP_GAP));
-        // Above, under the caption: its top comes back below it.
-        assert_eq!(scroll_to_show(500.0, Rect::new(0.0, 520.0, 10.0, 584.0), window, max), 520.0 - s::caption::HEIGHT - s::page::GROUP_GAP);
-        let (top0, len) = scrollbar(0.0, content, window).unwrap();
-        let (top1, _) = scrollbar(max, content, window).unwrap();
-        assert_eq!(top0, s::caption::HEIGHT);
-        assert!((top1 + len - (window - s::scrollbar::MARGIN)).abs() < 1e-3);
-        assert!((scroll_for_thumb(top1, content, window) - max).abs() < 1e-3);
-        assert_eq!(scroll_for_thumb(top0 - 50.0, content, window), 0.0);
-        assert!(scrollbar(0.0, 300.0, window).is_none());
-    }
-
-    #[test]
-    fn nav_and_caption_geometry() {
-        let items = nav_items(3);
-        assert_eq!(items[1].t, items[0].b + s::nav::ITEM_GAP);
-        let [min, close] = caption_buttons(1000.0);
-        assert_eq!(close.r, 1000.0 - s::caption::INSET);
-        assert_eq!(min.r, close.l - s::caption::BUTTON_GAP);
-        assert_eq!(column_width(10_000.0), s::page::MAX_WIDTH);
-        assert_eq!(page_left(900.0), s::nav::WIDTH + s::page::PADDING_X);
-        let wide = page_left(2000.0);
-        assert_eq!(wide - s::nav::WIDTH, 2000.0 - wide - s::page::MAX_WIDTH);
-        let slider = Rect::new(100.0, 0.0, 100.0 + SLIDER_READING + s::control::GAP + 200.0, 32.0);
+    fn bare_rows_have_no_container_and_sliders_keep_their_knob_inside() {
+        let blocks = vec![group("", vec![Row::new("next", "").part(button("Next", Role::Primary)).bare()])];
+        let l = layout(&blocks, 600.0, &Fixed);
+        assert!(!l.shapes.iter().any(|s| matches!(s, Shape::Container { .. })));
+        let slider = Rect::new(100.0, 0.0, 100.0 + s::control::SLIDER_READING + s::control::GAP + 200.0, 24.0);
+        let (bar_l, bar_r) = slider_bar(slider);
         assert_eq!(slider_value(slider, 0.0), 0.0);
-        assert_eq!(slider_value(slider, slider.r - 100.0), 0.5);
+        assert_eq!(slider_value(slider, (bar_l + bar_r) / 2.0), 0.5);
+        assert_eq!(bar_r, slider.r - s::control::SLIDER_KNOB / 2.0);
     }
 }

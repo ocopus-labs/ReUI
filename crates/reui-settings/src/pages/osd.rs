@@ -2,7 +2,9 @@
 
 use serde_json::Value;
 
-use super::{flag, group, head, Effect};
+use super::{flag, footed, group, head, Effect, Page};
+use crate::ui::icons;
+use reui_design::tokens::color::system;
 use crate::model::files::File;
 use crate::state::State;
 use crate::ui::{Act, Block, Part, Row, Target};
@@ -12,7 +14,7 @@ const STEP_MIN: f64 = 0.01;
 const STEP_MAX: f64 = 0.10;
 
 pub fn build(state: &State) -> Vec<Block> {
-    let mut blocks = head(state, File::Osd, "Volume & brightness", "The island answers the volume and brightness keys with a level you can drag, and shows Caps Lock, battery saver and the microphone when they change.");
+    let mut blocks = head(state, File::Osd, Page::Osd, "The island answers the volume and brightness keys with a level you can drag, and shows Caps Lock, battery saver and the microphone when they change.");
     let ok = state.files.doc(File::Osd).error().is_none();
     let step = state.files.scroll_step();
     let wheel = Row::new("step", "Wheel step")
@@ -29,16 +31,17 @@ pub fn build(state: &State) -> Vec<Block> {
             wheel,
         ],
     ));
-    blocks.push(group(
+    blocks.push(footed(
         "Windows' pop-up",
-        vec![flag(state, File::Osd, "replace_windows_flyout", "Replace Windows' pop-up", "Hides Windows' own volume and brightness pop-up while ReUI runs; it's back when ReUI quits")],
+        vec![flag(state, File::Osd, "replace_windows_flyout", "Replace Windows' pop-up", "Only ReUI's level shows").icon(icons::gray(icons::MONITOR))],
+        "Windows' own volume and brightness pop-up is hidden while ReUI runs, and back when ReUI quits.",
     ));
     blocks.push(group(
         "System states",
         vec![
-            flag(state, File::Osd, "lock_keys", "Caps Lock and Num Lock", ""),
-            flag(state, File::Osd, "battery_saver", "Battery saver", ""),
-            flag(state, File::Osd, "mic_mute", "Microphone mute", ""),
+            flag(state, File::Osd, "lock_keys", "Caps Lock and Num Lock", "").icon(icons::gray(icons::KEYBOARD)),
+            flag(state, File::Osd, "battery_saver", "Battery saver", "").icon(icons::tile(icons::BATTERY, system::GREEN)),
+            flag(state, File::Osd, "mic_mute", "Microphone mute", "").icon(icons::tile(icons::MIC, system::RED)),
         ],
     ));
     blocks

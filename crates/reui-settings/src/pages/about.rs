@@ -1,20 +1,19 @@
 //! About: version and updates, What's new after an update, the idle cost measured live,
 //! help (guide, the tour, logs, reporting a bug), licenses.
 
-use super::{button, flag, group, intro, Effect, Page};
+use super::{button, flag, group, Effect, Page};
 use crate::model::agents::ago;
 use crate::model::files::File;
 use crate::state::State;
 use crate::stats::{self, PROCESSES};
 use crate::system;
-use crate::ui::{Act, Block, Part, Role, Row, Target, Tone};
+use crate::ui::{icons, Act, Block, Icon, Part, Role, Row, Target, Tone};
 use crate::updates::{self, Phase};
 
 pub const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 pub fn build(state: &State) -> Vec<Block> {
-    let mut blocks = vec![intro("About", "")];
-    blocks.push(group("", vec![Row::new("version", &format!("ReUI {VERSION}")).detail(format!("Windows build {}", state.windows_build))]));
+    let mut blocks = vec![Block::Intro { eyebrow: None, title: "ReUI".into(), body: Some(format!("Version {VERSION} · Windows build {}", state.windows_build)), icon: Some(Icon::Mark), preview: None, row: None }];
     if let Some(text) = state.whats_new.as_ref().filter(|_| state.files.doc(File::Island).bool("whats_new")) {
         blocks.push(Block::Text { label: Some("What's new".into()), title: format!("ReUI {VERSION}"), body: text.clone(), accent: true });
     }
@@ -38,17 +37,17 @@ pub fn build(state: &State) -> Vec<Block> {
     blocks.push(group("", rows));
 
     let repo = updates::repository_set();
-    let guide = Row::new("guide", "Guide").detail(if repo { "Every feature and shortcut, on GitHub" } else { "Opens once the GitHub repository is set" }).part(button("Open", Role::Secondary)).enabled(repo);
+    let guide = Row::new("guide", "Guide").detail(if repo { "Every feature and shortcut, on GitHub" } else { "Opens once the GitHub repository is set" }).part(button("Open", Role::Secondary)).enabled(repo).icon(icons::help(icons::HELP));
     blocks.push(group(
         "Help",
         vec![
             guide,
-            Row::new("tour", "Replay the tour").detail("The three welcome steps again").part(button("Replay", Role::Secondary)),
-            Row::new("logs", "Logs").detail(state.paths.local.display().to_string()).part(button("Open", Role::Secondary)),
-            Row::new("bug", "Report a bug").detail("A GitHub issue with the version and Windows build, nothing else").part(button("Report", Role::Secondary)),
+            Row::new("tour", "Replay the tour").icon(icons::welcome()).detail("The three welcome steps again").part(button("Replay", Role::Secondary)),
+            Row::new("logs", "Logs").icon(icons::gray(icons::PAGE)).detail(state.paths.local.display().to_string()).part(button("Open", Role::Secondary)),
+            Row::new("bug", "Report a bug").icon(icons::danger(icons::BUG)).detail("A GitHub issue with the version and Windows build, nothing else").part(button("Report", Role::Secondary)),
         ],
     ));
-    blocks.push(group("", vec![Row::new("licenses", "Licenses").detail("Built with open-source Rust crates under the MIT and Apache-2.0 licenses")]));
+    blocks.push(group("", vec![Row::new("licenses", "Licenses").icon(icons::gray(icons::DOCUMENT)).detail("Built with open-source Rust crates under the MIT and Apache-2.0 licenses")]));
     blocks
 }
 

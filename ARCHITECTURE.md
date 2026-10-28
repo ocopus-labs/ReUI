@@ -112,12 +112,19 @@ main.rs            single instance, --page, --welcome, --check-updates (no windo
                    REUI_CONFIG_DIR (test sandbox)
 window.rs          the window: own caption (no system title bar), hit-testing, DWM corners,
                    per-monitor DPI v2
-app/               state machine: page, scroll, hover, focus, menus, drags, animations
+gpu.rs             D3D11 device, D2D device context, flip swap chain + frame-latency waitable
+perf.rs            --perf frame timings      shots.rs   --shots <dir> page screenshots
+app/               state machine: page, scroll, hover, focus, menus, drags
   input.rs         pointer and keyboard (Tab order, arrows, Space/Enter, Esc)
+  motion.rs        springs and eases stepped once per presented frame
+  search.rs        sidebar search over every row's title and line
+  shot.rs          offscreen rendering for --shots
 ui/                pages as data: blocks, rows, parts (controls)
   layout.rs        where everything goes (pure, tested): rows, controls, scrolling, nav
-render/            drawing only: Renderer/Painter primitives, fonts, frame (nav, caption,
-                   scrollbar), page, controls, menu
+  chrome.rs        sidebar and caption geometry      icons.rs   page icons and tile colours
+render/            drawing only: Renderer/Painter primitives, fonts, text (layout cache),
+                   shapes, icons, sidebar, frame (caption, scrollbar), page, controls, menu
+  preview/         the hero cards' island previews (music, clipboard, levels, devices, agents)
 pages/             one file per page: build its rows from State, handle its controls;
                    welcome.rs is the three-step welcome (first run, Replay the tour)
 model/             settings files (read, change a key, atomic write, keep unknown keys,
@@ -128,6 +135,7 @@ updates/           GitHub releases: release.rs (JSON, semver, checksums, notes; 
 state.rs           what the pages show and change      hub.rs     pipe client (reload, clear)
 keys.rs            hotkey recorder (low-level hook)     system.rs  startup entry, folders, apps
 stats.rs           idle cost: CPU and private memory of ReUI's processes
+../perf/           harness.ps1 / live.ps1: scripted scroll/hover runs against --perf
 ```
 
 ## Data on disk

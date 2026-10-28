@@ -119,6 +119,7 @@ In the hidden modes, pushing the pointer against the top edge above the island r
 | `motion.crossfade` | When compact content fades out and expanded content fades and scales in, as fractions of the morph |
 | `motion.bars` | `fps` the island moves live level bars at |
 | `settings` | The Settings window: window and caption, nav, page, row wells (outer and inner radii, 2 gap), controls (capsules, toggle, key caps, focus ring), menu, scrollbar, its colours, motion and type |
+| `prefs` | The Settings window in the macOS System Settings style: sidebar, page tiles and their colours, hero card and preview wash, grouped cards and hairlines, macOS controls, type and motion |
 
 Format notes: dimensions are DIPs and durations are ms (plain numbers, or `{ "value", "unit" }`); colours are `"#RRGGBB"` or `{ "hex", "alpha" }`; `{group.token}` aliases resolve at build time; `$type` is inherited from the group. `spring` is a ReUI extension type: `{ "dampingRatio", "period" }`.
 
@@ -173,7 +174,9 @@ Text buttons are 44 high capsules; inline glyph buttons are 40 circles; transpor
 
 ## Settings window
 
-`reui-settings` uses the island's material and type on a normal window (tokens under `settings`). Black edge to edge with our own caption (minimise and close are circles, filled only on hover); a quiet text nav whose selected page sits on a soft capsule like the clipboard tabs. Each page reads hero (28 title) → one secondary paragraph → groups: a small eyebrow, then rows in one well whose outer corners are round and inner ones tight, separated by 2-DIP gaps of black instead of lines. A row is a title, one quiet line, and its controls at the right: toggles (accent track, white knob concentric with the end), segmented capsules, sliders like the volume row, capsule buttons by role (a destructive one asks a second time), key caps for shortcuts, dropdown capsules with an opaque menu, a text field with the steady caret. Keyboard focus is an accent ring just outside the control, following its radius. No filler: every line is a fact about the setting.
+`reui-settings` follows macOS System Settings (dark), with the island's type (tokens under `prefs`; most of the older `settings` group is no longer read). A solid sidebar (#252527) holds a search field, the ReUI header row (icon, name, version), then the pages, each with a coloured icon tile (General grey, Now Playing pink, Clipboard blue, Volume orange, Devices green, Agents purple, Privacy indigo); the selected page is an accent-filled row. The content has back/forward and the page title in its own caption row, then a hero card: a live island preview drawn from real components on a soft wash of the page colour, under it the page icon, title, one paragraph and the module's master toggle. Groups are a small eyebrow over one rounded card whose rows are split by inset hairlines. A row is a title, one quiet line, and its controls on the right: macOS-style toggles, segmented controls, steppers/popups, key caps, capsule buttons (a destructive one asks a second time). Keyboard focus is an accent ring following the control's radius. No filler: every line is a fact about the setting.
+
+Rendering: D3D11 + a Direct2D device context on a flip-model swap chain paced by its frame-latency waitable object, so motion runs at display rate (≈200 fps on a 200 Hz panel, ~0.3 ms CPU per frame) and the window does nothing at rest. Text layouts and page bitmaps are cached; `--perf` prints frame timings, `perf/harness.ps1` drives it.
 
 ## Motion
 

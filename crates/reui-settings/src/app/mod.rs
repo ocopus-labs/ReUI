@@ -1,27 +1,33 @@
-//! The window's state machine: which page, scroll, hover, focus, the open menu, drags and
-//! the short animations; it rebuilds the page from the [`State`] after every change and
-//! draws on demand. Input handling is in [`input`].
+//! The window's state machine: which page, the sidebar's search, history (back, forward),
+//! hover, focus, the open menu, drags; it rebuilds the page from the [`State`] when
+//! content changes (never for hover or focus) and draws on demand.
+//!
+//! Frames: a change marks the window dirty; the message loop draws when the swap chain can
+//! take a frame ([`App::needs_frame`], [`App::frame`]). While something moves
+//! ([`motion`]), that's once per display refresh; at rest, nothing is drawn and no timer
+//! runs. Input handling is in [`input`].
 
 mod input;
+mod motion;
+mod search;
+mod shot;
 
-use std::collections::HashMap;
 use std::time::Instant;
 
-use reui_design::tokens::settings as s;
-use windows::Win32::Foundation::HWND;
-use windows::Win32::Graphics::Gdi::InvalidateRect;
-use windows::Win32::Foundation::{LPARAM, WPARAM};
+use reui_design::tokens::{prefs, settings as s};
+use windows::Win32::Foundation::{HANDLE, HWND, LPARAM, WPARAM};
 use windows::Win32::UI::WindowsAndMessaging::{KillTimer, PostMessageW, SetTimer, WM_CLOSE};
 
+use self::motion::Motion;
 use crate::keys;
 use crate::pages::{self, Effect, Page};
+use crate::render::frame::NavItem;
 use crate::render::{self, Renderer, View};
 use crate::state::State;
 use crate::ui::layout::{self, Layout, Measure};
-use crate::ui::{Act, Block, Focus, Hover, Menu, Part, Role, Target};
+use crate::ui::{chrome, Act, Block, Focus, Hover, Menu, Part, Role, Target};
 use crate::updates::{self, Phase};
 
-pub const TIMER_ANIM: usize = 1;
 pub const TIMER_STATS: usize = 2;
 pub const TIMER_ARM: usize = 3;
 pub const TIMER_CLOCK: usize = 4;
@@ -45,21 +51,29 @@ pub struct App {
     dpi: u32,
     /// Client size in pixels.
     size: (u32, u32),
-    scroll: f32,
-    scroll_target: f32,
+    motion: Motion,
+    /// Something changed that the screen doesn't show yet.
+    dirty: bool,
+    /// The page drawn last frame is still right (only its scroll may have changed).
+    page_fresh: bool,
+    /// The pointer in window DIPs, while it's over the window.
+    pointer: Option<(f32, f32)>,
     hover: Hover,
     focus: Option<Focus>,
     /// The keyboard is in use: the focus ring shows.
     focus_visible: bool,
     pressed: Option<Target>,
-    /// A caption button held down.
-    pressed_caption: Option<usize>,
+    /// A caption or toolbar button held down.
+    pressed_chrome: Option<Hover>,
     menu: Option<Menu>,
     drag: Option<Drag>,
-    /// Toggles sliding: row id → (from, to, start).
-    knobs: HashMap<String, (f32, f32, Instant)>,
-    last_frame: Instant,
-    reduced_motion: bool,
+    /// The sidebar's search, and the pages it leaves in the nav.
+    query: String,
+    nav: Vec<Page>,
+    /// Pages visited, and where in them we are (back / forward).
+    history: Vec<Page>,
+    history_at: usize,
+    active: bool,
     /// The welcome is open and not finished yet: closing the window finishes it (P-1).
     welcoming: bool,
     /// The welcome was replayed from About: Done goes back to Settings, not away.
@@ -78,18 +92,22 @@ impl App {
             renderer,
             dpi,
             size: (0, 0),
-            scroll: 0.0,
-            scroll_target: 0.0,
+            motion: Motion::new(reduced_motion),
+            dirty: true,
+            page_fresh: false,
+            pointer: None,
             hover: Hover::None,
             focus: None,
             focus_visible: false,
             pressed: None,
-            pressed_caption: None,
+            pressed_chrome: None,
             menu: None,
             drag: None,
-            knobs: HashMap::new(),
-            last_frame: Instant::now(),
-            reduced_motion,
+            query: String::new(),
+            nav: page.nav().to_vec(),
+            history: vec![page],
+            history_at: 0,
+            active: true,
             welcoming: false,
             replaying: false,
         };
@@ -107,40 +125,76 @@ impl App {
     }
 
     pub fn resize(&mut self, width: u32, height: u32) {
+        if self.size == (width, height) {
+            return;
+        }
         self.size = (width, height);
         self.renderer.resize(width, height);
         self.menu = None;
-        self.rebuild();
+        self.relayout();
     }
 
     pub fn set_dpi(&mut self, dpi: u32) {
         self.dpi = dpi;
         self.renderer.set_dpi(dpi as f32);
-        self.rebuild();
+        self.relayout();
     }
 
-    pub fn invalidate(&self) {
-        unsafe { _ = InvalidateRect(Some(self.hwnd), None, false) };
+    /// Marks the window for drawing on the next frame.
+    pub fn invalidate(&mut self) {
+        self.dirty = true;
+        self.page_fresh = false;
     }
 
-    /// Builds the page again from the state and lays it out.
+    /// Only the scroll changed: the next frame moves the page it drew last.
+    fn scrolled(&mut self) {
+        self.dirty = true;
+    }
+
+    /// Builds the page again from the state, then lays it out.
     pub fn rebuild(&mut self) {
         self.blocks = pages::build(self.page, &self.state);
+        self.relayout();
+    }
+
+    /// Lays the page out again (content or size changed; hover and focus never do this).
+    fn relayout(&mut self) {
+        crate::perf::layout();
         let (w, h) = self.dips();
-        self.layout = layout::layout(&self.blocks, layout::column_width(w), &self.renderer);
-        let max = layout::max_scroll(self.layout.height, h);
-        self.scroll = self.scroll.clamp(0.0, max);
-        self.scroll_target = self.scroll_target.clamp(0.0, max);
+        self.layout = layout::layout(&self.blocks, chrome::column_width(w), &self.renderer);
+        let max = chrome::max_scroll(self.layout.height, h);
+        self.motion.scroll = self.motion.scroll.clamp(0.0, max);
+        self.motion.scroll_target = self.motion.scroll_target.clamp(0.0, max);
         // A control that went away (an app removed) loses the focus.
         if let Some(Focus::Part(t)) = &self.focus {
             if self.layout.part(t).is_none_or(|p| !p.enabled) {
                 self.focus = None;
             }
         }
+        self.refresh_hover();
         self.invalidate();
     }
 
     pub fn set_page(&mut self, page: Page) {
+        self.go(page);
+        if self.history.get(self.history_at) != Some(&page) {
+            self.history.truncate(self.history_at + 1);
+            self.history.push(page);
+            self.history_at = self.history.len() - 1;
+        }
+    }
+
+    /// Back (-1) or forward (+1) through the pages visited.
+    fn travel(&mut self, step: isize) {
+        let at = self.history_at as isize + step;
+        if at < 0 || at as usize >= self.history.len() {
+            return;
+        }
+        self.history_at = at as usize;
+        self.go(self.history[self.history_at]);
+    }
+
+    fn go(&mut self, page: Page) {
         let timer = |id, ms: Option<u32>| unsafe {
             match ms {
                 Some(ms) => _ = SetTimer(Some(self.hwnd), id, ms, None),
@@ -152,20 +206,22 @@ impl App {
             self.replaying = !self.blocks.is_empty() && !self.page.is_welcome();
             pages::start_welcome(&mut self.state);
         }
+        let changed = page != self.page || self.blocks.is_empty();
+        if page.is_welcome() != self.page.is_welcome() || self.nav.is_empty() {
+            self.query.clear();
+            self.nav = page.nav().to_vec();
+        }
         self.page = page;
-        self.scroll = 0.0;
-        self.scroll_target = 0.0;
+        self.motion.jump(0.0);
         self.menu = None;
         self.pressed = None;
         self.state.armed = None;
-        if !matches!(self.focus, Some(Focus::Nav)) {
+        if !matches!(self.focus, Some(Focus::Nav | Focus::Search)) {
             self.focus = None;
         }
         if page == Page::About {
             self.state.stats.reset();
             self.state.stats.sample();
-        }
-        if page == Page::About {
             self.state.whats_new_seen();
         }
         if page == Page::Privacy {
@@ -174,11 +230,34 @@ impl App {
         timer(TIMER_STATS, (page == Page::About).then_some(s::motion::STATS));
         // Times that move on their own: the pause's, the agents' last events.
         timer(TIMER_CLOCK, matches!(page, Page::General | Page::Agents).then_some(CLOCK_MS));
+        if changed {
+            self.motion.enter_page();
+            self.motion.wake();
+        }
         self.rebuild();
+        self.reveal_match();
+    }
+
+    /// With a search typed, the first row it matches on this page scrolls into view.
+    fn reveal_match(&mut self) {
+        if let Some(rect) = search::first_match(&self.blocks, &self.layout, &self.query) {
+            let h = self.dips().1;
+            let target = chrome::scroll_to_show(self.motion.scroll_target, rect, h, chrome::max_scroll(self.layout.height, h));
+            self.motion.jump(target);
+        }
+    }
+
+    /// The search changed: the nav keeps the pages that match.
+    fn set_query(&mut self, query: String) {
+        self.query = query;
+        self.nav = search::filter(self.page.nav(), &self.query, &self.state);
+        self.hover = Hover::None;
+        self.invalidate();
     }
 
     /// The window came to the front: files may have been edited meanwhile (P-4, P-7).
     pub fn activated(&mut self, active: bool) {
+        self.active = active;
         if active {
             self.state.refresh();
             self.rebuild();
@@ -189,40 +268,88 @@ impl App {
         }
     }
 
-    pub fn paint(&mut self) {
+    /// Signalled when the swap chain can take another frame.
+    pub fn waitable(&self) -> Option<HANDLE> {
+        self.renderer.waitable()
+    }
+
+    /// Whether the next display frame should be drawn.
+    pub fn needs_frame(&self) -> bool {
+        self.dirty || self.motion.moving(&self.hover)
+    }
+
+    /// One frame: motion moves on, then the window is drawn and presented.
+    pub fn frame(&mut self) {
+        let started = Instant::now();
+        if crate::perf::enabled() {
+            crate::perf::reason(if self.dirty { "dirty" } else { self.motion.why(&self.hover) });
+        }
+        // After a rest, time starts now rather than at the last frame drawn.
+        if self.dirty && !self.motion.moving(&self.hover) {
+            self.motion.wake();
+        }
+        let scroll = self.motion.scroll;
+        if self.motion.restless(&self.hover) {
+            self.page_fresh = false;
+        }
+        self.motion.step(&self.hover);
+        if self.motion.scroll != scroll {
+            self.refresh_hover();
+        }
+        self.dirty = false;
+        let (hwnd, size) = (self.hwnd, self.size);
+        let drawn = self.with_view(|renderer, view| renderer.draw(hwnd, size.0, size.1, prefs::color::CONTENT, |p| render::frame::draw(p, view)));
+        // A failed frame (the GPU went away) is drawn again on the next change rather than
+        // straight away, so a device that can't come back doesn't spin the loop.
+        self.page_fresh = drawn.is_ok();
+        if let Err(e) = drawn {
+            eprintln!("settings: draw failed: {e}");
+        }
+        crate::perf::frame(started.elapsed().as_secs_f64() * 1000.0);
+    }
+
+    fn with_view<R>(&mut self, f: impl FnOnce(&mut Renderer, &View) -> R) -> R {
         let (width, height) = self.dips();
-        let now = Instant::now();
-        let knobs: HashMap<String, f32> = self.knobs.iter().map(|(id, &(from, to, start))| (id.clone(), knob_at(from, to, start, now))).collect();
-        let titles: Vec<&'static str> = self.page.nav().iter().map(|p| p.title()).collect();
+        let knobs = self.motion.knobs();
+        let nav: Vec<NavItem> = self.nav.iter().map(|&page| NavItem { title: page.title(), icon: page.icon(), section: page.section() }).collect();
         let typing = match (&self.focus, &self.menu) {
-            (Some(Focus::Part(t)), None) if matches!(self.part(t), Some(Part::Field { .. })) => Some(t.clone()),
+            (Some(Focus::Search), None) => Some(Focus::Search),
+            (Some(Focus::Part(t)), None) if matches!(self.part(t), Some(Part::Field { .. })) => Some(Focus::Part(t.clone())),
             _ => None,
         };
+        let version = format!("Version {}", pages::VERSION);
+        let motion = &self.motion;
+        let lit = |key: &Hover| motion.lit(key);
         let view = View {
             width,
             height,
-            nav: &titles,
-            page: self.page.index(),
+            welcome: self.page.is_welcome(),
+            nav: &nav,
+            selected: self.nav.iter().position(|p| *p == self.page),
+            query: &self.query,
+            title: self.page.title(),
+            can_back: self.history_at > 0,
+            can_forward: self.history_at + 1 < self.history.len(),
+            active: self.active,
+            version: &version,
             blocks: &self.blocks,
             layout: &self.layout,
-            scroll: self.scroll,
-            hover: &self.hover,
+            scroll: self.motion.scroll,
+            lit: &lit,
             focus: self.focus.as_ref().filter(|_| self.focus_visible),
+            typing: typing.as_ref(),
             pressed: self.pressed.as_ref(),
             knobs: &knobs,
             menu: self.menu.as_ref(),
-            typing: typing.as_ref(),
             scrollbar_active: matches!(self.drag, Some(Drag::Scrollbar(_))),
+            enter: self.motion.enter(),
+            fresh: self.page_fresh,
         };
-        let (hwnd, size) = (self.hwnd, self.size);
-        if let Err(e) = self.renderer.draw(hwnd, size.0, size.1, |p| render::frame::draw(p, &view)) {
-            eprintln!("settings: draw failed: {e}");
-        }
+        f(&mut self.renderer, &view)
     }
 
     pub fn on_timer(&mut self, id: usize) {
         match id {
-            TIMER_ANIM => self.tick(),
             TIMER_STATS => {
                 self.state.stats.sample();
                 self.rebuild();
@@ -240,42 +367,12 @@ impl App {
         }
     }
 
-    /// One animation frame: knobs slide, the scroll eases to its target.
-    fn tick(&mut self) {
-        let now = Instant::now();
-        let dt = now.duration_since(self.last_frame).as_secs_f32() * 1000.0;
-        self.last_frame = now;
-        self.knobs.retain(|_, &mut (_, _, start)| now.duration_since(start).as_millis() < u128::from(s::motion::TOGGLE));
-        let gap = self.scroll_target - self.scroll;
-        if gap.abs() < 0.5 {
-            self.scroll = self.scroll_target;
-        } else {
-            self.scroll += gap * (1.0 - (-dt / s::motion::SCROLL as f32).exp());
-        }
-        if self.knobs.is_empty() && self.scroll == self.scroll_target {
-            unsafe { _ = KillTimer(Some(self.hwnd), TIMER_ANIM) };
-        }
-        self.refresh_hover();
-        self.invalidate();
-    }
-
-    fn animate(&mut self) {
-        if self.reduced_motion {
-            self.knobs.clear();
-            self.scroll = self.scroll_target;
-            self.invalidate();
-            return;
-        }
-        self.last_frame = Instant::now();
-        unsafe { _ = SetTimer(Some(self.hwnd), TIMER_ANIM, 1000 / s::motion::FPS as u32, None) };
-    }
-
     fn scroll_to(&mut self, target: f32) {
-        let max = layout::max_scroll(self.layout.height, self.dips().1);
-        self.scroll_target = target.clamp(0.0, max);
-        if self.scroll_target != self.scroll {
-            self.animate();
+        let max = chrome::max_scroll(self.layout.height, self.dips().1);
+        if !self.motion.moving(&self.hover) {
+            self.motion.wake();
         }
+        self.motion.scroll_target = target.clamp(0.0, max);
     }
 
     fn part(&self, target: &Target) -> Option<&Part> {
@@ -301,9 +398,10 @@ impl App {
             return;
         }
         if let (Part::Toggle { on }, Act::Press) = (&part, &act) {
-            let (from, to) = if *on { (1.0, 0.0) } else { (0.0, 1.0) };
-            self.knobs.insert(target.row.clone(), (from, to, Instant::now()));
-            self.animate();
+            if !self.motion.moving(&self.hover) {
+                self.motion.wake();
+            }
+            self.motion.slide(&target.row, *on);
         }
         match pages::act(self.page, &mut self.state, target, act) {
             Effect::None => {}
@@ -369,13 +467,13 @@ impl App {
         let Some((items, checked)) = pages::menu(self.page, &mut self.state, target) else { return };
         let Some(placed) = self.layout.part(target) else { return };
         let anchor = self.to_window(placed.rect);
-        let widest = items.iter().map(|i| self.renderer.width(i, layout::Font::Nav)).fold(0.0, f32::max);
+        let widest = items.iter().map(|i| self.renderer.width(i, layout::Font::Control)).fold(0.0, f32::max);
         let rect = render::menu::place(anchor, items.len().max(1), widest, self.dips());
         let mut menu = Menu { target: target.clone(), items, checked, rect, hot: checked, scroll: 0.0 };
         if let Some(i) = checked {
             // The checked entry in view.
-            let visible = rect.h() - 2.0 * s::menu::PADDING;
-            menu.scroll = (i as f32 * s::menu::ITEM_HEIGHT - visible / 2.0).clamp(0.0, render::menu::max_scroll(&menu));
+            let visible = rect.h() - 2.0 * prefs::menu::PADDING;
+            menu.scroll = (i as f32 * prefs::menu::ITEM_HEIGHT - visible / 2.0).clamp(0.0, render::menu::max_scroll(&menu));
         }
         self.menu = Some(menu);
         self.invalidate();
@@ -410,28 +508,6 @@ impl App {
 
     /// Page rect → window rect.
     fn to_window(&self, r: layout::Rect) -> layout::Rect {
-        r.offset(layout::page_left(self.dips().0), -self.scroll)
-    }
-}
-
-/// A knob's position `from` → `to`, eased out.
-fn knob_at(from: f32, to: f32, start: Instant, now: Instant) -> f32 {
-    let t = (now.duration_since(start).as_secs_f32() * 1000.0 / s::motion::TOGGLE as f32).clamp(0.0, 1.0);
-    let eased = 1.0 - (1.0 - t).powi(3);
-    from + (to - from) * eased
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use std::time::Duration;
-
-    #[test]
-    fn knobs_ease_out_to_their_end() {
-        let start = Instant::now();
-        assert_eq!(knob_at(0.0, 1.0, start, start), 0.0);
-        let mid = knob_at(0.0, 1.0, start, start + Duration::from_millis(u64::from(s::motion::TOGGLE) / 2));
-        assert!(mid > 0.5 && mid < 1.0, "past halfway at half time: {mid}");
-        assert_eq!(knob_at(1.0, 0.0, start, start + Duration::from_secs(1)), 0.0);
+        r.offset(chrome::page_left(self.dips().0), -self.motion.scroll)
     }
 }

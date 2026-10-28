@@ -1,13 +1,13 @@
 //! Coding agents: per agent, its status (connected, when ReUI last heard from it, or that
 //! it isn't on this PC), Connect / Disconnect with the file that changes, and a test event.
 
-use super::{button, group, intro, Effect};
+use super::{button, group, intro, Effect, Page};
 use crate::model::agents::{self, Agent, Status};
 use crate::state::State;
-use crate::ui::{Act, Block, Role, Row, Target, Tone};
+use crate::ui::{icons, Act, Block, Icon, Role, Row, Target, Tone};
 
 pub fn build(state: &State) -> Vec<Block> {
-    let mut blocks = vec![intro("Coding agents", "Claude Code, Codex and OpenCode sessions in the island: what they're working on, when they finish, and permission requests you can answer there.")];
+    let mut blocks = vec![intro(Page::Agents, "Claude Code, Codex and OpenCode sessions in the island: what they're working on, when they finish, and permission requests you can answer there.")];
     let bridge = state.paths.installed_bridge().exists() || state.paths.exe_dir.join("reui-bridge.exe").exists();
     let now = reui_protocol::unix_ms();
     let rows = Agent::ALL
@@ -15,7 +15,7 @@ pub fn build(state: &State) -> Vec<Block> {
         .enumerate()
         .map(|(i, &agent)| {
             let file = state.paths.short(&agent.file(&state.paths));
-            let row = Row::new(&format!("agent:{}", agent.arg()), agent.name());
+            let row = Row::new(&format!("agent:{}", agent.arg()), agent.name()).icon(if agent == Agent::Claude { Icon::Claude } else { icons::gray(icons::CODE) });
             let installed = state.agent_installed[i];
             let line = agents::status_line(state.agents[i], installed, state.agent_last[i], now);
             let row = match state.agents[i] {

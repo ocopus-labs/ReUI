@@ -1,39 +1,86 @@
-//! DirectWrite text formats, one per typographic role, from the tokens; and measuring.
+//! DirectWrite text formats, one per typographic role (from the tokens), and icon formats
+//! made once per size.
 
-use reui_design::tokens::{font, settings};
+use std::cell::RefCell;
+use std::collections::HashMap;
+
+use reui_design::tokens::{font, prefs::typography as t, typography as island};
 use reui_design::TextStyle;
 use windows::core::{w, Result, HSTRING};
 use windows::Win32::Graphics::DirectWrite::*;
 
-use super::Renderer;
-use crate::ui::layout::{Font, Measure};
+use crate::ui::layout::{Font, IslandFont};
 
 pub struct Fonts {
-    formats: Vec<(Font, TextStyle, IDWriteTextFormat)>,
-    icons: Vec<(f32, IDWriteTextFormat)>,
+    formats: HashMap<Font, IDWriteTextFormat>,
+    icons: RefCell<HashMap<u32, IDWriteTextFormat>>,
+    dwrite: IDWriteFactory,
 }
 
-const ROLES: [Font; 10] = [Font::Title, Font::Intro, Font::Label, Font::RowTitle, Font::RowDetail, Font::Nav, Font::Control, Font::Field, Font::Mono, Font::Figure];
+const ROLES: [Font; 14] = [
+    Font::Toolbar,
+    Font::Hero,
+    Font::HeroBody,
+    Font::Label,
+    Font::RowTitle,
+    Font::RowDetail,
+    Font::Footnote,
+    Font::Nav,
+    Font::Control,
+    Font::Field,
+    Font::Mono,
+    Font::Figure,
+    Font::Account,
+    Font::AccountDetail,
+];
 
-fn style(font: Font) -> TextStyle {
-    use settings::typography as t;
+const ISLAND: [IslandFont; 10] = [
+    IslandFont::Eyebrow,
+    IslandFont::Headline,
+    IslandFont::Detail,
+    IslandFont::Compact,
+    IslandFont::Caption,
+    IslandFont::Button,
+    IslandFont::Code,
+    IslandFont::Tab,
+    IslandFont::CardText,
+    IslandFont::CardLabel,
+];
+
+pub fn style(font: Font) -> TextStyle {
     match font {
-        Font::Title => t::TITLE,
-        Font::Intro => t::INTRO,
+        Font::Toolbar => t::TOOLBAR,
+        Font::Hero => t::HERO,
+        Font::HeroBody => t::HERO_BODY,
         Font::Label => t::LABEL,
         Font::RowTitle => t::ROW_TITLE,
         Font::RowDetail => t::ROW_DETAIL,
+        Font::Footnote => t::FOOTNOTE,
         Font::Nav => t::NAV,
         Font::Control => t::CONTROL,
         Font::Field => t::FIELD,
         Font::Mono => t::MONO,
         Font::Figure => t::FIGURE,
+        Font::Account => t::ACCOUNT,
+        Font::AccountDetail => t::ACCOUNT_DETAIL,
+        Font::Island(f) => match f {
+            IslandFont::Eyebrow => island::EYEBROW,
+            IslandFont::Headline => island::HEADLINE,
+            IslandFont::Detail => island::DETAIL,
+            IslandFont::Compact => island::COMPACT,
+            IslandFont::Caption => island::CAPTION,
+            IslandFont::Button => island::BUTTON,
+            IslandFont::Code => island::CODE,
+            IslandFont::Tab => island::TAB,
+            IslandFont::CardText => island::CARD_TEXT,
+            IslandFont::CardLabel => island::CARD_LABEL,
+        },
     }
 }
 
 fn format(dwrite: &IDWriteFactory, style: TextStyle) -> Result<IDWriteTextFormat> {
     unsafe {
-        let format = dwrite.CreateTextFormat(&HSTRING::from(style.family), None, DWRITE_FONT_WEIGHT(style.weight as i32), DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, style.size, w!("en-us"))?;
+        let format = dwrite.CreateTextFormat(&HSTRING::from(style.family), None, DWRITE_FONT_WEIGHT(i32::from(style.weight)), DWRITE_FONT_STYLE_NORMAL, DWRITE_FONT_STRETCH_NORMAL, style.size, w!("en-us"))?;
         format.SetWordWrapping(DWRITE_WORD_WRAPPING_NO_WRAP)?;
         let sign = dwrite.CreateEllipsisTrimmingSign(&format)?;
         let trimming = DWRITE_TRIMMING { granularity: DWRITE_TRIMMING_GRANULARITY_CHARACTER, delimiter: 0, delimiterCount: 0 };
@@ -44,59 +91,25 @@ fn format(dwrite: &IDWriteFactory, style: TextStyle) -> Result<IDWriteTextFormat
 
 impl Fonts {
     pub fn new(dwrite: &IDWriteFactory) -> Result<Self> {
-        let mut formats = Vec::new();
-        for role in ROLES {
-            let s = style(role);
-            formats.push((role, s, format(dwrite, s)?));
+        let mut formats = HashMap::new();
+        for role in ROLES.into_iter().chain(ISLAND.map(Font::Island)) {
+            formats.insert(role, format(dwrite, style(role))?);
         }
-        let mut icons = Vec::new();
-        for size in [settings::icon::CAPTION, settings::icon::CONTROL, 16.0] {
-            icons.push((size, format(dwrite, TextStyle { family: font::ICONS, weight: 400, size, line_height: size })?));
-        }
-        Ok(Self { formats, icons })
+        Ok(Self { formats, icons: RefCell::default(), dwrite: dwrite.clone() })
     }
 
     pub fn format(&self, font: Font) -> &IDWriteTextFormat {
-        &self.formats.iter().find(|(f, ..)| *f == font).expect("every role has a format").2
+        &self.formats[&font]
     }
 
-    pub fn style(&self, font: Font) -> TextStyle {
-        style(font)
-    }
-
-    /// The icon format closest to `size`.
-    pub fn icon(&self, size: f32) -> &IDWriteTextFormat {
-        &self.icons.iter().min_by(|a, b| (a.0 - size).abs().total_cmp(&(b.0 - size).abs())).expect("icon formats").1
-    }
-}
-
-pub fn width(dwrite: &IDWriteFactory, fonts: &Fonts, tabular: &IDWriteTypography, text: &str, font: Font) -> f32 {
-    let wide: Vec<u16> = text.encode_utf16().collect();
-    unsafe {
-        let Ok(layout) = dwrite.CreateTextLayout(&wide, fonts.format(font), 10_000.0, 100.0) else { return 0.0 };
-        // Numbers may be drawn tabular, which is wider: measure them so.
-        _ = layout.SetTypography(tabular, DWRITE_TEXT_RANGE { startPosition: 0, length: wide.len() as u32 });
-        let mut metrics = DWRITE_TEXT_METRICS::default();
-        _ = layout.GetMetrics(&mut metrics);
-        metrics.widthIncludingTrailingWhitespace.ceil()
-    }
-}
-
-impl Measure for Renderer {
-    fn width(&self, text: &str, font: Font) -> f32 {
-        width(self.dwrite(), &self.fonts, self.tabular(), text, font)
-    }
-
-    fn height(&self, text: &str, font: Font, max_width: f32) -> f32 {
-        let wide: Vec<u16> = text.encode_utf16().collect();
-        let line = style(font).line_height;
-        unsafe {
-            let Ok(layout) = self.dwrite().CreateTextLayout(&wide, self.fonts.format(font), max_width.max(1.0), 10_000.0) else { return line };
-            _ = layout.SetWordWrapping(DWRITE_WORD_WRAPPING_WRAP);
-            _ = layout.SetLineSpacing(DWRITE_LINE_SPACING_METHOD_UNIFORM, line, line * 0.8);
-            let mut metrics = DWRITE_TEXT_METRICS::default();
-            _ = layout.GetMetrics(&mut metrics);
-            (metrics.lineCount.max(1) as f32) * line
+    /// Segoe Fluent Icons at `size`.
+    pub fn icon(&self, size: f32) -> Result<IDWriteTextFormat> {
+        let key = size.to_bits();
+        if let Some(format) = self.icons.borrow().get(&key) {
+            return Ok(format.clone());
         }
+        let made = format(&self.dwrite, TextStyle { family: font::ICONS, weight: 400, size, line_height: size })?;
+        self.icons.borrow_mut().insert(key, made.clone());
+        Ok(made)
     }
 }

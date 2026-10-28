@@ -1,15 +1,17 @@
 //! Pointer and keyboard. Everything works from the keyboard: Tab and Shift+Tab walk the
-//! nav and every control, arrows switch pages in the nav, move segments and sliders and
-//! walk menus, Space and Enter press, Esc backs out. Coordinates are window DIPs.
+//! search field, the nav and every control; Ctrl+F searches; arrows switch pages in the
+//! nav, move segments and sliders and walk menus; Space and Enter press; Alt+Left / Right
+//! (and the mouse's back / forward buttons) go back and forward; Esc backs out.
+//! Coordinates are window DIPs.
 
-use reui_design::tokens::settings as s;
-use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, SC_MINIMIZE, WM_CLOSE, WM_SYSCOMMAND};
+use reui_design::tokens::prefs as s;
 use windows::Win32::Foundation::{LPARAM, WPARAM};
+use windows::Win32::UI::WindowsAndMessaging::{PostMessageW, SC_MINIMIZE, WM_CLOSE, WM_SYSCOMMAND};
 
 use super::{App, Drag};
 use crate::render::menu;
 use crate::ui::layout::{self, Rect};
-use crate::ui::{Act, Focus, Hover, Part, Target};
+use crate::ui::{chrome, Act, Focus, Hover, Part};
 
 const VK_BACK: u32 = 0x08;
 const VK_TAB: u32 = 0x09;
@@ -24,14 +26,18 @@ const VK_LEFT: u32 = 0x25;
 const VK_UP: u32 = 0x26;
 const VK_RIGHT: u32 = 0x27;
 const VK_DOWN: u32 = 0x28;
+const VK_F: u32 = 0x46;
+const VK_BROWSER_BACK: u32 = 0xA6;
+const VK_BROWSER_FORWARD: u32 = 0xA7;
 
 /// Keyboard steps on a slider.
 const SLIDER_STEP: f32 = 0.1;
 
 impl App {
-    /// Whether (`x`, `y`) drags the window: the caption band, except its buttons.
+    /// Whether (`x`, `y`) drags the window: the band across the top, except its buttons and
+    /// the search field.
     pub fn is_caption(&self, x: f32, y: f32) -> bool {
-        y < s::caption::HEIGHT && self.menu.is_none() && !layout::caption_buttons(self.dips().0).iter().any(|r| r.contains(x, y))
+        y < s::toolbar::HEIGHT && self.menu.is_none() && self.hit(x, y) == Hover::None
     }
 
     /// What's under the pointer.
@@ -40,42 +46,57 @@ impl App {
         if let Some(menu) = &self.menu {
             return menu::item_at(menu, x, y).map_or(Hover::None, Hover::Menu);
         }
-        if let Some(i) = layout::caption_buttons(w).iter().position(|r| r.contains(x, y)) {
+        if let Some(i) = chrome::caption_buttons(w).iter().position(|r| r.contains(x, y)) {
             return Hover::Caption(i);
         }
-        if let Some(i) = layout::nav_items(self.page.nav().len()).iter().position(|r| r.contains(x, y)) {
+        if let Some(i) = chrome::history_buttons().iter().position(|r| r.contains(x, y)) {
+            return Hover::History(i);
+        }
+        if !self.page.is_welcome() && chrome::search().contains(x, y) {
+            return Hover::Search;
+        }
+        if !self.page.is_welcome() && chrome::account().contains(x, y) {
+            return Hover::Account;
+        }
+        let sections: Vec<usize> = self.nav.iter().map(|p| p.section()).collect();
+        if let Some(i) = chrome::nav_items(&sections).iter().position(|r| r.contains(x, y)) {
             return Hover::Nav(i);
         }
-        if x >= w - s::scrollbar::HOVER_WIDTH - 2.0 * s::scrollbar::MARGIN && y >= s::caption::HEIGHT && layout::scrollbar(self.scroll, self.layout.height, h).is_some() {
+        if x >= w - s::scrollbar::HOVER_WIDTH - 2.0 * s::scrollbar::MARGIN && y >= s::toolbar::HEIGHT && chrome::scrollbar(self.motion.scroll, self.layout.height, h).is_some() {
             return Hover::Scrollbar;
         }
-        if x < s::nav::WIDTH || y < s::caption::HEIGHT {
+        if x < s::sidebar::WIDTH || y < s::toolbar::HEIGHT {
             return Hover::None;
         }
-        let (px, py) = (x - layout::page_left(w), y + self.scroll);
+        let (px, py) = (x - chrome::page_left(w), y + self.motion.scroll);
         match self.layout.hit(px, py) {
             Some(placed) => {
-                let cell = placed.cells.iter().position(|c| c.contains(px, py));
+                let segmented = matches!(self.part(&placed.target), Some(Part::Segmented { .. }));
+                let cell = segmented.then(|| placed.cells.iter().position(|c| c.contains(px, py))).flatten();
                 Hover::Part(placed.target.clone(), cell)
             }
             None => Hover::None,
         }
     }
 
-    /// The pointer moved or the page did under it.
-    pub fn refresh_hover(&mut self) {
-        let Some((x, y)) = crate::window::cursor(self.hwnd, self.scale()) else { return };
-        let hover = self.hit(x, y);
+    fn set_hover(&mut self, hover: Hover) {
         if hover != self.hover {
-            self.hover = hover;
-            if let (Some(menu), Hover::Menu(i)) = (self.menu.as_mut(), &self.hover) {
+            if let (Some(menu), Hover::Menu(i)) = (self.menu.as_mut(), &hover) {
                 menu.hot = Some(*i);
             }
+            self.hover = hover;
             self.invalidate();
         }
     }
 
+    /// The page moved under the pointer.
+    pub fn refresh_hover(&mut self) {
+        let hover = self.pointer.map_or(Hover::None, |(x, y)| self.hit(x, y));
+        self.set_hover(hover);
+    }
+
     pub fn mouse_move(&mut self, x: f32, y: f32) {
+        self.pointer = Some((x, y));
         match &self.drag {
             Some(Drag::Slider(target)) => {
                 let target = target.clone();
@@ -87,37 +108,28 @@ impl App {
             }
             Some(Drag::Scrollbar(grab)) => {
                 let (_, h) = self.dips();
-                self.scroll = layout::scroll_for_thumb(y - grab, self.layout.height, h);
-                self.scroll_target = self.scroll;
-                self.invalidate();
+                self.motion.jump(chrome::scroll_for_thumb(y - grab, self.layout.height, h));
+                self.scrolled();
                 return;
             }
             None => {}
         }
-        let hover = self.hit(x, y);
-        if hover != self.hover {
-            if let (Some(menu), Hover::Menu(i)) = (self.menu.as_mut(), &hover) {
-                menu.hot = Some(*i);
-            }
-            self.hover = hover;
-            self.invalidate();
-        }
+        self.set_hover(self.hit(x, y));
     }
 
     /// The pointer is over a text field (it shows the I-beam).
     pub fn over_field(&self) -> bool {
-        matches!(&self.hover, Hover::Part(t, _) if matches!(self.part(t), Some(Part::Field { .. })))
+        self.hover == Hover::Search || matches!(&self.hover, Hover::Part(t, _) if matches!(self.part(t), Some(Part::Field { .. })))
     }
 
     pub fn mouse_leave(&mut self) {
-        if self.hover != Hover::None {
-            self.hover = Hover::None;
-            self.invalidate();
-        }
+        self.pointer = None;
+        self.set_hover(Hover::None);
     }
 
     /// Returns whether the pointer should be captured (a drag started).
     pub fn mouse_down(&mut self, x: f32, y: f32) -> bool {
+        self.pointer = Some((x, y));
         self.focus_visible = false;
         if let Some(m) = &self.menu {
             if !m.rect.contains(x, y) {
@@ -129,15 +141,20 @@ impl App {
         if self.state.recording {
             self.cancel_recording();
         }
-        match self.hit(x, y) {
-            Hover::Caption(i) => self.pressed_caption = Some(i),
+        let hit = self.hit(x, y);
+        match hit.clone() {
+            Hover::Caption(_) | Hover::History(_) | Hover::Account => self.pressed_chrome = Some(hit),
+            Hover::Search => {
+                self.focus = Some(Focus::Search);
+                self.invalidate();
+            }
             Hover::Nav(i) => {
                 self.focus = Some(Focus::Nav);
-                self.set_page(self.page.nav()[i]);
+                self.set_page(self.nav[i]);
             }
             Hover::Scrollbar => {
                 let (_, h) = self.dips();
-                if let Some((top, len)) = layout::scrollbar(self.scroll, self.layout.height, h) {
+                if let Some((top, len)) = chrome::scrollbar(self.motion.scroll, self.layout.height, h) {
                     let grab = if (top..top + len).contains(&y) { y - top } else { len / 2.0 };
                     self.drag = Some(Drag::Scrollbar(grab));
                     self.mouse_move(x, y);
@@ -177,21 +194,20 @@ impl App {
             return;
         }
         let hit = self.hit(x, y);
-        if let Some(m) = &self.menu {
+        if self.menu.is_some() {
             if let Hover::Menu(i) = hit {
-                let _ = m;
                 self.choose(i);
             }
             return;
         }
-        if let Some(i) = self.pressed_caption.take() {
-            if hit == Hover::Caption(i) {
-                unsafe {
-                    if i == 0 {
-                        _ = PostMessageW(Some(self.hwnd), WM_SYSCOMMAND, WPARAM(SC_MINIMIZE as usize), LPARAM(0));
-                    } else {
-                        _ = PostMessageW(Some(self.hwnd), WM_CLOSE, WPARAM(0), LPARAM(0));
-                    }
+        if let Some(pressed) = self.pressed_chrome.take() {
+            if hit == pressed {
+                match pressed {
+                    Hover::Caption(0) => unsafe { _ = PostMessageW(Some(self.hwnd), WM_SYSCOMMAND, WPARAM(SC_MINIMIZE as usize), LPARAM(0)) },
+                    Hover::Caption(_) => unsafe { _ = PostMessageW(Some(self.hwnd), WM_CLOSE, WPARAM(0), LPARAM(0)) },
+                    Hover::History(i) => self.travel(if i == 0 { -1 } else { 1 }),
+                    Hover::Account if !self.page.is_welcome() => self.set_page(crate::pages::Page::About),
+                    _ => {}
                 }
             }
             return;
@@ -204,6 +220,13 @@ impl App {
         }
     }
 
+    /// The mouse's back (1) / forward (2) button.
+    pub fn x_button(&mut self, button: u16) {
+        self.travel(if button == 1 { -1 } else { 1 });
+    }
+
+    /// A wheel or touchpad turned by `delta` (120 a notch). Notches ease to their target;
+    /// a touchpad's small deltas arrive smooth already, so they move the page directly.
     pub fn wheel(&mut self, delta: i16) {
         let notches = f32::from(delta) / 120.0;
         if let Some(menu) = self.menu.as_mut() {
@@ -211,7 +234,26 @@ impl App {
             self.invalidate();
             return;
         }
-        self.scroll_to(self.scroll_target - notches * s::scrollbar::WHEEL);
+        let distance = notches * s::scrollbar::WHEEL;
+        if delta % 120 != 0 {
+            let max = chrome::max_scroll(self.layout.height, self.dips().1);
+            let to = (self.motion.scroll_target - distance).clamp(0.0, max);
+            self.motion.jump(to);
+            self.refresh_hover();
+            self.scrolled();
+        } else {
+            self.scroll_to(self.motion.scroll_target - distance);
+        }
+    }
+
+    /// A key the system sends as a system key (with Alt): back / forward.
+    pub fn sys_key(&mut self, vk: u32) -> bool {
+        match vk {
+            VK_LEFT => self.travel(-1),
+            VK_RIGHT => self.travel(1),
+            _ => return false,
+        }
+        true
     }
 
     /// Returns whether the key was used.
@@ -219,15 +261,34 @@ impl App {
         if self.menu.is_some() {
             return self.menu_key(vk);
         }
-        if vk == VK_TAB && ctrl {
-            let nav = self.page.nav();
-            let i = self.page.index() as isize + if shift { -1 } else { 1 };
-            self.set_page(nav[i.rem_euclid(nav.len() as isize) as usize]);
-            return true;
+        match vk {
+            VK_BROWSER_BACK => {
+                self.travel(-1);
+                return true;
+            }
+            VK_BROWSER_FORWARD => {
+                self.travel(1);
+                return true;
+            }
+            VK_F if ctrl && !self.page.is_welcome() => {
+                self.focus = Some(Focus::Search);
+                self.invalidate();
+                return true;
+            }
+            VK_TAB if ctrl => {
+                let nav = self.page.nav();
+                let i = self.page.index() as isize + if shift { -1 } else { 1 };
+                self.set_page(nav[i.rem_euclid(nav.len() as isize) as usize]);
+                return true;
+            }
+            VK_TAB => {
+                self.move_focus(if shift { -1 } else { 1 });
+                return true;
+            }
+            _ => {}
         }
-        if vk == VK_TAB {
-            self.move_focus(if shift { -1 } else { 1 });
-            return true;
+        if self.focus == Some(Focus::Search) {
+            return self.search_key(vk);
         }
         let part = match &self.focus {
             Some(Focus::Part(t)) => self.part(t).cloned().map(|p| (t.clone(), p)),
@@ -265,9 +326,15 @@ impl App {
             }
             (VK_UP | VK_DOWN, Some(Focus::Nav), _) => {
                 self.focus_visible = true;
-                let nav = self.page.nav();
-                let i = self.page.index() as isize + if vk == VK_UP { -1 } else { 1 };
-                self.set_page(nav[i.clamp(0, nav.len() as isize - 1) as usize]);
+                if self.nav.is_empty() {
+                    return true;
+                }
+                let at = self.nav.iter().position(|p| *p == self.page);
+                let i = match at {
+                    Some(i) => (i as isize + if vk == VK_UP { -1 } else { 1 }).clamp(0, self.nav.len() as isize - 1) as usize,
+                    None => 0,
+                };
+                self.set_page(self.nav[i]);
             }
             (VK_LEFT | VK_RIGHT, _, Some((target, Part::Segmented { options, selected }))) => {
                 let next = if vk == VK_LEFT { selected.saturating_sub(1) } else { (selected + 1).min(options.len() - 1) };
@@ -291,11 +358,43 @@ impl App {
                 self.act(target, Act::Press);
             }
             (VK_PRIOR | VK_NEXT, ..) => {
-                let page = self.dips().1 - s::caption::HEIGHT - s::page::GROUP_GAP;
-                self.scroll_to(self.scroll_target + if vk == VK_PRIOR { -page } else { page });
+                let page = self.dips().1 - s::toolbar::HEIGHT - s::page::GROUP_GAP;
+                self.scroll_to(self.motion.scroll_target + if vk == VK_PRIOR { -page } else { page });
             }
             (VK_HOME, ..) => self.scroll_to(0.0),
             (VK_END, ..) => self.scroll_to(f32::MAX),
+            _ => return false,
+        }
+        true
+    }
+
+    /// Keys while the search field has the keyboard.
+    fn search_key(&mut self, vk: u32) -> bool {
+        match vk {
+            VK_BACK => {
+                let mut query = self.query.clone();
+                query.pop();
+                self.set_query(query);
+            }
+            VK_ESCAPE if !self.query.is_empty() => self.set_query(String::new()),
+            VK_ESCAPE => {
+                self.focus = None;
+                self.invalidate();
+            }
+            VK_RETURN => {
+                if let Some(&first) = self.nav.first() {
+                    self.set_page(first);
+                }
+            }
+            VK_DOWN => {
+                self.focus = Some(Focus::Nav);
+                self.focus_visible = true;
+                if let Some(&first) = self.nav.first().filter(|_| !self.nav.contains(&self.page)) {
+                    self.set_page(first);
+                }
+                self.invalidate();
+            }
+            VK_SPACE => return false, // typed by `char`
             _ => return false,
         }
         true
@@ -335,17 +434,30 @@ impl App {
     }
 
     pub fn char(&mut self, c: char) {
-        let Some(Focus::Part(target)) = &self.focus else { return };
-        if !matches!(self.part(target), Some(Part::Field { .. })) || c.is_control() || self.state.field.chars().count() >= 64 {
+        if c.is_control() {
             return;
         }
-        self.state.field.push(c);
-        self.rebuild();
+        match &self.focus {
+            Some(Focus::Search) if self.query.chars().count() < 40 => {
+                let mut query = self.query.clone();
+                query.push(c);
+                self.set_query(query);
+            }
+            Some(Focus::Part(target)) if matches!(self.part(target), Some(Part::Field { .. })) && self.state.field.chars().count() < 64 => {
+                self.state.field.push(c);
+                self.rebuild();
+            }
+            _ => {}
+        }
     }
 
-    /// Tab order: the nav, then every enabled control in reading order.
+    /// Tab order: the search field, the nav, then every enabled control in reading order.
     fn move_focus(&mut self, step: isize) {
-        let mut order: Vec<Focus> = vec![Focus::Nav];
+        let mut order: Vec<Focus> = Vec::new();
+        if !self.page.is_welcome() {
+            order.push(Focus::Search);
+        }
+        order.push(Focus::Nav);
         order.extend(self.layout.focus_order().into_iter().map(Focus::Part));
         let at = self.focus.as_ref().and_then(|f| order.iter().position(|o| o == f));
         let next = match at {
@@ -357,20 +469,12 @@ impl App {
         self.focus_visible = true;
         if let Some(Focus::Part(t)) = &self.focus {
             if let Some(placed) = self.layout.part(t) {
-                let rect = Rect { l: placed.rect.l, r: placed.rect.r, ..row_rect(&self.layout, t).unwrap_or(placed.rect) };
-                let target = layout::scroll_to_show(self.scroll_target, rect, self.dips().1, layout::max_scroll(self.layout.height, self.dips().1));
+                let rect = Rect { l: placed.rect.l, r: placed.rect.r, ..self.layout.row_of(t).unwrap_or(placed.rect) };
+                let h = self.dips().1;
+                let target = chrome::scroll_to_show(self.motion.scroll_target, rect, h, chrome::max_scroll(self.layout.height, h));
                 self.scroll_to(target);
             }
         }
         self.invalidate();
     }
-}
-
-/// The well of the row a control is in (scrolling shows the whole row, not just the control).
-fn row_rect(l: &layout::Layout, target: &Target) -> Option<Rect> {
-    let placed = l.part(target)?;
-    l.shapes.iter().find_map(|s| match s {
-        layout::Shape::Row { rect, .. } if rect.t <= placed.rect.t && rect.b >= placed.rect.b => Some(*rect),
-        _ => None,
-    })
 }

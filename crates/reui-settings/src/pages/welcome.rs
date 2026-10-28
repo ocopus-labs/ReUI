@@ -11,7 +11,8 @@ use crate::model::files::File;
 use crate::model::hotkey;
 use crate::state::State;
 use crate::system::{self, Startup};
-use crate::ui::{Act, Block, Part, Role, Row, Target, Tone};
+use crate::ui::{icons, Act, Block, Part, Role, Row, Target, Tone};
+use reui_design::tokens::color::system as palette;
 
 /// Shared with the hub's onboarding module (first-run demo, tips, offers).
 pub const ONBOARDING: &str = "onboarding.json";
@@ -28,25 +29,25 @@ fn words(page: Page, state: &State) -> (&'static str, &'static str) {
 
 pub fn build(page: Page, state: &State) -> Vec<Block> {
     let (title, body) = words(page, state);
-    let mut blocks = vec![Block::Intro { eyebrow: Some(format!("Step {} of 3", page.index() + 1)), title: title.into(), body: Some(body.into()) }];
+    let mut blocks = vec![Block::Intro { eyebrow: Some(format!("Step {} of 3", page.index() + 1)), title: title.into(), body: Some(body.into()), icon: Some(page.icon()), preview: page.preview(), row: None }];
     let next = || group("", vec![Row::new("next", "").part(button("Next", Role::Primary)).bare()]);
     match page {
         Page::WelcomeFeatures => {
             blocks.push(group(
                 "",
                 vec![
-                    flag(state, File::Media, "enabled", "Now Playing", "Whatever plays, with its controls"),
-                    flag(state, File::Devices, "enabled", "Devices", "Bluetooth, batteries, charging and drives"),
-                    flag(state, File::Clipboard, "enabled", "Clipboard history", "What you copy, kept on this PC"),
-                    flag(state, File::Osd, "volume", "Volume pop-up", "The level when the volume changes"),
+                    flag(state, File::Media, "enabled", "Now Playing", "Whatever plays, with its controls").icon(icons::now_playing()),
+                    flag(state, File::Devices, "enabled", "Devices", "Bluetooth, batteries, charging and drives").icon(icons::devices()),
+                    flag(state, File::Clipboard, "enabled", "Clipboard history", "What you copy, kept on this PC").icon(icons::clipboard()),
+                    flag(state, File::Osd, "volume", "Volume pop-up", "The level when the volume changes").icon(icons::osd()),
                 ],
             ));
             blocks.push(group(
                 "",
                 vec![
-                    flag(state, File::Osd, "replace_windows_flyout", "Replace Windows' volume pop-up", "Hides Windows' pop-up while ReUI runs; restored when you quit"),
-                    flag(state, File::Media, "lyrics", "Lyrics", "Song titles go to lrclib.net"),
-                    flag(state, File::Devices, "airpods", "AirPods detail", "Case and bud batteries from a short Bluetooth scan nearby"),
+                    flag(state, File::Osd, "replace_windows_flyout", "Replace Windows' volume pop-up", "Hides Windows' pop-up while ReUI runs; restored when you quit").icon(icons::gray(icons::MONITOR)),
+                    flag(state, File::Media, "lyrics", "Lyrics", "Song titles go to lrclib.net").icon(icons::tile(icons::LYRICS, palette::PINK)),
+                    flag(state, File::Devices, "airpods", "AirPods detail", "Case and bud batteries from a short Bluetooth scan nearby").icon(icons::gray(icons::HEADPHONES)),
                 ],
             ));
             blocks.push(next());

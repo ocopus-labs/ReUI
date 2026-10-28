@@ -22,7 +22,7 @@ use serde_json::Value;
 use crate::model::files::File;
 use crate::state::State;
 use crate::system;
-use crate::ui::{button, group, Act, Block, Part, Role, Row, Target, Tone};
+use crate::ui::{button, footed, group, icons, Act, Block, Icon, Part, Preview, Role, Row, Target, Tone};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Page {
@@ -80,6 +80,45 @@ impl Page {
         self.nav().iter().position(|p| *p == self).unwrap_or(0)
     }
 
+    /// The sidebar's sections: General; the island's features; privacy and About.
+    pub fn section(self) -> usize {
+        match self {
+            Page::NowPlaying | Page::Clipboard | Page::Osd | Page::Devices | Page::Agents => 1,
+            Page::Privacy | Page::About => 2,
+            _ => 0,
+        }
+    }
+
+    /// Its tile in the sidebar and the header card.
+    pub fn icon(self) -> Icon {
+        match self {
+            Page::General => icons::general(),
+            Page::NowPlaying => icons::now_playing(),
+            Page::Clipboard => icons::clipboard(),
+            Page::Osd => icons::osd(),
+            Page::Devices => icons::devices(),
+            Page::Agents => icons::agents(),
+            Page::Privacy => icons::privacy(),
+            Page::About => Icon::Mark,
+            Page::WelcomeFeatures => icons::welcome(),
+            Page::WelcomeShortcut => icons::shortcut(),
+            Page::WelcomeStartup => icons::startup(),
+        }
+    }
+
+    /// The island this page's header card shows.
+    pub fn preview(self) -> Option<Preview> {
+        match self {
+            Page::General => Some(Preview::Idle),
+            Page::NowPlaying | Page::WelcomeFeatures => Some(Preview::Music),
+            Page::Clipboard | Page::WelcomeShortcut => Some(Preview::Clipboard),
+            Page::Osd => Some(Preview::Levels),
+            Page::Devices => Some(Preview::Devices),
+            Page::Agents => Some(Preview::Agents),
+            _ => None,
+        }
+    }
+
     /// `--page clipboard`, for opening on a page.
     pub fn from_arg(arg: &str) -> Option<Page> {
         let arg = arg.to_ascii_lowercase();
@@ -115,7 +154,7 @@ pub fn build(page: Page, state: &State) -> Vec<Block> {
         Page::WelcomeFeatures | Page::WelcomeShortcut | Page::WelcomeStartup => welcome::build(page, state),
     };
     if let Some(error) = &state.write_error {
-        let row = Row::new("write-error", "Couldn't save").detail(error.clone()).tone(Tone::Negative);
+        let row = Row::new("write-error", "Couldn't save").detail(error.clone()).tone(Tone::Negative).icon(icons::danger(icons::WARNING));
         blocks.insert(1.min(blocks.len()), group("", vec![row]));
     }
     blocks
@@ -185,32 +224,36 @@ fn file_error(state: &State, file: File) -> Option<Block> {
     let doc = state.files.doc(file);
     let error = doc.error()?;
     let row = Row::new(&format!("error:{}", file.prefix()), &format!("{} isn't valid JSON", doc.name()))
+        .icon(icons::danger(icons::WARNING))
         .detail(error.to_string())
         .tone(Tone::Negative)
         .part(button("Open file", Role::Secondary));
     Some(group("", vec![row]))
 }
 
-fn intro(title: &str, body: &str) -> Block {
-    Block::Intro { eyebrow: None, title: title.into(), body: (!body.is_empty()).then(|| body.into()) }
+/// The page's header card: its tile, title, paragraph and island.
+fn intro(page: Page, body: &str) -> Block {
+    Block::Intro { eyebrow: None, title: page.title().into(), body: (!body.is_empty()).then(|| body.into()), icon: Some(page.icon()), preview: page.preview(), row: None }
 }
 
-/// A feature page's first row: whether the feature runs at all (`enabled` in its file).
-fn enable(state: &State, file: File, title: &str) -> Block {
+/// A feature's on/off switch (`enabled` in its file), in its header card.
+fn enable(blocks: &mut [Block], state: &State, file: File, title: &str) {
     let row = flag(state, file, "enabled", title, "");
     let row = if state.restart_note { row.detail("Takes effect when ReUI restarts").tone(Tone::Warning) } else { row };
-    group("", vec![row])
+    if let Some(Block::Intro { row: slot, .. }) = blocks.first_mut() {
+        *slot = Some(row);
+    }
 }
 
-/// The intro, then the file's error card if it has one.
-fn head(state: &State, file: File, title: &str, body: &str) -> Vec<Block> {
-    let mut blocks = vec![intro(title, body)];
+/// The header card, then the file's error card if it has one.
+fn head(state: &State, file: File, page: Page, body: &str) -> Vec<Block> {
+    let mut blocks = vec![intro(page, body)];
     blocks.extend(file_error(state, file));
     blocks
 }
 
 #[cfg(test)]
-mod tests {
+pub mod tests {
     use super::*;
     use crate::model::doc::tests::temp_dir;
     use crate::paths::Paths;

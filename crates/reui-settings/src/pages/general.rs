@@ -2,7 +2,9 @@
 
 use serde_json::Value;
 
-use super::{button, flag, group, head, Effect};
+use super::{button, flag, footed, group, head, Effect, Page};
+use crate::ui::icons;
+use reui_design::tokens::color::system as palette;
 use crate::model::files::{File, MONITOR_CURSOR, MONITOR_PRIMARY, VISIBILITY};
 use crate::state::State;
 use crate::system::{self, Startup};
@@ -11,7 +13,7 @@ use crate::ui::{Act, Block, Part, Role, Row, Target, Tone};
 const PAUSE_MS: u64 = 3_600_000;
 
 pub fn build(state: &State) -> Vec<Block> {
-    let mut blocks = head(state, File::Island, "General", "");
+    let mut blocks = head(state, File::Island, Page::General, "The island at the top of your screen: where it sits, when it shows, and whether it starts with Windows.");
 
     let hub = state.paths.hub_exe();
     let startup = match &state.startup {
@@ -24,7 +26,7 @@ pub fn build(state: &State) -> Vec<Block> {
             .tone(Tone::Warning)
             .part(super::button("Open Task Manager", Role::Secondary)),
     };
-    blocks.push(group("Startup", vec![startup]));
+    blocks.push(group("Startup", vec![startup.icon(icons::startup())]));
 
     let doc_ok = state.files.doc(File::Island).error().is_none();
     let selected = state.files.visibility();
@@ -32,17 +34,18 @@ pub fn build(state: &State) -> Vec<Block> {
     let visibility = Row::new("visibility", "Show the island")
         .detail(detail)
         .part(Part::Segmented { options: vec!["Always".into(), "When active".into(), "When needed".into()], selected })
-        .enabled(doc_ok);
-    let monitor = Row::new("monitor", "Display").detail("Where the island sits").part(Part::Dropdown { label: monitor_label(&state.files.monitor()) }).enabled(doc_ok);
-    let fullscreen = flag(state, File::Island, "hide_in_fullscreen", "Hide in full screen", "Games, videos and presentations keep the whole screen");
+        .enabled(doc_ok)
+        .icon(icons::tile(icons::VIEW, palette::BLUE));
+    let monitor = Row::new("monitor", "Display").detail("Where the island sits").part(Part::Dropdown { label: monitor_label(&state.files.monitor()) }).enabled(doc_ok).icon(icons::tile(icons::MONITOR, palette::TEAL));
+    let fullscreen = flag(state, File::Island, "hide_in_fullscreen", "Hide in full screen", "Games, videos and presentations keep the whole screen").icon(icons::tile(icons::FULLSCREEN, palette::PURPLE));
     blocks.push(group("Island", vec![visibility, monitor, fullscreen]));
 
     let left = state.files.paused_until().and_then(|until| until.checked_sub(reui_protocol::unix_ms())).filter(|&ms| ms > 0);
     let pause = match left {
         Some(ms) => Row::new("pause", "Paused").detail(format!("Resumes in {}", system::time_left(ms))).tone(Tone::Warning).part(button("Resume", Role::Primary)),
-        None => Row::new("pause", "Pause ReUI").detail("Quiets the island and stops recording the clipboard for an hour; permission requests still show").part(button("Pause for 1 hour", Role::Secondary)),
+        None => Row::new("pause", "Pause ReUI").detail("Quiets the island for an hour").part(button("Pause for 1 hour", Role::Secondary)),
     };
-    blocks.push(group("", vec![pause.enabled(doc_ok)]));
+    blocks.push(footed("", vec![pause.enabled(doc_ok).icon(icons::tile(icons::MOON, palette::INDIGO))], "The clipboard isn't recorded meanwhile; permission requests still show."));
     blocks
 }
 

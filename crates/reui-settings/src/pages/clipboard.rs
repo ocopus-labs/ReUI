@@ -3,7 +3,8 @@
 
 use serde_json::Value;
 
-use super::{button, enable, flag, group, head, Effect};
+use super::{button, enable, flag, group, head, Effect, Page};
+use crate::ui::icons;
 use crate::keys;
 use crate::model::files::{add_app, File};
 use crate::model::hotkey::{self, Hotkey, Problem};
@@ -14,8 +15,8 @@ use crate::ui::{Act, Block, Part, Role, Row, Target, Tone};
 const RETENTION: [u64; 6] = [1, 7, 30, 90, 365, 0];
 
 pub fn build(state: &State) -> Vec<Block> {
-    let mut blocks = head(state, File::Clipboard, "Clipboard", "A history of what you copy, kept on this PC, to search and paste again. Copies from password managers and anything that looks like a secret are never saved.");
-    blocks.push(enable(state, File::Clipboard, "Clipboard history"));
+    let mut blocks = head(state, File::Clipboard, Page::Clipboard, "A history of what you copy, kept on this PC, to search and paste again. Copies from password managers and anything that looks like a secret are never saved.");
+    enable(&mut blocks, state, File::Clipboard, "Clipboard history");
     let ok = state.files.doc(File::Clipboard).error().is_none();
 
     let hotkey = state.files.hotkey();
@@ -35,7 +36,7 @@ pub fn build(state: &State) -> Vec<Block> {
     blocks.push(group("Never recorded from", apps));
 
     let armed = state.is_armed("clear", 0);
-    let clear = Row::new("clear", "Clear history").detail("Removes everything except pinned items").part(Part::Button { label: if armed { "Clear now".into() } else { "Clear".into() }, role: Role::Destructive, armed });
+    let clear = Row::new("clear", "Clear history").detail("Removes everything except pinned items").icon(icons::danger(icons::DELETE)).part(Part::Button { label: if armed { "Clear now".into() } else { "Clear".into() }, role: Role::Destructive, armed });
     blocks.push(group("", vec![clear]));
     blocks
 }

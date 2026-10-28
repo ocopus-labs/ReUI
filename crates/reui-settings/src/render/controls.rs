@@ -1,108 +1,115 @@
-//! The controls, in the island's language: capsules concentric with their wells, the
-//! accent used once per control, tabular numbers, a quiet fill on hover.
+//! The controls, in the vocabulary of macOS forms drawn with ReUI's tokens: switches (the
+//! accent when on, a white knob concentric with the track's end), pop-up buttons with
+//! their up/down chevrons, segmented controls, sliders with a round knob, push buttons by
+//! role, the shortcut recorder's key caps, text fields. Hover fills ease in and out.
 
-use reui_design::tokens::{color, component, opacity, settings as s};
+use reui_design::tokens::{color, prefs as s};
 use reui_design::Color;
 use windows::core::Result;
 
 use super::frame::View;
-use super::{mix, Align, Painter};
-use crate::ui::layout::{self, Font, Placed, Rect, SLIDER_READING};
-use crate::ui::{Block, Focus, Hover, Part, Role, Target};
+use super::{fade, mix, Align, Painter};
+use crate::ui::layout::{self, Font, Placed, Rect, RECORDING};
+use crate::ui::{icons, Block, Focus, Hover, Part, Role, Target};
 
-const ACCENT: Color = color::accent::DEFAULT;
-/// White laid over a control while hovered / pressed.
-const HOVER: f32 = 0.07;
-const PRESS: f32 = 0.13;
+const WHITE: Color = Color { r: 1.0, g: 1.0, b: 1.0, a: 1.0 };
 
 pub fn part_of<'a>(blocks: &'a [Block], target: &Target) -> Option<&'a Part> {
     blocks.iter().find_map(|b| match b {
         Block::Group { rows, .. } => rows.iter().find(|r| r.id == target.row).and_then(|r| r.parts.get(target.part)),
+        Block::Intro { row: Some(row), .. } if row.id == target.row => row.parts.get(target.part),
         _ => None,
     })
 }
 
 pub fn draw(p: &Painter, v: &View, placed: &Placed, part: &Part, dx: f32, dy: f32) -> Result<()> {
     let r = placed.rect.offset(dx, dy);
-    let hover = match v.hover {
-        Hover::Part(t, cell) if *t == placed.target => Some(*cell),
-        _ => None,
-    };
+    let lit = (v.lit)(&Hover::Part(placed.target.clone(), None));
     let pressed = v.pressed == Some(&placed.target);
     let radius = placed.radius;
     match part {
         Part::Toggle { on } => {
             let t = v.knobs.get(&placed.target.row).copied().unwrap_or(if *on { 1.0 } else { 0.0 });
-            p.fill(r, radius, mix(color::fill::PRIMARY, ACCENT, t))?;
+            p.fill(r, radius, mix(s::color::SWITCH_OFF, s::color::ACCENT, t))?;
+            if lit > 0.0 && t < 0.5 {
+                p.fill(r, radius, fade(s::color::HOVER, lit))?;
+            }
             let knob = r.h() / 2.0 - s::control::TOGGLE_INSET;
-            let left = r.l + r.h() / 2.0;
-            let right = r.r - r.h() / 2.0;
-            p.circle(left + (right - left) * t, (r.t + r.b) / 2.0, knob, s::color::KNOB)?;
+            let (left, right) = (r.l + r.h() / 2.0, r.r - r.h() / 2.0);
+            knob_at(p, left + (right - left) * t, r.mid_y(), knob)?;
         }
         Part::Segmented { options, selected } => {
-            p.fill(r, radius, color::fill::TERTIARY)?;
+            p.fill(r, radius, s::color::TRACK)?;
             for (i, (option, cell)) in options.iter().zip(&placed.cells).enumerate() {
                 let c = cell.offset(dx, dy);
+                let inner = radius - s::control::SEGMENT_INSET;
                 let ink = if i == *selected {
-                    p.fill(c, c.h() / 2.0, color::fill::PRIMARY)?;
-                    color::label::PRIMARY
-                } else if hover == Some(Some(i)) {
+                    p.fill(c, inner, s::color::SEGMENT)?;
                     color::label::PRIMARY
                 } else {
-                    color::label::SECONDARY
+                    let cell_lit = (v.lit)(&Hover::Part(placed.target.clone(), Some(i)));
+                    if cell_lit > 0.0 {
+                        p.fill(c, inner, fade(s::color::HOVER, cell_lit))?;
+                    }
+                    mix(color::label::SECONDARY, color::label::PRIMARY, 0.4 + 0.6 * cell_lit)
                 };
                 p.text(option, Font::Control, c, Align::Center, ink)?;
             }
         }
         Part::Slider { value, reading } => {
-            let reading_rect = Rect::new(r.l, r.t, r.l + SLIDER_READING, r.b);
+            let reading_rect = Rect::new(r.l, r.t, r.l + s::control::SLIDER_READING, r.b);
             p.figures(reading, Font::Control, reading_rect, Align::End, color::label::SECONDARY)?;
             let (l, right) = layout::slider_bar(r);
-            let h = component::progress::HEIGHT;
-            let top = p.snap((r.t + r.b - h) / 2.0);
+            let h = s::control::SLIDER_TRACK;
+            let top = p.snap(r.mid_y() - h / 2.0);
             let end = l + (right - l) * value.clamp(0.0, 1.0);
-            p.fill(Rect::new(l, top, right, top + h), h / 2.0, color::fill::TRACK)?;
-            p.fill(Rect::new(l, top, end.max(l + h), top + h), h / 2.0, ACCENT)?;
-            let thumb = component::thumb::SIZE / 2.0 + if hover.is_some() || pressed { 1.0 } else { 0.0 };
-            p.circle(end, (r.t + r.b) / 2.0, thumb, s::color::KNOB)?;
+            p.fill(Rect::new(l - h / 2.0, top, right + h / 2.0, top + h), h / 2.0, s::color::SWITCH_OFF)?;
+            p.fill(Rect::new(l - h / 2.0, top, end, top + h), h / 2.0, s::color::ACCENT)?;
+            let grow = if pressed { 1.0 } else { lit * 0.5 };
+            knob_at(p, end, r.mid_y(), s::control::SLIDER_KNOB / 2.0 + grow)?;
         }
         Part::Button { label, role, armed } => {
             let (fill, ink) = button_colors(*role, *armed);
             p.fill(r, radius, fill)?;
-            overlay(p, r, radius, hover.is_some(), pressed)?;
+            overlay(p, r, radius, lit, pressed)?;
             p.text(label, Font::Control, r, Align::Center, ink)?;
         }
         Part::Hotkey { caps, recording } => {
-            p.fill(r, radius, color::fill::TERTIARY)?;
+            p.fill(r, radius, s::color::FIELD)?;
             if *recording || caps.is_empty() {
-                p.stroke(r.inflate(-0.75), radius - 0.75, 1.5, ACCENT)?;
-                p.text("Press keys", Font::Control, r, Align::Center, ACCENT)?;
+                p.stroke(r.inflate(-0.75), radius - 0.75, 1.5, s::color::ACCENT)?;
+                p.text(RECORDING, Font::Control, r, Align::Center, s::color::ACCENT)?;
             } else {
-                overlay(p, r, radius, hover.is_some(), pressed)?;
+                p.edge(r, radius, s::color::FIELD_EDGE)?;
+                overlay(p, r, radius, lit, pressed)?;
                 for (cap, cell) in caps.iter().zip(&placed.cells) {
                     let c = cell.offset(dx, dy);
-                    p.fill(c, c.h() / 2.0, color::fill::SECONDARY)?;
+                    p.fill(c, radius - (r.h() - c.h()) / 2.0, s::color::BUTTON)?;
                     p.text(cap, Font::Control, c, Align::Center, color::label::PRIMARY)?;
                 }
             }
         }
         Part::Dropdown { label } => {
-            p.fill(r, radius, color::fill::SECONDARY)?;
-            overlay(p, r, radius, hover.is_some(), pressed || v.menu.is_some_and(|m| m.target == placed.target))?;
+            p.fill(r, radius, s::color::BUTTON)?;
+            overlay(p, r, radius, lit, pressed || v.menu.is_some_and(|m| m.target == placed.target))?;
             let pad = s::control::PADDING;
-            let icon = s::icon::CONTROL;
-            p.text(label, Font::Control, Rect::new(r.l + pad, r.t, r.r - pad - icon - s::control::GAP, r.b), Align::Start, color::label::PRIMARY)?;
-            p.glyph('\u{E70D}', icon, Rect::new(r.r - pad - icon, r.t, r.r - pad, r.b), color::label::SECONDARY)?;
+            let chevrons = s::control::CHEVRONS;
+            p.text(label, Font::Control, Rect::new(r.l + pad, r.t, r.r - pad - chevrons - s::control::GAP, r.b), Align::Start, color::label::PRIMARY)?;
+            let col = Rect::new(r.r - pad - chevrons - 2.0, r.t, r.r - pad + 2.0, r.b);
+            let step = chevrons * 0.55;
+            p.glyph(icons::UP, chevrons, col.offset(0.0, -step), color::label::PRIMARY)?;
+            p.glyph(icons::DOWN, chevrons, col.offset(0.0, step), color::label::PRIMARY)?;
         }
         Part::Field { text, placeholder } => {
-            p.fill(r, radius, color::fill::TERTIARY)?;
-            let focused = v.typing == Some(&placed.target);
+            p.fill(r, radius, s::color::FIELD)?;
+            let focused = v.typing == Some(&Focus::Part(placed.target.clone()));
             if focused {
-                p.stroke(r.inflate(-0.75), radius - 0.75, 1.5, ACCENT)?;
+                ring(p, r, radius)?;
             } else {
-                overlay(p, r, radius, hover.is_some(), false)?;
+                overlay(p, r, radius, lit * 0.6, false)?;
             }
-            let pad = s::control::PADDING;
+            p.edge(r, radius, s::color::FIELD_EDGE)?;
+            let pad = s::control::PADDING - 3.0;
             let inner = Rect::new(r.l + pad, r.t, r.r - pad, r.b);
             let mut caret_x = inner.l;
             p.clip(Rect::new(inner.l, r.t, inner.r + 2.0, r.b), || {
@@ -118,15 +125,13 @@ pub fn draw(p: &Painter, v: &View, placed: &Placed, part: &Part, dx: f32, dy: f3
             })?;
             if focused {
                 let h = s::typography::FIELD.line_height;
-                let x = p.snap(caret_x);
-                let top = (r.t + r.b - h) / 2.0;
-                p.fill(Rect::new(x, top, x + component::search::CARET, top + h), component::search::CARET / 2.0, ACCENT)?;
+                p.fill(Rect::at(p.snap(caret_x), r.mid_y() - h / 2.0, 1.5, h), 0.75, s::color::ACCENT)?;
             }
         }
         Part::Remove => {
-            let (fill, ink) = if hover.is_some() { (color::system::RED.with_alpha(opacity::TINT_FILL), color::system::RED) } else { (color::fill::TERTIARY, color::label::SECONDARY) };
-            p.fill(r, radius, fill)?;
-            p.glyph('\u{E711}', s::icon::CONTROL, r, ink)?;
+            let red = color::system::RED;
+            p.fill(r, radius, mix(s::color::BUTTON, red, lit))?;
+            p.glyph(icons::CANCEL, s::control::GLYPH - 2.0, r, mix(color::label::SECONDARY, WHITE, lit))?;
         }
         Part::Value(text) => p.figures(text, Font::RowTitle, r, Align::End, color::label::SECONDARY)?,
     }
@@ -136,25 +141,35 @@ pub fn draw(p: &Painter, v: &View, placed: &Placed, part: &Part, dx: f32, dy: f3
     Ok(())
 }
 
-/// The keyboard focus ring: accent, just outside the control, following its radius.
-pub fn ring(p: &Painter, r: Rect, radius: f32) -> Result<()> {
-    let w = s::control::FOCUS_WIDTH;
-    let out = s::control::FOCUS_GAP + w / 2.0;
-    p.stroke(r.inflate(out), radius + out, w, ACCENT)
+/// A white knob with a soft edge under it.
+fn knob_at(p: &Painter, cx: f32, cy: f32, radius: f32) -> Result<()> {
+    p.circle(cx, cy + 0.5, radius + 0.5, s::color::KNOB_SHADOW)?;
+    p.circle(cx, cy, radius, s::color::KNOB)
 }
 
-fn overlay(p: &Painter, r: Rect, radius: f32, hover: bool, pressed: bool) -> Result<()> {
-    let a = if pressed { PRESS } else if hover { HOVER } else { return Ok(()) };
-    p.fill(r, radius, Color { r: 1.0, g: 1.0, b: 1.0, a })
+/// The keyboard focus ring: the accent, just outside the control, following its radius.
+pub fn ring(p: &Painter, r: Rect, radius: f32) -> Result<()> {
+    let w = s::control::FOCUS_WIDTH;
+    p.stroke(r.inflate(w / 2.0), radius + w / 2.0, w, s::color::FOCUS)
+}
+
+fn overlay(p: &Painter, r: Rect, radius: f32, lit: f32, pressed: bool) -> Result<()> {
+    if pressed {
+        return p.fill(r, radius, s::color::PRESS);
+    }
+    if lit > 0.0 {
+        p.fill(r, radius, fade(s::color::HOVER, lit))?;
+    }
+    Ok(())
 }
 
 /// (fill, ink)
 fn button_colors(role: Role, armed: bool) -> (Color, Color) {
     match role {
-        Role::Primary => (color::label::PRIMARY, color::label::ON_ACCENT),
-        Role::Secondary => (color::fill::SECONDARY, color::label::PRIMARY),
-        Role::Accent => (ACCENT.with_alpha(opacity::TINT_FILL), ACCENT),
-        Role::Destructive if armed => (color::system::RED, color::label::PRIMARY),
-        Role::Destructive => (color::system::RED.with_alpha(opacity::TINT_FILL), color::system::RED),
+        Role::Primary => (s::color::ACCENT, WHITE),
+        Role::Secondary => (s::color::BUTTON, color::label::PRIMARY),
+        Role::Accent => (s::color::BUTTON, s::color::ACCENT),
+        Role::Destructive if armed => (color::system::RED, WHITE),
+        Role::Destructive => (s::color::BUTTON, color::system::RED),
     }
 }
