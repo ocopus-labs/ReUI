@@ -11,7 +11,7 @@ use super::sound;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
-    /// Opens the launcher ("Win+Alt+T").
+    /// Opens the launcher ("Win+Ctrl+T").
     pub shortcut: String,
     /// Preset lengths in minutes, in order.
     pub presets: Vec<u32>,
@@ -38,7 +38,7 @@ pub struct Focus {
 impl Default for Settings {
     fn default() -> Self {
         Self {
-            shortcut: "Win+Alt+T".into(),
+            shortcut: "Win+Ctrl+T".into(),
             presets: vec![1, 5, 10, 25],
             sound: Some(sound::DEFAULT.into()),
             ring_for_s: 60,

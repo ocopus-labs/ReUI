@@ -1,11 +1,12 @@
-//! The history hotkey: parsing a setting ("Win+Alt+V") into modifiers and a virtual key.
+//! Hotkeys from settings ("Win+Alt+V", "Win+Ctrl+T"): parsing them into modifiers and a
+//! virtual key. Shared by the clipboard's history hotkey and the timers' launcher.
 
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 
-/// The default history hotkey: Win + Alt + V.
+/// The clipboard history's default hotkey: Win + Alt + V.
 pub const HOTKEY_LABEL: &str = "Win+Alt+V";
 
-/// The history hotkey, from settings ("Win+Alt+V", "Ctrl+Shift+V").
+/// A hotkey from settings ("Win+Alt+V", "Ctrl+Shift+V"); the default is the clipboard's.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Hotkey {
     /// `HOT_KEY_MODIFIERS` bits (MOD_WIN, MOD_ALT, ...), without MOD_NOREPEAT.

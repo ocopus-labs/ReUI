@@ -10,10 +10,10 @@ use windows::Win32::Graphics::Direct2D::*;
 use crate::render::{Align, Hit, Renderer};
 
 impl Renderer {
-    /// The search field (magnifier, text or the quiet placeholder, a steady caret while
+    /// The search field (magnifier or the module's glyph, text or the quiet placeholder, a steady caret while
     /// the panel has the keyboard) with its icon buttons at the right; returns its height.
     #[allow(clippy::too_many_arguments)]
-    pub(in crate::render) fn search(&self, rt: &ID2D1RenderTarget, text: &str, caret: bool, buttons: &[Button], y: f32, accent: Color, hits: &mut Vec<Hit>) -> Result<f32> {
+    pub(in crate::render) fn search(&self, rt: &ID2D1RenderTarget, text: &str, placeholder: Option<&str>, glyph_char: Option<char>, caret: bool, buttons: &[Button], y: f32, accent: Color, hits: &mut Vec<Hit>) -> Result<f32> {
         let h = component::search::HEIGHT;
         let pad = component::search::PADDING;
         let inset = island::expanded::INSET;
@@ -29,14 +29,14 @@ impl Renderer {
         }
         unsafe { self.round_rect(rt, inset, y, right, y + h, h / 2.0, color::fill::QUATERNARY)? };
         let glyph = icon::SEARCH;
-        self.text(rt, "\u{E721}", &self.fonts.icon_search, inset + pad, y + (h - glyph) / 2.0, glyph, Align::Center, color::label::SECONDARY)?;
+        self.text(rt, &glyph_char.unwrap_or('\u{E721}').to_string(), &self.fonts.icon_search, inset + pad, y + (h - glyph) / 2.0, glyph, Align::Center, color::label::SECONDARY)?;
         let left = inset + pad + glyph + space::SM;
         let avail = (right - pad - left).max(0.0);
         let line = self.fonts.search.style.line_height;
         let top = y + (h - line) / 2.0;
         let mut end = left;
         if text.is_empty() {
-            self.text(rt, "Search", &self.fonts.search, left, top, avail, Align::Start, color::label::TERTIARY)?;
+            self.text(rt, placeholder.unwrap_or("Search"), &self.fonts.search, left, top, avail, Align::Start, color::label::TERTIARY)?;
         } else {
             // Long queries show their end, where the typing is.
             let tw = self.text_width(text, &self.fonts.search)?;

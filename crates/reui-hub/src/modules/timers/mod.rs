@@ -7,11 +7,14 @@
 //! monotonic clock (`Instant`, which keeps counting through sleep); the wall clock only
 //! stamps what's sent and what's saved (`store.rs`).
 //!
-//! Activities (module `timers`): `timers` (Ongoing: every running or paused timer, the
-//! soonest in front, the rest a page away) and `done` (Decision while it rings, then Alert,
-//! until stopped).
+//! Activities (module `timers`): `launcher` (Passive, summoned by the hotkey or the tray:
+//! a field that reads what you type, and the presets), `timers` (Ongoing: every running or
+//! paused timer, the soonest in front, the rest a page away) and `done` (Decision while it
+//! rings, then Alert, until stopped).
 //!
-//! Commands: `start:<text>` (what the launcher's field takes, `parse.rs`), `reload`.
+//! Commands: `start:<text>` (what the launcher's field takes, `parse.rs`), `launcher`,
+//! `reload`. The launcher's hotkey (Win+Ctrl+T by default) lives on the shared
+//! system-events window.
 //!
 //! Files: `parse.rs`, `model.rs`, `store.rs`, `sound.rs`, `view.rs`, `settings.rs`.
 
@@ -20,7 +23,7 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::time::Duration;
 
-use reui_protocol::{unix_ms, Priority, ACTION_EXPANDED, ACTION_UNDO};
+use reui_protocol::{unix_ms, Priority, ACTION_COLLAPSED, ACTION_EXPANDED, ACTION_SEARCH, ACTION_SUBMIT, ACTION_UNDO};
 use tokio::sync::mpsc;
 use tokio::time::{sleep_until, Instant};
 
@@ -34,13 +37,18 @@ mod view;
 use self::model::{Cancelled, Finished, Timers, LATE_MS};
 use self::parse::Parsed;
 use self::settings::Settings;
-use super::system_events::{self, SystemEvent};
+use super::hotkey::Hotkey;
+use super::system_events::{self, Subscription, SystemEvent};
 use super::{supervise, Module};
 use crate::hub::{ModuleAction, ModuleContext, ModuleInput};
 
+const LAUNCHER: &str = "launcher";
 const RUNNING: &str = "timers";
 const DONE: &str = "done";
 const MINUTE: u64 = 60_000;
+/// The launcher hotkey's id on the shared system-events window.
+const HOTKEY_ID: i32 = 0x7101;
+const DEFAULT_HOTKEY: &str = "Win+Ctrl+T";
 
 pub struct TimersModule;
 
@@ -64,6 +72,13 @@ struct Done {
     late_at: Option<u64>,
 }
 
+/// The open launcher: what's typed, and why the last try didn't start anything.
+#[derive(Default)]
+struct Launcher {
+    query: String,
+    refused: Option<&'static str>,
+}
+
 struct State {
     epoch: Instant,
     settings: Settings,
@@ -74,13 +89,33 @@ struct State {
     done: Done,
     /// The last cancel, for Ctrl+Z.
     undo: Option<Cancelled>,
+    events: Option<Subscription>,
+    /// The hotkey as registered.
+    hotkey: Option<Hotkey>,
+    launcher: Option<Launcher>,
+    /// The last length typed into the launcher: its placeholder, and what a bare Enter
+    /// starts (T4).
+    last_typed: Option<String>,
 }
 
 async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
     let (events_tx, mut events) = mpsc::unbounded_channel();
-    let _events = system_events::subscribe(events_tx);
-    let epoch = Instant::now();
-    let mut state = State { epoch, settings: Settings::load(), timers: Timers::default(), store: store::path(), page: None, done: Done::default(), undo: None };
+    // The first subscriber creates the window, which blocks for a moment.
+    let subscription = tokio::task::spawn_blocking(move || system_events::subscribe(events_tx)).await.ok().flatten();
+    let mut state = State {
+        epoch: Instant::now(),
+        settings: Settings::load(),
+        timers: Timers::default(),
+        store: store::path(),
+        page: None,
+        done: Done::default(),
+        undo: None,
+        events: subscription,
+        hotkey: None,
+        launcher: None,
+        last_typed: None,
+    };
+    state.register_hotkey();
     let missed = store::load(&state.store, &mut state.timers, 0, unix_ms());
     if !missed.is_empty() {
         state.finish(ctx, missed);
@@ -100,6 +135,8 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
                 // Waits don't count sleep, so look again now; a clock change re-stamps
                 // what the island shows (and the "Ends 3:42 PM" line).
                 SystemEvent::Resumed | SystemEvent::TimeChanged => state.publish(ctx),
+                SystemEvent::Hotkey { id: HOTKEY_ID } => state.open_launcher(ctx),
+                SystemEvent::HotkeyTaken { id: HOTKEY_ID } => eprintln!("timers: the launcher hotkey is taken by another app"),
                 _ => continue,
             },
             _ = sleep_until(deadline.unwrap_or_else(Instant::now)), if deadline.is_some() => {}
@@ -155,8 +192,17 @@ impl State {
     fn act(&mut self, ctx: &ModuleContext, ModuleAction { key, action }: ModuleAction) {
         let now = self.now();
         match (key.as_str(), action.as_str()) {
-            ("", "reload") => self.settings = Settings::load(),
-            ("", command) if command.starts_with("start:") => self.start(ctx, &command["start:".len()..]),
+            ("", "reload") => {
+                self.settings = Settings::load();
+                self.register_hotkey();
+            }
+            ("", "launcher") => return self.open_launcher(ctx),
+            ("", command) if command.starts_with("start:") => {
+                if let Err(why) = self.start(&command["start:".len()..]) {
+                    println!("timers: didn't start: {why}");
+                }
+            }
+            (LAUNCHER, _) => return self.act_launcher(ctx, &action),
             (DONE, view::ACTION_STOP) => self.stop_done(ctx),
             (DONE, view::ACTION_MORE) => {
                 let label = self.done.list.last().and_then(|d| d.label.clone());
@@ -199,21 +245,94 @@ impl State {
         self.publish(ctx);
     }
 
-    /// Starts what `text` asks for. Focus sessions and the stopwatch come in M3.
-    fn start(&mut self, _ctx: &ModuleContext, text: &str) {
+    /// The launcher's field and presets. Enter on an empty field starts the last length
+    /// typed (the placeholder); anything refused says why in place of the detail line.
+    fn act_launcher(&mut self, ctx: &ModuleContext, action: &str) {
+        let Some(launcher) = self.launcher.as_mut() else { return };
+        let text = if let Some(query) = action.strip_prefix(ACTION_SEARCH) {
+            launcher.query = query.to_string();
+            launcher.refused = None;
+            return self.publish_launcher(ctx);
+        } else if action == ACTION_SUBMIT {
+            let typed = launcher.query.trim().to_string();
+            if typed.is_empty() { self.placeholder() } else { typed }
+        } else if let Some(minutes) = action.strip_prefix("preset:").and_then(|m| m.parse::<u32>().ok()) {
+            format!("{minutes}m")
+        } else if action == ACTION_COLLAPSED {
+            // Closed without starting anything.
+            self.launcher = None;
+            return ctx.retract(LAUNCHER);
+        } else {
+            return;
+        };
+        match self.start(&text) {
+            Ok(()) => {
+                if action == ACTION_SUBMIT {
+                    self.last_typed = Some(text);
+                }
+                self.launcher = None;
+                ctx.retract(LAUNCHER);
+                self.publish(ctx);
+            }
+            Err(why) => {
+                if let Some(l) = self.launcher.as_mut() {
+                    l.refused = Some(why);
+                }
+                self.publish_launcher(ctx);
+            }
+        }
+    }
+
+    /// Starts what `text` asks for, or says why it can't.
+    fn start(&mut self, text: &str) -> Result<(), &'static str> {
         match parse::parse(text) {
             Parsed::Timer { ms, label } => {
-                match self.timers.start(label, ms, self.now()) {
-                    Some(id) => {
-                        println!("timers: started a {} timer", view::length_text(ms));
-                        self.page = Some(id);
-                    }
-                    None => println!("timers: {} timers is the limit", model::MAX_TIMERS),
-                }
+                let id = self.timers.start(label, ms, self.now()).ok_or("10 timers is the limit")?;
+                println!("timers: started a {} timer", view::length_text(ms));
+                self.page = Some(id);
                 self.save();
+                Ok(())
             }
-            other => println!("timers: can't start {other:?}"),
+            Parsed::TooLong => Err("Up to 24 hours"),
+            // Focus sessions and the stopwatch come in M3.
+            Parsed::Focus | Parsed::Stopwatch => Err("Not yet"),
+            Parsed::Empty | Parsed::Unknown => Err("Type a length, like 10m"),
         }
+    }
+
+    /// Opens the launcher (the hotkey, the tray's "New timer…"). Pressing the hotkey again
+    /// while it's open closes it (the island does that).
+    fn open_launcher(&mut self, ctx: &ModuleContext) {
+        self.launcher.get_or_insert_with(Launcher::default);
+        self.publish_launcher(ctx);
+        ctx.focus(LAUNCHER);
+    }
+
+    /// What an empty field offers: the last length typed, else the longest preset.
+    fn placeholder(&self) -> String {
+        self.last_typed.clone().unwrap_or_else(|| format!("{}m", self.settings.presets.iter().max().copied().unwrap_or(25)))
+    }
+
+    fn publish_launcher(&self, ctx: &ModuleContext) {
+        let Some(l) = &self.launcher else { return };
+        // An empty field reads as what Enter would start.
+        let parsed = match parse::parse(&l.query) {
+            Parsed::Empty => parse::parse(&self.placeholder()),
+            parsed => parsed,
+        };
+        ctx.publish(LAUNCHER, Priority::Passive, view::launcher(&l.query, &parsed, &self.placeholder(), &self.settings.presets, l.refused));
+    }
+
+    /// (Re)registers the launcher hotkey from settings; one it can't read is the default.
+    fn register_hotkey(&mut self) {
+        let wanted = Hotkey::parse(&self.settings.shortcut).or_else(|| Hotkey::parse(DEFAULT_HOTKEY));
+        if wanted == self.hotkey {
+            return;
+        }
+        if let Some(events) = &self.events {
+            events.hotkey(HOTKEY_ID, wanted.as_ref());
+        }
+        self.hotkey = wanted;
     }
 
     fn stop_done(&mut self, ctx: &ModuleContext) {

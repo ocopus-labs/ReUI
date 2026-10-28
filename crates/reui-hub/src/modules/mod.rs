@@ -7,6 +7,7 @@ mod audio;
 pub mod clipboard;
 pub mod demo;
 pub mod devices;
+pub mod hotkey;
 pub mod media;
 pub mod onboarding;
 pub mod osd;

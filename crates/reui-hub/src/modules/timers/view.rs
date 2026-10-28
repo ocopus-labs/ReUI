@@ -1,9 +1,10 @@
-//! How timers look: the running timers (one activity, soonest in front, the rest a page
-//! away) and the finish card.
+//! How timers look: the launcher (a field that previews what it will start), the running
+//! timers (one activity, soonest in front, the rest a page away) and the finish card.
 
 use reui_protocol::{Button, ButtonContent, ButtonRole, Clock, CompactView, Element, ExpandedView, Headline, Pager, Rgb, Row, Tone};
 
 use super::model::{Finished, Timer, Timers};
+use super::parse::Parsed;
 use crate::hub::View;
 
 pub const ACCENT: Rgb = Rgb(255, 159, 10);
@@ -12,11 +13,54 @@ const GLYPH_PLAY: char = '\u{E768}';
 const GLYPH_PAUSE: char = '\u{E769}';
 const GLYPH_CANCEL: char = '\u{E711}';
 const GLYPH_BELL: char = '\u{EA8F}';
+const GLYPH_TIMER: char = '\u{E916}';
 
 pub const ACTION_PREV: &str = "prev";
 pub const ACTION_NEXT: &str = "next";
 pub const ACTION_STOP: &str = "stop";
 pub const ACTION_MORE: &str = "more";
+
+/// The launcher: the field, a live reading of what Enter will start, and the presets.
+/// `hint` replaces the detail line (a refusal: "10 timers is the limit").
+pub fn launcher(query: &str, parsed: &Parsed, placeholder: &str, presets: &[u32], hint: Option<&str>) -> View {
+    let (eyebrow, value, detail) = match parsed {
+        Parsed::Timer { ms, label } => ("Timer", clock_text(*ms), label.clone()),
+        Parsed::Focus => ("Focus", "Focus".to_string(), None),
+        Parsed::Stopwatch => ("Stopwatch", "0:00".to_string(), None),
+        Parsed::TooLong => ("Timer", "0:00".to_string(), Some("Up to 24 hours".to_string())),
+        Parsed::Unknown => ("Timer", "0:00".to_string(), Some("Type a length, like 10m".to_string())),
+        Parsed::Empty => ("Timer", "0:00".to_string(), None),
+    };
+    let tile = Element::Art(reui_protocol::Art::Glyph(GLYPH_TIMER));
+    View {
+        accent: Some(ACCENT),
+        audio: None,
+        compact: CompactView { leading: Element::Glyph { glyph: GLYPH_TIMER, tone: Tone::Accent }, trailing: Element::Empty },
+        minimal: Element::Glyph { glyph: GLYPH_TIMER, tone: Tone::Accent },
+        expanded: Some(ExpandedView {
+            leading: tile,
+            eyebrow: Some(eyebrow.into()),
+            headline: Headline::Value(value),
+            detail: hint.map(str::to_string).or(detail),
+            trailing: Element::Empty,
+            rows: vec![
+                Row::Search { query: query.into(), buttons: vec![], placeholder: Some(placeholder.into()), glyph: Some(GLYPH_TIMER) },
+                Row::Buttons(presets.iter().map(|m| text(&format!("preset:{m}"), &format!("{m} min"), ButtonRole::Secondary)).collect()),
+            ],
+            wide: false,
+            tint: false,
+            pager: None,
+            open: None,
+        }),
+    }
+}
+
+/// `m:ss` below an hour, `h:mm:ss` from there.
+pub fn clock_text(ms: u64) -> String {
+    let secs = ms.div_ceil(1000);
+    let (h, m, s) = (secs / 3600, secs / 60 % 60, secs % 60);
+    if h > 0 { format!("{h}:{m:02}:{s:02}") } else { format!("{m}:{s:02}") }
+}
 
 /// The running timers' card, showing `page` (a timer id) or the soonest. `None` when there
 /// are none.
@@ -136,6 +180,17 @@ pub fn time_of_day(unix_ms: u64) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_launcher_previews_what_enter_starts() {
+        let card = launcher("10m tea", &Parsed::Timer { ms: 600_000, label: Some("Tea".into()) }, "25m", &[5, 10], None).expanded.unwrap();
+        assert_eq!(card.headline, Headline::Value("10:00".into()));
+        assert_eq!(card.detail.as_deref(), Some("Tea"));
+        assert!(matches!(&card.rows[1], Row::Buttons(b) if b.len() == 2));
+        let refused = launcher("x", &Parsed::Unknown, "25m", &[], Some("10 timers is the limit")).expanded.unwrap();
+        assert_eq!(refused.detail.as_deref(), Some("10 timers is the limit"));
+        assert_eq!(clock_text(90 * 60_000), "1:30:00");
+    }
 
     #[test]
     fn lengths_read_naturally() {

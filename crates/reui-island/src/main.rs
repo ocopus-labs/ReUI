@@ -146,7 +146,7 @@ fn open_menu(hwnd: HWND) {
     match tray::menu(hwnd, paused) {
         Some(tray::Command::Settings) => tray::open_settings(),
         Some(tray::Command::TogglePause) => with_pill(|pill| pill.set_paused(!paused)),
-        Some(tray::Command::Module(module, action)) => with_pill(|pill| pill.command(module, action)),
+        Some(tray::Command::Module(module, action)) => with_pill(|pill| pill.command(module, &action)),
         Some(tray::Command::Quit) => unsafe { _ = DestroyWindow(hwnd) },
         None => {}
     }

@@ -225,7 +225,7 @@ impl Renderer {
                     (None, _) => match &rows[i] {
                         Row::Buttons(buttons) => y += self.button_row(rt, buttons, y, accent, &mut hits)?,
                         Row::Items(items) => y += self.cards(rt, items, y, accent, with, &mut hits)?,
-                        Row::Search { query, buttons } => y += self.search(rt, with.query.unwrap_or(query), with.keyboard, buttons, y, accent, &mut hits)?,
+                        Row::Search { query, buttons, placeholder, glyph } => y += self.search(rt, with.query.unwrap_or(query), placeholder.as_deref(), *glyph, with.keyboard, buttons, y, accent, &mut hits)?,
                         Row::Tabs(tabs) => y += self.tabs(rt, tabs, y, &mut hits)?,
                         // Standing in for the cards under a search field, it keeps their
                         // height, so the panel doesn't jump while typing.

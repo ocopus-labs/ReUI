@@ -14,7 +14,8 @@
 //! moment in the island, never a session. Exits 1 if ReUI isn't running.
 //!
 //! `reui-bridge timer <length and label>` starts a timer (`10m tea`, `1h30`, `focus`,
-//! `stopwatch`), the same text the island's timer field takes, for scripts and agents.
+//! `stopwatch`), the same text the island's timer field takes, for scripts and agents; with
+//! nothing after it, it opens that field.
 //! Exits 1 if ReUI isn't running.
 
 mod install;
@@ -125,11 +126,9 @@ fn test(agent: Option<&str>) -> Result<String, String> {
     })
 }
 
-/// `reui-bridge timer <text>`: hands the text to the Timers module, as Settings sends commands.
+/// `reui-bridge timer <text>`: hands the text to the Timers module, as Settings sends
+/// commands; with no text it opens the island's timer field instead.
 fn timer(text: &str) -> Result<(), String> {
-    if text.trim().is_empty() {
-        return Err("say how long, like `reui-bridge timer 10m tea`".into());
-    }
     let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|e| e.to_string())?;
     runtime.block_on(async {
         let pipe = timeout(CONNECT_TIMEOUT, connect()).await.ok().flatten().ok_or("ReUI isn't running")?;
@@ -140,7 +139,7 @@ fn timer(text: &str) -> Result<(), String> {
             Ok(Ok(HubMsg::Rejected { reason })) => return Err(format!("ReUI refused: {reason}")),
             _ => return Err("ReUI didn't answer".into()),
         }
-        let action = format!("start:{}", text.trim());
+        let action = if text.trim().is_empty() { "launcher".to_string() } else { format!("start:{}", text.trim()) };
         write_frame(&mut writer, &ClientMsg::Command { module: "timers".into(), action }).await.map_err(|e| e.to_string())?;
         tokio::time::sleep(Duration::from_millis(100)).await;
         Ok(())

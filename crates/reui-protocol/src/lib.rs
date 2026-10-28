@@ -281,8 +281,10 @@ pub enum Row {
     Items(Vec<Item>),
     /// A search field. The surface owns the text while typing and sends
     /// `search:<query>` (see [`ACTION_SEARCH`]) as it changes; `query` is the module's
-    /// current one. `buttons` sit at its right end (icon buttons).
-    Search { query: String, buttons: Vec<Button> },
+    /// current one. `buttons` sit at its right end (icon buttons). `placeholder` shows
+    /// while it's empty ("Search" when `None`), `glyph` replaces the magnifier. Enter with
+    /// no card to choose sends [`ACTION_SUBMIT`] (after the module has seen the text).
+    Search { query: String, buttons: Vec<Button>, placeholder: Option<String>, glyph: Option<char> },
     /// Filter tabs; Tab / Shift+Tab move between them.
     Tabs(Vec<Tab>),
     /// One quiet line, for when there's nothing else to show ("No matches").
@@ -331,6 +333,9 @@ pub const ACTION_EXPANDED: &str = "expanded";
 pub const ACTION_COLLAPSED: &str = "collapsed";
 /// Prefix of the action a [`Row::Search`] field sends: `search:<query>`.
 pub const ACTION_SEARCH: &str = "search:";
+/// Enter in a search field with no cards to choose from: act on what was typed (start the
+/// timer it describes).
+pub const ACTION_SUBMIT: &str = "submit";
 /// Ctrl+Z in a card that has a search field: undo the module's last removal.
 pub const ACTION_UNDO: &str = "undo";
 /// A horizontal swipe (trackpad) on the compact pill, to the front activity: next / previous.

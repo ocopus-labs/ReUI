@@ -1,5 +1,5 @@
 //! System events shared by modules: one hidden top-level window (see `window.rs`) that
-//! receives power settings, resume and unlock, clock changes, device-interface arrivals (volumes, portable
+//! receives power settings, resume and unlock, clock changes, hotkeys, device-interface arrivals (volumes, portable
 //! devices), brightness keys as Raw Input, the lock keys, Explorer restarts and display
 //! changes, and hands them to every subscriber.
 //!
@@ -61,6 +61,10 @@ pub enum SystemEvent {
     Unlocked,
     /// The system clock or time zone changed (`WM_TIMECHANGE`).
     TimeChanged,
+    /// A hotkey registered with [`Subscription::hotkey`] was pressed.
+    Hotkey { id: i32 },
+    /// That hotkey couldn't be registered: another app has it.
+    HotkeyTaken { id: i32 },
     /// A storage volume arrived or left; the receiver rescans.
     Volume,
     /// A portable device (phone, camera over MTP/PTP) arrived or left. `id` is a per-session
@@ -175,6 +179,13 @@ impl Subscription {
             b.lock_keys_wanted()
         });
         window::set_lock_hook(self.hwnd, wanted);
+    }
+
+    /// Registers a system-wide hotkey under `id` (unique per module; see the module's
+    /// constant), replacing what `id` had; `None` just removes it. Presses come back to
+    /// every subscriber as [`SystemEvent::Hotkey`], a refusal as [`SystemEvent::HotkeyTaken`].
+    pub fn hotkey(&self, id: i32, hotkey: Option<&crate::modules::hotkey::Hotkey>) {
+        window::set_hotkey(self.hwnd, id, hotkey.map(|h| (h.modifiers, h.vk)));
     }
 }
 

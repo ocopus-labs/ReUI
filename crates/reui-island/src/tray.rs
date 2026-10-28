@@ -15,6 +15,11 @@ const CMD_PAUSE: usize = 101;
 const CMD_CLIPBOARD: usize = 102;
 const CMD_DEVICES: usize = 103;
 const CMD_QUIT: usize = 104;
+const CMD_NEW_TIMER: usize = 105;
+const CMD_FOCUS: usize = 106;
+const CMD_STOPWATCH: usize = 107;
+/// Timer presets: this plus the preset's index.
+const CMD_PRESET: usize = 200;
 const CMD_ITEM: usize = 400;
 
 pub enum Command {
@@ -22,7 +27,7 @@ pub enum Command {
     /// Pause ReUI for an hour, or resume it when paused.
     TogglePause,
     /// (module, action)
-    Module(&'static str, &'static str),
+    Module(&'static str, String),
     Quit,
 }
 
@@ -92,6 +97,19 @@ pub fn menu(hwnd: HWND, paused: bool) -> Option<Command> {
         _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
         _ = AppendMenuW(menu, MF_STRING, CMD_CLIPBOARD, w!("Clipboard history"));
         _ = AppendMenuW(menu, MF_STRING, CMD_DEVICES, w!("Devices"));
+        let presets = timer_presets();
+        if let Ok(timer) = CreatePopupMenu() {
+            _ = AppendMenuW(timer, MF_STRING, CMD_NEW_TIMER, w!("New timer…"));
+            _ = AppendMenuW(timer, MF_SEPARATOR, 0, None);
+            for (i, minutes) in presets.iter().enumerate() {
+                let label: Vec<u16> = format!("{minutes} min").encode_utf16().chain([0]).collect();
+                _ = AppendMenuW(timer, MF_STRING, CMD_PRESET + i, PCWSTR(label.as_ptr()));
+            }
+            _ = AppendMenuW(timer, MF_SEPARATOR, 0, None);
+            _ = AppendMenuW(timer, MF_STRING, CMD_FOCUS, w!("Focus session"));
+            _ = AppendMenuW(timer, MF_STRING, CMD_STOPWATCH, w!("Stopwatch"));
+            _ = AppendMenuW(menu, MF_POPUP, timer.0 as usize, w!("Timer"));
+        }
         _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
         _ = AppendMenuW(menu, MF_STRING, CMD_QUIT, w!("Quit ReUI"));
         _ = SetMenuDefaultItem(menu, CMD_SETTINGS as u32, 0);
@@ -106,8 +124,12 @@ pub fn menu(hwnd: HWND, paused: bool) -> Option<Command> {
         match picked {
             CMD_SETTINGS => Some(Command::Settings),
             CMD_PAUSE => Some(Command::TogglePause),
-            CMD_CLIPBOARD => Some(Command::Module("clipboard", "open")),
-            CMD_DEVICES => Some(Command::Module("devices", "overview")),
+            CMD_CLIPBOARD => Some(Command::Module("clipboard", "open".into())),
+            CMD_DEVICES => Some(Command::Module("devices", "overview".into())),
+            CMD_NEW_TIMER => Some(Command::Module("timers", "launcher".into())),
+            CMD_FOCUS => Some(Command::Module("timers", "start:focus".into())),
+            CMD_STOPWATCH => Some(Command::Module("timers", "start:stopwatch".into())),
+            n if (CMD_PRESET..CMD_PRESET + presets.len()).contains(&n) => Some(Command::Module("timers", format!("start:{}m", presets[n - CMD_PRESET]))),
             CMD_QUIT => Some(Command::Quit),
             _ => None,
         }
@@ -142,4 +164,16 @@ pub fn item_menu(hwnd: HWND, labels: &[(&str, bool)]) -> (Option<usize>, HWND) {
         let picked = picked.checked_sub(CMD_ITEM).filter(|&i| i < labels.len());
         (picked, previous)
     }
+}
+
+/// The timer presets in minutes, from the Timers settings (`timers.json`), as Settings
+/// writes them; the defaults when there's no file yet.
+fn timer_presets() -> Vec<u32> {
+    let file = crate::settings::Settings::dir().map(|dir| dir.join("timers.json"));
+    let text = file.and_then(|f| std::fs::read_to_string(f).ok()).unwrap_or_default();
+    let parsed: Option<Vec<u32>> = serde_json::from_str::<serde_json::Value>(&text).ok().and_then(|v| {
+        let list: Vec<u32> = v.get("presets")?.as_array()?.iter().filter_map(|m| m.as_u64()).filter(|m| (1..=1440).contains(m)).map(|m| m as u32).take(6).collect();
+        (!list.is_empty()).then_some(list)
+    });
+    parsed.unwrap_or_else(|| vec![1, 5, 10, 25])
 }

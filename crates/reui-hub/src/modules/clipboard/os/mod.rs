@@ -29,11 +29,10 @@
 //!
 //! Files: `window.rs` (the window thread), `access.rs` (reading and writing the clipboard),
 //! `worker.rs` (the worker thread), `image.rs` and `formats.rs` (images), `paste.rs` (typing
-//! the paste), `target.rs` (target and caret) and `hotkey.rs`.
+//! the paste), and `target.rs` (target and caret); the hotkey's parsing is shared (`modules/hotkey.rs`).
 
 mod access;
 mod formats;
-mod hotkey;
 mod image;
 mod paste;
 mod target;
@@ -47,7 +46,7 @@ use std::sync::Arc;
 use windows::Win32::Foundation::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
-pub use self::hotkey::Hotkey;
+pub use crate::modules::hotkey::Hotkey;
 pub(crate) use self::image::thumbnail;
 pub use self::window::start_with;
 use self::window::WM_STACK;

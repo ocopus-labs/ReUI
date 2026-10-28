@@ -47,7 +47,7 @@ pub fn panel(view: &cv::View, accent: Rgb) -> View {
             headline: Headline::Text(String::new()),
             detail: None,
             trailing: Element::Empty,
-            rows: vec![Row::Search { query: view.query.clone(), buttons }, Row::Tabs(tabs), content],
+            rows: vec![Row::Search { query: view.query.clone(), buttons, placeholder: None, glyph: None }, Row::Tabs(tabs), content],
             wide: true,
             tint: false,
             pager: None,

@@ -90,7 +90,7 @@ impl State {
             }
             SystemEvent::PortableDevice { arrived: false, .. } => {}
             // The OSD's and the timers'.
-            SystemEvent::TimeChanged | SystemEvent::Brightness { .. } | SystemEvent::BrightnessKey | SystemEvent::BatterySaver { .. } | SystemEvent::Lock { .. } | SystemEvent::TaskbarCreated | SystemEvent::DisplaysChanged => {}
+            SystemEvent::TimeChanged | SystemEvent::Hotkey { .. } | SystemEvent::HotkeyTaken { .. } | SystemEvent::Brightness { .. } | SystemEvent::BrightnessKey | SystemEvent::BatterySaver { .. } | SystemEvent::Lock { .. } | SystemEvent::TaskbarCreated | SystemEvent::DisplaysChanged => {}
         }
     }
 

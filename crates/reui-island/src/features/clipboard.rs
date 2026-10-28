@@ -450,7 +450,7 @@ mod tests {
             detail: None,
             trailing: Element::Empty,
             rows: vec![
-                Row::Search { query: query.into(), buttons: vec![] },
+                Row::Search { query: query.into(), buttons: vec![], placeholder: None, glyph: None },
                 Row::Tabs(vec![Tab { label: tab.into(), count: 1, selected: true, action: tab.into() }]),
                 Row::Items(actions.iter().map(|a| item(a)).collect()),
             ],

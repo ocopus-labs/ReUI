@@ -4,7 +4,7 @@
 
 use reui_design::tokens::motion;
 use reui_protocol::{
-    ActivityId, ClientMsg, ItemKey, Row, ACTION_COLLAPSED, ACTION_EXPANDED, ACTION_SEARCH,
+    ActivityId, ClientMsg, ItemKey, Row, ACTION_COLLAPSED, ACTION_EXPANDED, ACTION_SEARCH, ACTION_SUBMIT,
     ACTION_UNDO,
 };
 use windows::Win32::UI::WindowsAndMessaging::*;
@@ -175,6 +175,7 @@ impl Pill {
                 self.panel.select(usize::MAX);
                 None
             }
+            Key::Activate if count == 0 => Some(ACTION_SUBMIT.to_string()),
             Key::Activate => self.items().get(selected).map(|i| i.action.clone()),
             Key::Item(k) => self.item_action(selected, k),
             Key::Nth(n) => {

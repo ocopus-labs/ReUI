@@ -59,13 +59,13 @@ On Windows, a timer lives in the Clock app, behind other windows. You start it t
 
 | # | Scenario | v1 |
 |---|---|---|
-| S1 | Tea | Win+Alt+T, type `4m tea`, press Enter. The pill shows a ring and `3:59` and counts down. At zero the island expands to "Tea" / "Done" with a sound, and Stop ends it |
+| S1 | Tea | Win+Ctrl+T, type `4m tea`, press Enter. The pill shows a ring and `3:59` and counts down. At zero the island expands to "Tea" / "Done" with a sound, and Stop ends it |
 | S2 | Quick preset | Tray → Timer → 5 min. Same as S1 |
 | S3 | Two timers | Pasta (9 min) and bread (40 min). The pill shows the one ending first, and the card pages between them ("1 of 2"). Each has its own Pause and Cancel |
 | S4 | Pause | Pause in the card. The numerals stop and dim, and the ring stops. Resume continues from there |
 | S5 | +1 minute | In the finish card, "+1 min" restarts the same timer for a minute. During a run, `+1:00` adds a minute |
-| S6 | Focus session | Win+Alt+T, `focus` (or the tray). 25 min of work with DND on if enabled. At the end, the island expands: "Break time" / Start break / Skip. After 4 rounds the break is 15 min |
-| S7 | Stopwatch | Win+Alt+T, `sw` (or the tray). The pill counts up. The card has Pause, Lap and Reset, and shows the last lap |
+| S6 | Focus session | Win+Ctrl+T, `focus` (or the tray). 25 min of work with DND on if enabled. At the end, the island expands: "Break time" / Start break / Skip. After 4 rounds the break is 15 min |
+| S7 | Stopwatch | Win+Ctrl+T, `sw` (or the tray). The pill counts up. The card has Pause, Lap and Reset, and shows the last lap |
 | S8 | Laptop sleeps mid-timer | On wake, if the timer ended while asleep: the island shows "Finished at 3:14 PM", **quiet** if more than a minute late, and rings if within a minute |
 | S9 | ReUI restarts or the PC reboots | Running timers come back with the right time left. Any that ended in between show "Finished at …" quietly |
 | S10 | Game in fullscreen | The island is hidden as usual, and the sound still plays. The finish card is waiting when the game leaves fullscreen |
@@ -76,7 +76,7 @@ On Windows, a timer lives in the Clock app, behind other windows. You start it t
 ### 5.1 Starting
 
 - **The launcher (Passive, key `launcher`, summoned):**
-  - **Opening it:** Win+Alt+T (configurable, like the clipboard hotkey), or Tray → Timer → "New timer…". It opens expanded with keyboard capture, like the clipboard panel.
+  - **Opening it:** Win+Ctrl+T (configurable, like the clipboard hotkey), or Tray → Timer → "New timer…". It opens expanded with keyboard capture, like the clipboard panel.
   - **Search field:** the module parses what you type live. The hero previews the result ("Timer · 10:00 · Tea"); Enter starts it and Esc closes. The parser:
     - `10` means minutes;
     - `10m`, `90s`, `1h30`, `1h 30m`, `1:30:00` and `5:00` work;
@@ -166,7 +166,7 @@ On Windows, a timer lives in the Clock app, behind other windows. You start it t
 | Sound | `PlaySoundW` of a file (`SND_FILENAME | SND_ASYNC | SND_LOOP`), `PlaySoundW(None)` to stop; choices: Windows `Alarm01–10.wav` and `Ring01–10.wav` from `C:\Windows\Media`, or none | Files, not `SND_ALIAS`: scheme aliases may be silent. Missing file: fall back to `Alarm01.wav`, then to `MessageBeep` |
 | DND state (read) | WNF `WNF_SHEL_QUIETHOURS_ACTIVE_PROFILE_CHANGED` (`0x0D83063EA3BF1C75`) via `NtQueryWnfStateData`: 0 off, 1 priority only, 2 alarms only | Undocumented but stable since 1803 |
 | DND toggle | Undocumented `IQuietHoursSettings` COM (CLSID `F53321FA-34F8-4B7F-B9A3-361877CB94CF`, IID `6BFF4732-81EC-4FFB-AE67-B6C1BC29631F`), `put_UserSelectedProfile("Microsoft.QuietHoursProfile.PriorityOnly" / ".Unrestricted")`, called as a raw vtable on a dedicated STA thread | **Verify** by reading WNF ~500 ms later; on failure turn the feature off for the session and say so once in the focus card ("Couldn't turn on Do Not Disturb"). `FocusSessionManager.TryStartFocusSession` is a Limited Access Feature (E_ACCESSDENIED), so it isn't used |
-| Hotkey | `RegisterHotKey` on the module's own message-only window thread, Win+Alt+T by default; taken → said once in Settings like the clipboard (E-C13) | |
+| Hotkey | `RegisterHotKey` on the shared system-events window, Win+Ctrl+T by default (Win+Alt+T is the Xbox Game Bar's recording timer, so it's taken wherever Game Bar runs); taken → said once in Settings like the clipboard (E-C13) | |
 | Keyboard in the launcher | The island's existing summoned-panel keyboard hook (no focus steal) | Same as the clipboard panel |
 
 **Engineering:**
@@ -228,7 +228,7 @@ On Windows, a timer lives in the Clock app, behind other windows. You start it t
 | Setting | Default |
 |---|---|
 | Timers module | on |
-| Shortcut | Win+Alt+T |
+| Shortcut | Win+Ctrl+T |
 | Presets | 1, 5, 10, 25 min |
 | Sound | Alarm01, with a preview button, or None |
 | Ring for | 1 min (30 s / 1 min / 2 min / until stopped) |

@@ -71,7 +71,7 @@ impl Osd {
                 }
             }
             // The Devices and Timers modules' events.
-            OsEvent::TimeChanged | OsEvent::PowerSource { .. } | OsEvent::BatteryPercent { .. } | OsEvent::Resumed | OsEvent::Unlocked | OsEvent::Volume | OsEvent::PortableDevice { .. } => {}
+            OsEvent::TimeChanged | OsEvent::Hotkey { .. } | OsEvent::HotkeyTaken { .. } | OsEvent::PowerSource { .. } | OsEvent::BatteryPercent { .. } | OsEvent::Resumed | OsEvent::Unlocked | OsEvent::Volume | OsEvent::PortableDevice { .. } => {}
         }
     }
 

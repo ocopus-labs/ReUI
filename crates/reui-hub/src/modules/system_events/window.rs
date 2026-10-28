@@ -22,18 +22,20 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::Power::{RegisterPowerSettingNotification, POWERBROADCAST_SETTING};
 use windows::Win32::System::RemoteDesktop::{WTSRegisterSessionNotification, NOTIFY_FOR_THIS_SESSION};
 use windows::Win32::System::SystemServices::{GUID_ACDC_POWER_SOURCE, GUID_BATTERY_PERCENTAGE_REMAINING, GUID_POWER_SAVING_STATUS, GUID_VIDEO_CURRENT_MONITOR_BRIGHTNESS};
-use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, VK_CAPITAL, VK_NUMLOCK};
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetKeyState, RegisterHotKey, UnregisterHotKey, HOT_KEY_MODIFIERS, MOD_NOREPEAT, VK_CAPITAL, VK_NUMLOCK};
 use windows::Win32::UI::Input::{GetRawInputData, RegisterRawInputDevices, HRAWINPUT, RAWINPUT, RAWINPUTDEVICE, RAWINPUTHEADER, RIDEV_INPUTSINK, RID_INPUT, RIM_TYPEHID};
 use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, KillTimer, PostMessageW, RegisterClassW, RegisterDeviceNotificationW, RegisterWindowMessageW, SetTimer,
     SetWindowsHookExW, UnhookWindowsHookEx, DBT_DEVICEARRIVAL, DBT_DEVICEREMOVECOMPLETE, DBT_DEVTYP_DEVICEINTERFACE, DEVICE_NOTIFY_WINDOW_HANDLE, DEV_BROADCAST_DEVICEINTERFACE_W,
     DEV_BROADCAST_HDR, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT, MSG, PBT_APMRESUMEAUTOMATIC, PBT_POWERSETTINGCHANGE, WH_KEYBOARD_LL, WM_APP, WM_DEVICECHANGE, WM_DISPLAYCHANGE, WM_INPUT, WM_KEYUP,
-    WM_POWERBROADCAST, WM_SYSKEYUP, WM_TIMECHANGE, WM_TIMER, WM_WTSSESSION_CHANGE, WNDCLASSW, WS_EX_TOOLWINDOW, WS_POPUP, WTS_SESSION_UNLOCK,
+    WM_POWERBROADCAST, WM_HOTKEY, WM_SYSKEYUP, WM_TIMECHANGE, WM_TIMER, WM_WTSSESSION_CHANGE, WNDCLASSW, WS_EX_TOOLWINDOW, WS_POPUP, WTS_SESSION_UNLOCK,
 };
 
 use super::{dispatch, dispatch_setting, LockKey, Setting, SystemEvent};
 
 const WM_LOCK_HOOK: u32 = WM_APP + 1;
+/// wparam: the hotkey's id; lparam: modifiers << 16 | virtual key, or 0 to remove it.
+const WM_SET_HOTKEY: u32 = WM_APP + 2;
 const LOCK_TIMER: usize = 1;
 /// After a lock key's key-up, when its toggle state has settled.
 const LOCK_SETTLE_MS: u32 = 30;
@@ -108,6 +110,12 @@ unsafe fn register(hwnd: HWND) {
 /// Watches the lock keys while `on`.
 pub(super) fn set_lock_hook(hwnd: isize, on: bool) {
     _ = unsafe { PostMessageW(Some(HWND(hwnd as *mut _)), WM_LOCK_HOOK, WPARAM(usize::from(on)), LPARAM(0)) };
+}
+
+/// Registers (or with `None` removes) the hotkey `id` on the window's thread.
+pub(super) fn set_hotkey(hwnd: isize, id: i32, key: Option<(u32, u32)>) {
+    let packed = key.map_or(0, |(modifiers, vk)| (modifiers as isize) << 16 | (vk as isize & 0xFFFF));
+    _ = unsafe { PostMessageW(Some(HWND(hwnd as *mut _)), WM_SET_HOTKEY, WPARAM(id as usize), LPARAM(packed)) };
 }
 
 unsafe fn create_window() -> Option<HWND> {
@@ -220,6 +228,22 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         WM_TIMECHANGE => {
             dispatch(SystemEvent::TimeChanged);
             DefWindowProcW(hwnd, msg, wparam, lparam)
+        }
+        WM_SET_HOTKEY => {
+            let id = wparam.0 as i32;
+            _ = UnregisterHotKey(Some(hwnd), id);
+            let packed = lparam.0;
+            if packed != 0 {
+                let (modifiers, vk) = ((packed >> 16) as u32, (packed & 0xFFFF) as u32);
+                if RegisterHotKey(Some(hwnd), id, HOT_KEY_MODIFIERS(modifiers) | MOD_NOREPEAT, vk).is_err() {
+                    dispatch(SystemEvent::HotkeyTaken { id });
+                }
+            }
+            LRESULT(0)
+        }
+        WM_HOTKEY => {
+            dispatch(SystemEvent::Hotkey { id: wparam.0 as i32 });
+            LRESULT(0)
         }
         WM_LOCK_HOOK => {
             with_state(|s| match (wparam.0 != 0, s.hook) {

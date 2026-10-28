@@ -14,7 +14,7 @@ use windows::Win32::UI::Input::KeyboardAndMouse::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
 use super::access::{read, write, Read};
-use super::hotkey::Hotkey;
+use crate::modules::hotkey::Hotkey;
 use super::target::{capture_target, exe_path, is_reui, CaretFinder};
 use super::worker::Worker;
 use super::{Clipboard, Formats, Job, OsEvent, OsStatus, Write};
