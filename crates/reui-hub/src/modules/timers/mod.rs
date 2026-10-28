@@ -1,22 +1,29 @@
-//! Timers (docs/PRD-timers-focus.md): countdowns started from the launcher, the tray or a
-//! command, shown in the pill while they run and impossible to miss when they end.
+//! Timers (docs/PRD-timers-focus.md): countdowns, focus sessions and a stopwatch, started
+//! from the launcher, the tray or a command, shown in the pill while they run and
+//! impossible to miss when they end.
 //!
 //! The island runs the clocks it's sent ([`reui_protocol::Clock`]), so the hub never ticks:
-//! it sleeps until the soonest timer ends (or the finish sound's cap), and wakes early for a
-//! command, an action, resume from sleep or a clock change. Truth is the module's
-//! monotonic clock (`Instant`, which keeps counting through sleep); the wall clock only
-//! stamps what's sent and what's saved (`store.rs`).
+//! it sleeps until the next thing is due (a timer or focus phase ending, the finish sound's
+//! cap, an unanswered phase end giving up), and wakes early for a command, an action,
+//! resume from sleep or a clock change. Truth is the module's monotonic clock (`Instant`,
+//! which keeps counting through sleep); the wall clock only stamps what's sent and what's
+//! saved (`store.rs`).
 //!
-//! Activities (module `timers`): `launcher` (Passive, summoned by the hotkey or the tray:
-//! a field that reads what you type, and the presets), `timers` (Ongoing: every running or
-//! paused timer, the soonest in front, the rest a page away) and `done` (Decision while it
-//! rings, then Alert, until stopped).
+//! Activities (module `timers`):
+//! - `launcher` (Passive, summoned by the hotkey or the tray): a field that reads what you
+//!   type, and the presets;
+//! - `timers` (Ongoing): every running or paused countdown, the soonest in front, the rest
+//!   a page away; `done` (Decision while it rings, then Alert, until stopped);
+//! - `focus` (Ongoing) while a phase runs; `focus-next` (Decision while it rings, then
+//!   Alert) when a phase ended and the next waits to be started;
+//! - `stopwatch` (Ongoing).
 //!
 //! Commands: `start:<text>` (what the launcher's field takes, `parse.rs`), `launcher`,
 //! `reload`. The launcher's hotkey (Win+Ctrl+T by default) lives on the shared
 //! system-events window.
 //!
-//! Files: `parse.rs`, `model.rs`, `store.rs`, `sound.rs`, `view.rs`, `settings.rs`.
+//! Files: `parse.rs`, `model.rs` (countdowns), `focus.rs`, `stopwatch.rs`, `store.rs`,
+//! `sound.rs`, `view.rs`, `settings.rs`.
 
 use std::future::Future;
 use std::path::PathBuf;
@@ -27,16 +34,20 @@ use reui_protocol::{unix_ms, Priority, ACTION_COLLAPSED, ACTION_EXPANDED, ACTION
 use tokio::sync::mpsc;
 use tokio::time::{sleep_until, Instant};
 
+mod focus;
 mod model;
 pub mod parse;
 mod settings;
 mod sound;
+mod stopwatch;
 mod store;
 mod view;
 
+use self::focus::{Focus, Plan};
 use self::model::{Cancelled, Finished, Timers, LATE_MS};
 use self::parse::Parsed;
 use self::settings::Settings;
+use self::stopwatch::Stopwatch;
 use super::hotkey::Hotkey;
 use super::system_events::{self, Subscription, SystemEvent};
 use super::{supervise, Module};
@@ -45,6 +56,9 @@ use crate::hub::{ModuleAction, ModuleContext, ModuleInput};
 const LAUNCHER: &str = "launcher";
 const RUNNING: &str = "timers";
 const DONE: &str = "done";
+const FOCUS: &str = "focus";
+const FOCUS_NEXT: &str = "focus-next";
+const STOPWATCH: &str = "stopwatch";
 const MINUTE: u64 = 60_000;
 /// The launcher hotkey's id on the shared system-events window.
 const HOTKEY_ID: i32 = 0x7101;
@@ -66,8 +80,8 @@ impl Module for TimersModule {
 #[derive(Default)]
 struct Done {
     list: Vec<Finished>,
-    /// Ringing until then (module clock); `None` once quiet.
-    ringing_until: Option<u64>,
+    /// It's ringing for this card.
+    loud: bool,
     /// They all ended a while ago (sleep, ReUI closed): when, on the wall clock.
     late_at: Option<u64>,
 }
@@ -83,10 +97,16 @@ struct State {
     epoch: Instant,
     settings: Settings,
     timers: Timers,
+    focus: Option<Focus>,
+    /// It's ringing for the focus session's phase end.
+    focus_loud: bool,
+    stopwatch: Option<Stopwatch>,
     store: PathBuf,
     /// The timer the open card shows (`None`: the soonest).
     page: Option<u32>,
     done: Done,
+    /// The finish sound plays until then (module clock), for whichever cards are loud.
+    ring_until: Option<u64>,
     /// The last cancel, for Ctrl+Z.
     undo: Option<Cancelled>,
     events: Option<Subscription>,
@@ -102,13 +122,21 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
     let (events_tx, mut events) = mpsc::unbounded_channel();
     // The first subscriber creates the window, which blocks for a moment.
     let subscription = tokio::task::spawn_blocking(move || system_events::subscribe(events_tx)).await.ok().flatten();
+    let settings = Settings::load();
+    let mut timers = Timers::default();
+    let store = store::path();
+    let loaded = store::load(&store, &mut timers, plan(&settings), 0, unix_ms());
     let mut state = State {
         epoch: Instant::now(),
-        settings: Settings::load(),
-        timers: Timers::default(),
-        store: store::path(),
+        settings,
+        timers,
+        focus: loaded.focus,
+        focus_loud: false,
+        stopwatch: loaded.stopwatch,
+        store,
         page: None,
         done: Done::default(),
+        ring_until: None,
         undo: None,
         events: subscription,
         hotkey: None,
@@ -116,15 +144,14 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
         last_typed: None,
     };
     state.register_hotkey();
-    let missed = store::load(&state.store, &mut state.timers, 0, unix_ms());
-    if !missed.is_empty() {
-        state.finish(ctx, missed);
+    if !loaded.finished.is_empty() {
+        state.finish(loaded.finished);
     }
     state.publish(ctx);
 
     loop {
-        let wake = [state.timers.next_end(), state.done.ringing_until].into_iter().flatten().min();
-        let deadline = wake.map(|ms| state.epoch + Duration::from_millis(ms));
+        let due = [state.timers.next_end(), state.focus.as_ref().and_then(Focus::next_due), state.ring_until];
+        let deadline = due.into_iter().flatten().min().map(|ms| state.epoch + Duration::from_millis(ms));
         tokio::select! {
             input = ctx.next() => match input {
                 Some(ModuleInput::Action(action)) => state.act(ctx, action),
@@ -145,30 +172,62 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
     }
 }
 
+fn plan(settings: &Settings) -> Plan {
+    let f = &settings.focus;
+    Plan { work_ms: u64::from(f.work_min) * MINUTE, short_break_ms: u64::from(f.short_break_min) * MINUTE, long_break_ms: u64::from(f.long_break_min) * MINUTE, rounds: f.rounds }
+}
+
 impl State {
     fn now(&self) -> u64 {
         self.epoch.elapsed().as_millis() as u64
     }
 
-    /// Whatever is due: timers that reached zero, a ring that has rung long enough.
+    /// Whatever is due: timers that reached zero, a focus phase ending (or an unanswered
+    /// one giving up), a ring that has rung long enough.
     fn tick(&mut self, ctx: &ModuleContext) {
         let now = self.now();
+        let mut changed = false;
         let finished = self.timers.take_finished(now);
         if !finished.is_empty() {
-            self.finish(ctx, finished);
+            self.finish(finished);
+            changed = true;
+        }
+        let auto = self.settings.focus.auto_start;
+        if let Some(f) = self.focus.as_mut() {
+            if f.end_phase(now, auto) {
+                println!("timers: a focus phase ended");
+                if auto {
+                    // Straight on: a chime, no card (unless something else is ringing).
+                    if self.ring_until.is_none() {
+                        sound::play(self.settings.sound.as_deref(), false);
+                    }
+                } else {
+                    self.focus_loud = true;
+                    self.ring();
+                }
+                changed = true;
+            } else if f.gave_up(now) {
+                println!("timers: focus ended after {} rounds (unanswered)", f.done_work);
+                self.end_focus();
+                changed = true;
+            }
+        }
+        if self.ring_until.is_some_and(|until| until <= now) {
+            sound::stop();
+            self.ring_until = None;
+            self.done.loud = false;
+            self.focus_loud = false;
+            changed = true;
+        }
+        if changed {
             self.save();
             self.publish(ctx);
-        }
-        if self.done.ringing_until.is_some_and(|until| until <= now) {
-            sound::stop();
-            self.done.ringing_until = None;
-            self.publish_done(ctx);
         }
     }
 
     /// Adds to the finish card. Anything that ended just now rings (once, however many end
     /// together, E-T5); finishes noticed late (sleep, restart) are quiet (E-T1, E-T2).
-    fn finish(&mut self, ctx: &ModuleContext, finished: Vec<Finished>) {
+    fn finish(&mut self, finished: Vec<Finished>) {
         let loud = finished.iter().any(|f| f.late_ms < LATE_MS);
         let latest = finished.iter().map(|f| f.late_ms).min().unwrap_or(0);
         for f in &finished {
@@ -178,15 +237,28 @@ impl State {
         self.done.list.extend(finished);
         if loud {
             self.done.late_at = None;
-            if self.done.ringing_until.is_none() {
-                sound::play(self.settings.sound.as_deref(), true);
-                let ring = if self.settings.ring_for_s == 0 { u64::MAX / 2 } else { u64::from(self.settings.ring_for_s) * 1000 };
-                self.done.ringing_until = Some(self.now() + ring);
-            }
+            self.done.loud = true;
+            self.ring();
         } else if was_empty {
             self.done.late_at = Some(unix_ms().saturating_sub(latest));
         }
-        self.publish_done(ctx);
+    }
+
+    /// Starts the finish sound, unless it's already playing (one sound for everything).
+    fn ring(&mut self) {
+        if self.ring_until.is_some() {
+            return;
+        }
+        sound::play(self.settings.sound.as_deref(), true);
+        let ring = if self.settings.ring_for_s == 0 { u64::MAX / 4 } else { u64::from(self.settings.ring_for_s) * 1000 };
+        self.ring_until = Some(self.now() + ring);
+    }
+
+    /// Stops the sound once no card is ringing any more.
+    fn hush(&mut self) {
+        if !self.done.loud && !self.focus_loud && self.ring_until.take().is_some() {
+            sound::stop();
+        }
     }
 
     fn act(&mut self, ctx: &ModuleContext, ModuleAction { key, action }: ModuleAction) {
@@ -207,9 +279,7 @@ impl State {
             (DONE, view::ACTION_MORE) => {
                 let label = self.done.list.last().and_then(|d| d.label.clone());
                 self.stop_done(ctx);
-                if self.timers.start(label, MINUTE, now).is_some() {
-                    self.save();
-                }
+                self.timers.start(label, MINUTE, now);
             }
             (RUNNING, ACTION_EXPANDED) => self.page = None,
             (RUNNING, view::ACTION_NEXT | view::ACTION_PREV) => {
@@ -217,13 +287,11 @@ impl State {
                 let at = self.page.and_then(|p| ids.iter().position(|id| *id == p)).unwrap_or(0);
                 let step = if action == view::ACTION_NEXT { 1 } else { ids.len() - 1 };
                 self.page = ids.get((at + step) % ids.len().max(1)).copied();
+                return self.publish(ctx);
             }
             (RUNNING, ACTION_UNDO) => {
-                if let Some(c) = self.undo.take() {
-                    let id = self.timers.add(c.label, c.length_ms, c.left_ms, c.running.then_some(now));
-                    self.page = id;
-                    self.save();
-                }
+                let Some(c) = self.undo.take() else { return };
+                self.page = self.timers.add(c.label, c.length_ms, c.left_ms, c.running.then_some(now));
             }
             (RUNNING, a) => {
                 let Some((verb, id)) = a.split_once(':') else { return };
@@ -238,10 +306,34 @@ impl State {
                     }
                     _ => return,
                 }
-                self.save();
+            }
+            (FOCUS | FOCUS_NEXT, a) => {
+                let Some(f) = self.focus.as_mut() else { return };
+                match a {
+                    view::ACTION_TOGGLE => f.toggle(now),
+                    view::ACTION_NEXT_PHASE => f.start_next(now),
+                    view::ACTION_SKIP => f.skip_break(now),
+                    view::ACTION_END => self.end_focus(),
+                    _ => return,
+                }
+                // Answered: the phase end stops ringing.
+                if key == FOCUS_NEXT {
+                    self.focus_loud = false;
+                    self.hush();
+                }
+            }
+            (STOPWATCH, a) => {
+                let Some(s) = self.stopwatch.as_mut() else { return };
+                match a {
+                    view::ACTION_TOGGLE => s.toggle(now),
+                    view::ACTION_LAP => _ = s.lap(now),
+                    view::ACTION_RESET => self.stopwatch = None,
+                    _ => return,
+                }
             }
             _ => return,
         }
+        self.save();
         self.publish(ctx);
     }
 
@@ -267,7 +359,7 @@ impl State {
         };
         match self.start(&text) {
             Ok(()) => {
-                if action == ACTION_SUBMIT {
+                if action == ACTION_SUBMIT && matches!(parse::parse(&text), Parsed::Timer { .. }) {
                     self.last_typed = Some(text);
                 }
                 self.launcher = None;
@@ -285,19 +377,33 @@ impl State {
 
     /// Starts what `text` asks for, or says why it can't.
     fn start(&mut self, text: &str) -> Result<(), &'static str> {
+        let now = self.now();
         match parse::parse(text) {
             Parsed::Timer { ms, label } => {
-                let id = self.timers.start(label, ms, self.now()).ok_or("10 timers is the limit")?;
+                let id = self.timers.start(label, ms, now).ok_or("10 timers is the limit")?;
                 println!("timers: started a {} timer", view::length_text(ms));
                 self.page = Some(id);
-                self.save();
-                Ok(())
             }
-            Parsed::TooLong => Err("Up to 24 hours"),
-            // Focus sessions and the stopwatch come in M3.
-            Parsed::Focus | Parsed::Stopwatch => Err("Not yet"),
-            Parsed::Empty | Parsed::Unknown => Err("Type a length, like 10m"),
+            Parsed::Focus => {
+                if self.focus.is_some() {
+                    return Err("A focus session is already on");
+                }
+                println!("timers: focus session started");
+                self.focus = Some(Focus::start(plan(&self.settings), now));
+            }
+            // There's one stopwatch; asking again just shows it.
+            Parsed::Stopwatch => _ = self.stopwatch.get_or_insert_with(|| Stopwatch::start(now)),
+            Parsed::TooLong => return Err("Up to 24 hours"),
+            Parsed::Empty | Parsed::Unknown => return Err("Type a length, like 10m"),
         }
+        self.save();
+        Ok(())
+    }
+
+    fn end_focus(&mut self) {
+        self.focus = None;
+        self.focus_loud = false;
+        self.hush();
     }
 
     /// Opens the launcher (the hotkey, the tray's "New timer…"). Pressing the hotkey again
@@ -336,31 +442,46 @@ impl State {
     }
 
     fn stop_done(&mut self, ctx: &ModuleContext) {
-        if self.done.ringing_until.take().is_some() {
-            sound::stop();
-        }
         self.done = Done::default();
+        self.hush();
         ctx.retract(DONE);
     }
 
     fn save(&self) {
-        store::save(&self.store, &self.timers, self.now(), unix_ms());
+        let state = store::State { timers: &self.timers, focus: self.focus.as_ref(), stopwatch: self.stopwatch.as_ref(), dnd_ours: false };
+        store::save(&self.store, &state, self.now(), unix_ms());
     }
 
     fn publish(&self, ctx: &ModuleContext) {
-        match view::running(&self.timers, self.page, self.now(), unix_ms()) {
+        let (now, now_unix) = (self.now(), unix_ms());
+        match view::running(&self.timers, self.page, now, now_unix) {
             Some(v) => ctx.publish(RUNNING, Priority::Ongoing, v),
             None => ctx.retract(RUNNING),
         }
-        self.publish_done(ctx);
-    }
-
-    fn publish_done(&self, ctx: &ModuleContext) {
-        if self.done.list.is_empty() {
-            return;
-        }
         // A decision while it rings: it opens itself and comes through a paused ReUI (E-T3).
-        let priority = if self.done.ringing_until.is_some() { Priority::Decision } else { Priority::Alert };
-        ctx.publish(DONE, priority, view::finished(&self.done.list, self.done.late_at));
+        let loud = |loud: bool| if loud { Priority::Decision } else { Priority::Alert };
+        if self.done.list.is_empty() {
+            ctx.retract(DONE);
+        } else {
+            ctx.publish(DONE, loud(self.done.loud), view::finished(&self.done.list, self.done.late_at));
+        }
+        match &self.focus {
+            Some(f) if f.waiting() => {
+                ctx.retract(FOCUS);
+                ctx.publish(FOCUS_NEXT, loud(self.focus_loud), view::phase_end(f));
+            }
+            Some(f) => {
+                ctx.retract(FOCUS_NEXT);
+                ctx.publish(FOCUS, Priority::Ongoing, view::focus(f, now, now_unix, None));
+            }
+            None => {
+                ctx.retract(FOCUS);
+                ctx.retract(FOCUS_NEXT);
+            }
+        }
+        match &self.stopwatch {
+            Some(s) => ctx.publish(STOPWATCH, Priority::Ongoing, view::stopwatch(s, now, now_unix)),
+            None => ctx.retract(STOPWATCH),
+        }
     }
 }

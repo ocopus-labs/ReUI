@@ -1,13 +1,19 @@
 //! How timers look: the launcher (a field that previews what it will start), the running
-//! timers (one activity, soonest in front, the rest a page away) and the finish card.
+//! timers (one activity, soonest in front, the rest a page away), the finish card, a focus
+//! session and its phase ends, and the stopwatch.
 
 use reui_protocol::{Button, ButtonContent, ButtonRole, Clock, CompactView, Element, ExpandedView, Headline, Pager, Rgb, Row, Tone};
 
+use super::focus::{Focus, Phase};
 use super::model::{Finished, Timer, Timers};
+use super::stopwatch::Stopwatch;
 use super::parse::Parsed;
 use crate::hub::View;
 
 pub const ACCENT: Rgb = Rgb(255, 159, 10);
+pub const FOCUS_ACCENT: Rgb = Rgb(94, 92, 230);
+pub const BREAK_ACCENT: Rgb = Rgb(48, 209, 88);
+pub const STOPWATCH_ACCENT: Rgb = Rgb(48, 209, 88);
 
 const GLYPH_PLAY: char = '\u{E768}';
 const GLYPH_PAUSE: char = '\u{E769}';
@@ -19,6 +25,16 @@ pub const ACTION_PREV: &str = "prev";
 pub const ACTION_NEXT: &str = "next";
 pub const ACTION_STOP: &str = "stop";
 pub const ACTION_MORE: &str = "more";
+pub const ACTION_TOGGLE: &str = "toggle";
+pub const ACTION_END: &str = "end";
+pub const ACTION_SKIP: &str = "skip";
+pub const ACTION_NEXT_PHASE: &str = "start";
+pub const ACTION_LAP: &str = "lap";
+pub const ACTION_RESET: &str = "reset";
+
+const GLYPH_SKIP: char = '\u{E893}';
+const GLYPH_LAP: char = '\u{E7C1}';
+const GLYPH_RESET: char = '\u{E72C}';
 
 /// The launcher: the field, a live reading of what Enter will start, and the presets.
 /// `hint` replaces the detail line (a refusal: "10 timers is the limit").
@@ -131,6 +147,124 @@ pub fn finished(done: &[Finished], late_at: Option<u64>) -> View {
     }
 }
 
+/// A running (or paused) focus phase. `dnd` is the Do Not Disturb line, if any.
+pub fn focus(f: &Focus, now: u64, now_unix: u64, dnd: Option<&str>) -> View {
+    let clock = Clock { value_ms: f.left(now), at_unix_ms: now_unix, running: f.running(), down: true };
+    let ring = Element::ClockRing { clock, total_ms: f.length_ms };
+    let on_break = f.phase.is_break();
+    let round = format!("Round {} of {}", f.round(), f.plan.rounds);
+    let detail = match (f.running(), dnd) {
+        (false, _) => "Paused".to_string(),
+        (true, Some(dnd)) if !on_break => format!("{round} · {dnd}"),
+        (true, _) => round,
+    };
+    let mut buttons = vec![glyph(ACTION_TOGGLE, if f.running() { GLYPH_PAUSE } else { GLYPH_PLAY }, ButtonRole::Accent)];
+    if on_break {
+        buttons.push(glyph(ACTION_SKIP, GLYPH_SKIP, ButtonRole::Secondary));
+    }
+    buttons.push(glyph(ACTION_END, GLYPH_CANCEL, ButtonRole::Secondary));
+    View {
+        accent: Some(if on_break { BREAK_ACCENT } else { FOCUS_ACCENT }),
+        audio: None,
+        compact: CompactView { leading: ring.clone(), trailing: Element::Clock(clock) },
+        minimal: ring.clone(),
+        expanded: Some(ExpandedView {
+            leading: ring,
+            eyebrow: Some(if on_break { "Break" } else { "Focus" }.into()),
+            headline: Headline::Clock { clock, tenths: false },
+            detail: Some(detail),
+            trailing: Element::Empty,
+            rows: vec![Row::Buttons(buttons)],
+            wide: false,
+            tint: false,
+            pager: None,
+            open: None,
+        }),
+    }
+}
+
+/// A focus phase ended and the next waits to be started.
+pub fn phase_end(f: &Focus) -> View {
+    let next = f.next_phase();
+    let bell = Element::Glyph { glyph: GLYPH_BELL, tone: Tone::Accent };
+    let (eyebrow, headline, detail, buttons) = match next {
+        Phase::Work => (
+            "Break",
+            "Back to it",
+            format!("Round {} of {}", f.round(), f.plan.rounds),
+            vec![text(ACTION_END, "End", ButtonRole::Secondary), text(ACTION_NEXT_PHASE, "Start focus", ButtonRole::Primary)],
+        ),
+        Phase::ShortBreak | Phase::LongBreak => {
+            let length = if next == Phase::LongBreak { f.plan.long_break_ms } else { f.plan.short_break_ms };
+            (
+                "Focus",
+                "Break time",
+                format!("{} break", length_text(length)),
+                vec![text(ACTION_SKIP, "Skip break", ButtonRole::Secondary), text(ACTION_NEXT_PHASE, "Start break", ButtonRole::Primary)],
+            )
+        }
+    };
+    View {
+        accent: Some(if next == Phase::Work { BREAK_ACCENT } else { FOCUS_ACCENT }),
+        audio: None,
+        compact: CompactView { leading: bell.clone(), trailing: Element::Text { text: headline.into(), tone: Tone::Accent } },
+        minimal: bell,
+        expanded: Some(ExpandedView {
+            leading: Element::Art(reui_protocol::Art::Glyph(GLYPH_BELL)),
+            eyebrow: Some(eyebrow.into()),
+            headline: Headline::Text(headline.into()),
+            detail: Some(detail),
+            trailing: Element::Empty,
+            rows: vec![Row::Buttons(buttons)],
+            wide: false,
+            tint: false,
+            pager: None,
+            open: None,
+        }),
+    }
+}
+
+pub fn stopwatch(s: &Stopwatch, now: u64, now_unix: u64) -> View {
+    let clock = Clock { value_ms: s.elapsed(now), at_unix_ms: now_unix, running: s.running(), down: false };
+    let mark = Element::Glyph { glyph: GLYPH_TIMER, tone: if s.running() { Tone::Accent } else { Tone::Secondary } };
+    let detail = match s.laps.last() {
+        Some(lap) => format!("Lap {} · {}", s.laps.len(), tenths_text(*lap)),
+        None if !s.running() => "Paused".into(),
+        None => String::new(),
+    };
+    View {
+        accent: Some(STOPWATCH_ACCENT),
+        audio: None,
+        compact: CompactView { leading: mark.clone(), trailing: Element::Clock(clock) },
+        minimal: mark,
+        expanded: Some(ExpandedView {
+            leading: Element::Art(reui_protocol::Art::Glyph(GLYPH_TIMER)),
+            eyebrow: Some("Stopwatch".into()),
+            headline: Headline::Clock { clock, tenths: true },
+            detail: (!detail.is_empty()).then_some(detail),
+            trailing: Element::Empty,
+            rows: vec![Row::Buttons(vec![
+                glyph(ACTION_TOGGLE, if s.running() { GLYPH_PAUSE } else { GLYPH_PLAY }, ButtonRole::Accent),
+                glyph(ACTION_LAP, GLYPH_LAP, ButtonRole::Secondary),
+                glyph(ACTION_RESET, GLYPH_RESET, ButtonRole::Secondary),
+            ])],
+            wide: false,
+            tint: false,
+            pager: None,
+            open: None,
+        }),
+    }
+}
+
+/// `m:ss.t` (a lap).
+fn tenths_text(ms: u64) -> String {
+    let tenths = ms / 100;
+    let secs = tenths / 10;
+    let (h, m, s) = (secs / 3600, secs / 60 % 60, secs % 60);
+    let whole = if h > 0 { format!("{h}:{m:02}:{s:02}") } else { format!("{m}:{s:02}") };
+    format!("{whole}.{}", tenths % 10)
+}
+
 fn clock(t: &Timer, now: u64, now_unix: u64) -> Clock {
     Clock { value_ms: t.left(now), at_unix_ms: now_unix, running: t.running(), down: true }
 }
@@ -190,6 +324,19 @@ mod tests {
         let refused = launcher("x", &Parsed::Unknown, "25m", &[], Some("10 timers is the limit")).expanded.unwrap();
         assert_eq!(refused.detail.as_deref(), Some("10 timers is the limit"));
         assert_eq!(clock_text(90 * 60_000), "1:30:00");
+    }
+
+    #[test]
+    fn focus_reads_its_round_and_asks_before_the_break() {
+        use super::super::focus::Plan;
+        let plan = Plan { work_ms: 25 * 60_000, short_break_ms: 5 * 60_000, long_break_ms: 15 * 60_000, rounds: 4 };
+        let mut f = Focus::start(plan, 0);
+        let card = focus(&f, 0, 0, Some("Do Not Disturb on")).expanded.unwrap();
+        assert_eq!(card.detail.as_deref(), Some("Round 1 of 4 · Do Not Disturb on"));
+        assert!(f.end_phase(25 * 60_000, false));
+        let ask = phase_end(&f).expanded.unwrap();
+        assert_eq!((ask.headline, ask.detail.as_deref()), (Headline::Text("Break time".into()), Some("5 min break")));
+        assert_eq!(tenths_text(72_480), "1:12.4");
     }
 
     #[test]

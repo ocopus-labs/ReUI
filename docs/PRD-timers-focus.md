@@ -133,7 +133,7 @@ On Windows, a timer lives in the Clock app, behind other windows. You start it t
   - after a break: hero "Back to it", Start focus (Primary) and End (Secondary);
   - the same ring and cap rules as §5.3 apply;
   - with **auto-start** on (off by default), the next phase starts at once and only a short chime plays;
-  - unanswered for 10 min: the session ends quietly with "Focus ended after 3 rounds".
+  - unanswered for 10 min: the session ends quietly (no card).
 - **Do Not Disturb (opt-in, *T1*):**
   - turned on for work phases and back to what it was for breaks and the end;
   - if DND was already on when the session started, ReUI leaves it on (like Clock);
