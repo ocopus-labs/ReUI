@@ -85,4 +85,7 @@ features = [
     "Win32_Devices_Properties",
     "Win32_System_IO",
     "Win32_System_EventLog",
+    # Timers: the finish sound's fallback beep, "Ends 3:42 PM" in the user's time format
+    "Win32_System_Diagnostics_Debug",
+    "Win32_Globalization",
 ]

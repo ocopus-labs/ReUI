@@ -60,7 +60,7 @@ impl Renderer {
 /// the curve.
 fn compact_margin(element: &Element) -> f32 {
     match element {
-        Element::Art(_) | Element::Ring(_) => island::compact::SIDE_MARGIN,
+        Element::Art(_) | Element::Ring(_) | Element::ClockRing { .. } => island::compact::SIDE_MARGIN,
         _ => island::compact::TEXT_MARGIN,
     }
 }

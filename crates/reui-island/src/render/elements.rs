@@ -5,12 +5,13 @@ use std::borrow::Cow;
 
 use reui_design::tokens::{color, component, island, opacity};
 use reui_design::Color;
-use reui_protocol::Element;
+use reui_protocol::{Element, Tone};
 use windows::core::Result;
 use windows::Win32::Graphics::Direct2D::Common::*;
 use windows::Win32::Graphics::Direct2D::*;
 
 use crate::render::{tone_color, Align, Renderer, Slot, BARS};
+use crate::features::clock;
 use crate::render::images::art_shape;
 
 impl Renderer {
@@ -41,6 +42,11 @@ impl Renderer {
                 (s, s)
             }
             Element::Level { .. } => (component::level::WIDTH, component::level::HEIGHT),
+            Element::Clock(clock) => return self.measure(&clock_text(clock), slot),
+            Element::ClockRing { .. } => {
+                let s = ring_size(slot).0;
+                (s, s)
+            }
         })
     }
 
@@ -73,6 +79,11 @@ impl Renderer {
                     Slot::Minimal => self.ring(rt, *value, slot, left + w / 2.0, mid, fill)?,
                     _ => self.level(rt, *value, left, top, w, h, fill)?,
                 }
+            }
+            Element::Clock(clock) => self.element(rt, &clock_text(clock), slot, x, mid, align, accent)?,
+            Element::ClockRing { clock, total_ms } => {
+                let fill = if clock.running { accent } else { accent.with_alpha(accent.a * opacity::LEVEL_DIM) };
+                self.ring(rt, clock::fraction(clock, *total_ms, reui_protocol::unix_ms()), slot, left + w / 2.0, mid, fill)?;
             }
         }
         Ok(())
@@ -137,6 +148,12 @@ impl Renderer {
         }
         Ok(())
     }
+}
+
+/// A clock as the text it reads now: the accent while it runs, quieter while stopped.
+fn clock_text(c: &reui_protocol::Clock) -> Element {
+    let tone = if c.running { Tone::Accent } else { Tone::Secondary };
+    Element::Text { text: clock::text(c, reui_protocol::unix_ms(), false), tone }
 }
 
 /// (diameter, stroke)

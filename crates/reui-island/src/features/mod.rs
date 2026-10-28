@@ -3,6 +3,7 @@
 
 pub mod clipboard;
 pub mod clipboard_keys;
+pub mod clock;
 pub mod level;
 pub mod music;
 pub mod visualizer;

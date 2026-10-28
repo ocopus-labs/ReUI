@@ -1,6 +1,6 @@
 //! Rehearses the real flows end to end with fake data, covering the design system's
 //! building blocks: now-playing (art or a real image, bars, progress, transport), a
-//! countdown timer (ring, hero numerals, inline controls, minimal bubble), and a recurring
+//! countdown timer the island runs by itself (ring, hero numerals, inline controls, minimal bubble), and a recurring
 //! agent permission request that takes over the island and must be answered or times out
 //! and fails open, as the real bridge will.
 
@@ -8,8 +8,8 @@ use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 
-use reui_protocol::{Art, Button, ButtonContent, ButtonRole, CompactView, Element, ExpandedView, Headline, ImageId, Priority, Rgb, Row, Tone};
-use tokio::time::{interval_at, sleep_until, Instant, MissedTickBehavior};
+use reui_protocol::{unix_ms, Art, Button, ButtonContent, ButtonRole, Clock, CompactView, Element, ExpandedView, Headline, ImageId, Priority, Rgb, Row, Tone};
+use tokio::time::{sleep, sleep_until, Instant};
 
 use super::Module;
 use crate::hub::{ModuleContext, ModuleInput, View};
@@ -67,12 +67,9 @@ async fn run(mut ctx: ModuleContext) {
     let mut playing = true;
     publish_music(&ctx, track, playing, image);
 
-    let mut timer_left = Some(TIMER_LENGTH);
-    let mut timer_running = true;
-    publish_timer(&ctx, TIMER_LENGTH, timer_running);
-    // One wake-up a second, only while the timer runs (a countdown is information, not decoration).
-    let mut tick = interval_at(Instant::now() + Duration::from_secs(1), Duration::from_secs(1));
-    tick.set_missed_tick_behavior(MissedTickBehavior::Skip);
+    // The island runs the clock; the hub only wakes when it ends or is paused.
+    let mut timer = Some(Clock { value_ms: u64::from(TIMER_LENGTH) * 1000, at_unix_ms: unix_ms(), running: true, down: true });
+    publish_timer(&ctx, timer.unwrap());
 
     let mut requests = 0usize;
     let mut pending: Option<(String, Instant)> = None;
@@ -80,7 +77,7 @@ async fn run(mut ctx: ModuleContext) {
 
     loop {
         let deadline = pending.as_ref().map(|(_, at)| *at).unwrap_or(next_request);
-        let ticking = timer_running && timer_left.is_some();
+        let timer_left = timer.filter(|c| c.running).map(|c| Duration::from_millis(c.value_at(unix_ms())));
         tokio::select! {
             input = ctx.next() => {
                 let action = match input {
@@ -92,9 +89,14 @@ async fn run(mut ctx: ModuleContext) {
                     ("music", "prev") => track = (track + TRACKS.len() - 1) % TRACKS.len(),
                     ("music", "next") => track = (track + 1) % TRACKS.len(),
                     ("music", "play") => playing = !playing,
-                    ("timer", "pause") => timer_running = !timer_running,
+                    ("timer", "pause") => {
+                        timer = timer.map(|c| {
+                            let now = unix_ms();
+                            Clock { value_ms: c.value_at(now), at_unix_ms: now, running: !c.running, down: true }
+                        });
+                    }
                     ("timer", "stop") => {
-                        timer_left = None;
+                        timer = None;
                         ctx.retract("timer");
                     }
                     (key, decision) if pending.as_ref().is_some_and(|(k, _)| k == key) => {
@@ -106,19 +108,13 @@ async fn run(mut ctx: ModuleContext) {
                     (key, other) => println!("demo: ignoring {other} on {key}"),
                 }
                 publish_music(&ctx, track, playing, image);
-                if let Some(left) = timer_left {
-                    publish_timer(&ctx, left, timer_running);
+                if let Some(clock) = timer {
+                    publish_timer(&ctx, clock);
                 }
             }
-            _ = tick.tick(), if ticking => {
-                let left = timer_left.unwrap_or(0).saturating_sub(1);
-                if left == 0 {
-                    timer_left = None;
-                    ctx.retract("timer");
-                } else {
-                    timer_left = Some(left);
-                    publish_timer(&ctx, left, timer_running);
-                }
+            _ = sleep(timer_left.unwrap_or_default()), if timer_left.is_some() => {
+                timer = None;
+                ctx.retract("timer");
             }
             _ = sleep_until(deadline) => {
                 if let Some((key, _)) = pending.take() {
@@ -192,20 +188,21 @@ fn publish_music(ctx: &ModuleContext, track: usize, playing: bool, image: Option
     );
 }
 
-fn publish_timer(ctx: &ModuleContext, left: u32, running: bool) {
-    let ring = Element::Ring(left as f32 / TIMER_LENGTH as f32);
+fn publish_timer(ctx: &ModuleContext, clock: Clock) {
+    let ring = Element::ClockRing { clock, total_ms: u64::from(TIMER_LENGTH) * 1000 };
+    let running = clock.running;
     ctx.publish(
         "timer",
         Priority::Ongoing,
         View {
             accent: Some(TIMER_ACCENT),
             audio: None,
-            compact: CompactView { leading: ring.clone(), trailing: Element::Text { text: clock(left), tone: Tone::Accent } },
+            compact: CompactView { leading: ring.clone(), trailing: Element::Clock(clock) },
             minimal: ring.clone(),
             expanded: Some(ExpandedView {
                 leading: ring,
                 eyebrow: Some("Timer".into()),
-                headline: Headline::Value(clock(left)),
+                headline: Headline::Clock { clock, tenths: false },
                 detail: (!running).then(|| "Paused".into()),
                 trailing: Element::Empty,
                 // A lone glyph row sits inline beside the value.

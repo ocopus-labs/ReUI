@@ -28,7 +28,7 @@ use windows::Win32::UI::WindowsAndMessaging::{
     CallNextHookEx, CreateWindowExW, DefWindowProcW, DispatchMessageW, GetMessageW, KillTimer, PostMessageW, RegisterClassW, RegisterDeviceNotificationW, RegisterWindowMessageW, SetTimer,
     SetWindowsHookExW, UnhookWindowsHookEx, DBT_DEVICEARRIVAL, DBT_DEVICEREMOVECOMPLETE, DBT_DEVTYP_DEVICEINTERFACE, DEVICE_NOTIFY_WINDOW_HANDLE, DEV_BROADCAST_DEVICEINTERFACE_W,
     DEV_BROADCAST_HDR, HC_ACTION, HHOOK, KBDLLHOOKSTRUCT, MSG, PBT_APMRESUMEAUTOMATIC, PBT_POWERSETTINGCHANGE, WH_KEYBOARD_LL, WM_APP, WM_DEVICECHANGE, WM_DISPLAYCHANGE, WM_INPUT, WM_KEYUP,
-    WM_POWERBROADCAST, WM_SYSKEYUP, WM_TIMER, WM_WTSSESSION_CHANGE, WNDCLASSW, WS_EX_TOOLWINDOW, WS_POPUP, WTS_SESSION_UNLOCK,
+    WM_POWERBROADCAST, WM_SYSKEYUP, WM_TIMECHANGE, WM_TIMER, WM_WTSSESSION_CHANGE, WNDCLASSW, WS_EX_TOOLWINDOW, WS_POPUP, WTS_SESSION_UNLOCK,
 };
 
 use super::{dispatch, dispatch_setting, LockKey, Setting, SystemEvent};
@@ -215,6 +215,10 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         }
         WM_DISPLAYCHANGE => {
             dispatch(SystemEvent::DisplaysChanged);
+            DefWindowProcW(hwnd, msg, wparam, lparam)
+        }
+        WM_TIMECHANGE => {
+            dispatch(SystemEvent::TimeChanged);
             DefWindowProcW(hwnd, msg, wparam, lparam)
         }
         WM_LOCK_HOOK => {

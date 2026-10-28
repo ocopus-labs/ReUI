@@ -9,6 +9,7 @@ use reui_protocol::{
 };
 use windows::Win32::UI::WindowsAndMessaging::*;
 
+use crate::features::clock;
 use crate::features::level;
 use crate::features::music;
 use crate::render;
@@ -43,6 +44,8 @@ pub(super) const TIMER_LYRIC: usize = 12;
 pub(super) const TIMER_LEVEL: usize = 13;
 /// "Pause ReUI" ends (one-shot, set for the time left).
 pub(super) const TIMER_PAUSE: usize = 14;
+/// A clock on screen (a timer, a stopwatch) reads differently: one-shot, just after it does.
+pub(super) const TIMER_CLOCK: usize = 15;
 
 /// How often an open card with a playing timeline redraws its position.
 const TICK_MS: u32 = 1000;
@@ -78,6 +81,7 @@ impl Pill {
                 self.redraw_expanded();
                 self.update_tick();
             }
+            TIMER_CLOCK => self.tick_clock(),
             TIMER_SPIN if self.logo_state.is_some_and(|(_, ticking)| ticking) => {
                 unsafe { SetTimer(Some(self.hwnd), TIMER_SPIN, motion::logo::INTERVAL, None) };
                 self.tick_logo();
@@ -117,6 +121,7 @@ impl Pill {
     /// Lyrics move on at their own lines too: the tick comes early when a line starts
     /// before the next whole second.
     pub(super) fn update_tick(&self) {
+        self.update_clock_tick();
         let playing = self.timeline_now().filter(|(_, _, playing, _)| *playing);
         unsafe {
             match playing {
@@ -129,6 +134,51 @@ impl Pill {
                 _ => _ = KillTimer(Some(self.hwnd), TIMER_TICK),
             }
         }
+    }
+
+    /// Running clocks (timers, stopwatches) redraw just after what they read changes, and
+    /// only while they're on screen: the pill's compact sides, the bubble, an open card.
+    /// A hidden island, or one whose clocks are all stopped, has no timer at all.
+    pub(super) fn update_clock_tick(&self) {
+        let now = reui_protocol::unix_ms();
+        let open = self.state == State::Expanded;
+        let compact = matches!(self.state, State::Compact | State::Peek);
+        let front = self.front().and_then(|a| clock::next_change(a, compact, false, open, now));
+        let second = self.snapshot.activities.get(1).and_then(|a| clock::next_change(a, false, self.minimal, false, now));
+        unsafe {
+            match front.into_iter().chain(second).min().filter(|_| self.shown) {
+                // A little after the change, so the redraw lands on the new reading.
+                Some(ms) => _ = SetTimer(Some(self.hwnd), TIMER_CLOCK, (ms as u32).saturating_add(15), None),
+                None => _ = KillTimer(Some(self.hwnd), TIMER_CLOCK),
+            }
+        }
+    }
+
+    /// Redraws the surfaces that show a clock. The compact side is redrawn even under an
+    /// open card, so the pill's width is right when it folds back; a width change (9:59
+    /// after 10:00) re-springs the pill only when compact is what's showing.
+    fn tick_clock(&mut self) {
+        let accent = |a: &Activity| a.accent.map(render::rgb).unwrap_or(color::accent::DEFAULT);
+        if let Some(a) = self.snapshot.activities.first().filter(|a| clock::in_compact(a)) {
+            match self.renderer.draw_compact(&self.compact_surface, Some(&a.compact), accent(a), None) {
+                Ok(layout) if layout.width != self.compact_width => {
+                    self.compact_width = layout.width;
+                    self.retarget();
+                }
+                Ok(_) => {}
+                Err(e) => eprintln!("island: redraw failed: {e}"),
+            }
+        }
+        if let Some(a) = self.snapshot.activities.get(1).filter(|a| matches!(a.minimal, reui_protocol::Element::Clock(_) | reui_protocol::Element::ClockRing { .. })) {
+            if let Err(e) = self.renderer.draw_minimal(&self.minimal_surface, Some(&a.minimal), accent(a), None) {
+                eprintln!("island: redraw failed: {e}");
+            }
+        }
+        let open_clock = self.front().is_some_and(clock::in_expanded);
+        if self.state == State::Expanded && open_clock {
+            self.redraw_expanded();
+        }
+        self.update_clock_tick();
     }
 
     /// The open card's timeline as (position now, length, playing, rate), a held seek

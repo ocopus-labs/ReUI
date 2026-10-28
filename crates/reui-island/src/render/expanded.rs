@@ -4,6 +4,7 @@
 
 use reui_design::tokens::{color, component, island, opacity, radius, space};
 use reui_design::Color;
+use crate::features::clock;
 use reui_protocol::{Button, ButtonContent, Element, ExpandedView, Headline, Row};
 use windows::core::Result;
 use windows::UI::Composition::CompositionDrawingSurface;
@@ -62,7 +63,7 @@ impl Renderer {
             let line_gap = island::expanded::LINE_GAP;
             let eyebrow_h = view.eyebrow.as_ref().map_or(0.0, |_| self.fonts.eyebrow.style.line_height + line_gap);
             let hero_h = match &view.headline {
-                Headline::Value(_) => self.fonts.value.style.line_height,
+                Headline::Value(_) | Headline::Clock { .. } => self.fonts.value.style.line_height,
                 Headline::Text(_) => self.fonts.headline.style.line_height,
                 Headline::Code(_) => self.fonts.code.style.line_height + 2.0 * component::chip::PADDING_Y,
             };
@@ -127,6 +128,10 @@ impl Renderer {
             }
             match &view.headline {
                 Headline::Value(s) => self.text(rt, s, &self.fonts.value, text_left, y, line_w, Align::Start, color::label::PRIMARY)?,
+                Headline::Clock { clock: c, tenths } => {
+                    let tone = if c.running { color::label::PRIMARY } else { color::label::SECONDARY };
+                    self.text(rt, &clock::text(c, reui_protocol::unix_ms(), *tenths), &self.fonts.value, text_left, y, line_w, Align::Start, tone)?
+                }
                 Headline::Text(s) => self.text(rt, s, &self.fonts.headline, text_left, y, line_w, Align::Start, color::label::PRIMARY)?,
                 Headline::Code(s) => {
                     let (px, py) = (component::chip::PADDING_X, component::chip::PADDING_Y);

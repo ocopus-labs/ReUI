@@ -221,6 +221,7 @@ impl Pill {
         self.update_bars();
         self.update_logo();
         self.update_capture();
+        self.update_clock_tick();
     }
 
     /// Emerges from the top edge (slide down, scale up with a little overshoot, fade in) or

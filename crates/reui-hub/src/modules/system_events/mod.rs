@@ -1,5 +1,5 @@
 //! System events shared by modules: one hidden top-level window (see `window.rs`) that
-//! receives power settings, resume and unlock, device-interface arrivals (volumes, portable
+//! receives power settings, resume and unlock, clock changes, device-interface arrivals (volumes, portable
 //! devices), brightness keys as Raw Input, the lock keys, Explorer restarts and display
 //! changes, and hands them to every subscriber.
 //!
@@ -59,6 +59,8 @@ pub enum SystemEvent {
     Resumed,
     /// The session was unlocked.
     Unlocked,
+    /// The system clock or time zone changed (`WM_TIMECHANGE`).
+    TimeChanged,
     /// A storage volume arrived or left; the receiver rescans.
     Volume,
     /// A portable device (phone, camera over MTP/PTP) arrived or left. `id` is a per-session

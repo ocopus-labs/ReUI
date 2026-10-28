@@ -86,6 +86,7 @@ On Windows, a timer lives in the Clock app, behind other windows. You start it t
     - anything that can't be parsed shows a quiet Note ("Type a length, like 10m") with no error colour.
   - **Preset capsules:** a row below the field, from Settings (default 1, 5, 10, 25 min), then Focus and Stopwatch. Clicking one starts it. The last 3 custom lengths show as the field's placeholder hint (*T4*).
 - **Tray and pill menu:** a "Timer" submenu with the presets, Focus session, Stopwatch and New timer….
+- **Command line:** `reui-bridge timer 10m tea` takes the same text, for scripts and coding agents.
 
 ### 5.2 Running timer (Ongoing, key `timer:<n>`, accent orange `#FF9F0A`)
 
@@ -160,7 +161,7 @@ On Windows, a timer lives in the Clock app, behind other windows. You start it t
 | Need | How | Notes |
 |---|---|---|
 | Deadlines | `std::time::Instant` (QPC on Windows: **counts sleep**) for the truth; `tokio::time::sleep_until` the soonest deadline | Waits don't count sleep time, so after resume (`system_events` `Resumed`) the module recomputes everything at once |
-| Surviving restarts | `%APPDATA%\ReUI\timers.json`: per timer `{ label, length_ms, ends_at_unix_ms | left_ms when paused }`, written on every change (not every tick) | Wall clock is used only across restarts; a clock change while running doesn't move a countdown (*E-T6*) |
+| Surviving restarts | `%APPDATA%\ReUI\timer-state.json`: per timer `{ label, length_ms, ends_at_unix_ms | left_ms when paused }`, written on every change (not every tick) | Wall clock is used only across restarts; a clock change while running doesn't move a countdown (*E-T6*) |
 | Surface ticking | `Clock { value_ms, at_unix_ms, running, counts_down }` in the protocol; the island computes `value ± (now − at)` and redraws once a second, just after each whole second, only while a running clock is on screen | Hub re-stamps on resume and on `WM_TIMECHANGE` so the surface's wall-clock math stays right |
 | Sound | `PlaySoundW` of a file (`SND_FILENAME | SND_ASYNC | SND_LOOP`), `PlaySoundW(None)` to stop; choices: Windows `Alarm01–10.wav` and `Ring01–10.wav` from `C:\Windows\Media`, or none | Files, not `SND_ALIAS`: scheme aliases may be silent. Missing file: fall back to `Alarm01.wav`, then to `MessageBeep` |
 | DND state (read) | WNF `WNF_SHEL_QUIETHOURS_ACTIVE_PROFILE_CHANGED` (`0x0D83063EA3BF1C75`) via `NtQueryWnfStateData`: 0 off, 1 priority only, 2 alarms only | Undocumented but stable since 1803 |
@@ -173,7 +174,7 @@ On Windows, a timer lives in the Clock app, behind other windows. You start it t
   - `mod.rs`: the module loop and the soonest-deadline sleep;
   - `parse.rs`: the duration parser, pure and unit-tested;
   - `clock.rs`: timers, stopwatch and focus state machines, pure and tested against a fake clock;
-  - `store.rs`: `timers.json`;
+  - `store.rs`: `timer-state.json`;
   - `sound.rs`;
   - `dnd.rs`: WNF read, COM toggle and verification;
   - `hotkey.rs`, or the shared hotkey code moved out of clipboard;
@@ -208,7 +209,7 @@ On Windows, a timer lives in the Clock app, behind other windows. You start it t
 | E-T11 | DND toggle fails or Windows build changes | Verified read-back; disables itself for the session; one quiet line |
 | E-T12 | User turns DND off by hand during focus | ReUI doesn't turn it back on until the next work phase |
 | E-T13 | Session ends (End, or unanswered) with DND on by ReUI | Restored to what it was before the session |
-| E-T14 | ReUI crashes during focus with DND on | `timers.json` records "DND set by us"; next start restores it if no session is resumed |
+| E-T14 | ReUI crashes during focus with DND on | `timer-state.json` records "DND set by us"; next start restores it if no session is resumed |
 | E-T15 | Timer's card open at the moment it ends | The card turns into the finish card in place |
 | E-T16 | Pause near 0 (0:00.4 left) | Paused shows `0:01` (ceil); never `0:00` while not done |
 | E-T17 | Stopwatch runs for days | Fine up to `999:59:59`; then shown as `999:59:59+` |
@@ -222,7 +223,7 @@ On Windows, a timer lives in the Clock app, behind other windows. You start it t
 - **Ringing:** `PlaySound` loop only.
 - **Memory:** < 1 MB for the module.
 
-## 10. Settings (`%APPDATA%\ReUI\timers.json` holds state; settings in `%APPDATA%\ReUI\timer-settings.json`, page "Timers")
+## 10. Settings (`%APPDATA%\ReUI\timers.json`, page "Timers"; running timers live in `timer-state.json`)
 
 | Setting | Default |
 |---|---|
@@ -240,7 +241,7 @@ On Windows, a timer lives in the Clock app, behind other windows. You start it t
 | M | Scope | Exit |
 |---|---|---|
 | **M0: Protocol + island clocks** | `Clock`, `Element::Clock`, `ClockRing`, `Headline::Clock`, protocol v17; island tick only while visible; paused dimming; demo timer moved onto it | Demo timer counts down without hub ticks; idle measured at 0 |
-| **M1: Timers core** | Parser, timer state machine (fake-clock tests), multiple timers + pager, finish (Decision → Alert), sound loop with cap, +1 min, cancel + undo, resume recompute, `timers.json` restore, late finish | S1, S3, S4, S5, S8, S9 |
+| **M1: Timers core** | Parser, timer state machine (fake-clock tests), multiple timers + pager, finish (Decision → Alert), sound loop with cap, +1 min, cancel + undo, resume recompute, `timer-state.json` restore, late finish | S1, S3, S4, S5, S8, S9 |
 | **M2: Starting** | Hotkey + launcher (field, live preview, preset capsules), tray / pill menu "Timer" submenu | S1 by keyboard only; S2 |
 | **M3: Focus + stopwatch** | Focus phases, ask vs auto-start, round counter, unanswered end; stopwatch with laps | S6 (without DND), S7 |
 | **M4: DND + Settings** | WNF read, COM toggle with verification, restore and crash recovery; Settings "Timers" page with sound preview | S6 with DND; E-T11–14 |
@@ -251,7 +252,7 @@ On Windows, a timer lives in the Clock app, behind other windows. You start it t
   - the parser (all the forms in §5.1, labels, limits);
   - countdown and stopwatch display rounding (E-T16, E-T19);
   - the timer and focus state machines on a fake clock (pause, resume, +1 min, phase order, long break every 4, unanswered end);
-  - restore from `timers.json` (running, paused, ended while off);
+  - restore from `timer-state.json` (running, paused, ended while off);
   - `Clock::value_at` clamping.
 - **Live checks:**
   - S1 to S11 on this PC;

@@ -70,8 +70,8 @@ impl Osd {
                     w.probe();
                 }
             }
-            // The Devices module's events.
-            OsEvent::PowerSource { .. } | OsEvent::BatteryPercent { .. } | OsEvent::Resumed | OsEvent::Unlocked | OsEvent::Volume | OsEvent::PortableDevice { .. } => {}
+            // The Devices and Timers modules' events.
+            OsEvent::TimeChanged | OsEvent::PowerSource { .. } | OsEvent::BatteryPercent { .. } | OsEvent::Resumed | OsEvent::Unlocked | OsEvent::Volume | OsEvent::PortableDevice { .. } => {}
         }
     }
 

@@ -12,7 +12,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-pub const PROTOCOL_VERSION: u32 = 16;
+pub const PROTOCOL_VERSION: u32 = 17;
 const MAX_FRAME: usize = 16 * 1024 * 1024;
 
 /// Per-user pipe name; the hub also restricts the pipe's ACL to the current user. A test
@@ -102,6 +102,61 @@ pub enum Element {
     /// draws it muted (the level is kept but not in effect). The surface eases between
     /// values, so a level that keeps changing reads as one movement.
     Level { value: f32, dim: bool },
+    /// Time that runs on by itself (a timer, a stopwatch): tabular numerals the surface
+    /// advances, so the hub sends it only when something changes. Dimmed while stopped.
+    Clock(Clock),
+    /// A ring in the accent colour showing how much of `total_ms` the clock has left
+    /// (counting down) or has run (counting up), advancing by itself.
+    ClockRing { clock: Clock, total_ms: u64 },
+}
+
+/// A time value that changes by itself: `value_ms` was true at `at_unix_ms`, and while
+/// `running` it moves down (`down`, a countdown, stopping at zero) or up from there.
+/// Surfaces show it rounded the way people read clocks: a countdown rounds up (the last
+/// second reads 0:01 and 0:00 only at the end), a count-up rounds down.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Clock {
+    pub value_ms: u64,
+    pub at_unix_ms: u64,
+    pub running: bool,
+    pub down: bool,
+}
+
+impl Clock {
+    /// The value at `now_unix_ms`; a countdown never goes below zero.
+    pub fn value_at(&self, now_unix_ms: u64) -> u64 {
+        if !self.running {
+            return self.value_ms;
+        }
+        let elapsed = now_unix_ms.saturating_sub(self.at_unix_ms);
+        if self.down {
+            self.value_ms.saturating_sub(elapsed)
+        } else {
+            self.value_ms + elapsed
+        }
+    }
+
+    /// What it reads at `now_unix_ms` in whole steps of `step_ms` (1000 for seconds, 100
+    /// for tenths): a countdown rounds up, a count-up rounds down.
+    pub fn shown(&self, now_unix_ms: u64, step_ms: u64) -> u64 {
+        let v = self.value_at(now_unix_ms);
+        if self.down { v.div_ceil(step_ms) } else { v / step_ms }
+    }
+
+    /// Milliseconds until what it reads (in steps of `step_ms`) next changes, or `None`
+    /// when it won't (stopped, or a countdown at zero).
+    pub fn next_change(&self, now_unix_ms: u64, step_ms: u64) -> Option<u64> {
+        if !self.running {
+            return None;
+        }
+        let v = self.value_at(now_unix_ms);
+        match (self.down, v % step_ms) {
+            (true, 0) if v == 0 => None,
+            (true, 0) => Some(step_ms),
+            (true, r) => Some(r),
+            (false, r) => Some(step_ms - r),
+        }
+    }
 }
 
 /// Compact presentation: two sides around the island's centre.
@@ -118,6 +173,8 @@ pub enum Headline {
     Text(String),
     /// Commands, paths and code: monospace.
     Code(String),
+    /// A [`Clock`] as the hero numerals; `tenths` adds a tenths digit (a stopwatch).
+    Clock { clock: Clock, tenths: bool },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
@@ -436,6 +493,33 @@ pub async fn read_frame<R: AsyncRead + Unpin, T: DeserializeOwned>(r: &mut R) ->
 
 #[cfg(test)]
 mod tests {
+    use super::Clock;
+
+    #[test]
+    fn countdown_rounds_up_and_stops_at_zero() {
+        let c = Clock { value_ms: 10_000, at_unix_ms: 1_000, running: true, down: true };
+        assert_eq!(c.shown(1_000, 1000), 10);
+        assert_eq!(c.shown(1_001, 1000), 10);
+        assert_eq!(c.shown(1_000 + 9_400, 1000), 1);
+        assert_eq!(c.shown(1_000 + 10_000, 1000), 0);
+        assert_eq!(c.value_at(1_000 + 60_000), 0);
+        assert_eq!(c.next_change(1_000 + 9_400, 1000), Some(600));
+        assert_eq!(c.next_change(1_000 + 2_000, 1000), Some(1000));
+        assert_eq!(c.next_change(1_000 + 10_000, 1000), None);
+    }
+
+    #[test]
+    fn count_up_rounds_down() {
+        let c = Clock { value_ms: 0, at_unix_ms: 0, running: true, down: false };
+        assert_eq!(c.shown(999, 1000), 0);
+        assert_eq!(c.shown(1_000, 1000), 1);
+        assert_eq!(c.shown(1_250, 100), 12);
+        assert_eq!(c.next_change(1_250, 1000), Some(750));
+        let stopped = Clock { running: false, ..c };
+        assert_eq!(stopped.next_change(5_000, 1000), None);
+        assert_eq!(stopped.value_at(5_000), 0);
+    }
+
     use super::*;
 
     #[tokio::test]

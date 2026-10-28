@@ -12,6 +12,10 @@
 //! `reui-bridge test claude` sends a synthetic event through the same pipe a hook uses
 //! (Settings' "Send test event"); the agent module answers it with a short "connected"
 //! moment in the island, never a session. Exits 1 if ReUI isn't running.
+//!
+//! `reui-bridge timer <length and label>` starts a timer (`10m tea`, `1h30`, `focus`,
+//! `stopwatch`), the same text the island's timer field takes, for scripts and agents.
+//! Exits 1 if ReUI isn't running.
 
 mod install;
 
@@ -51,12 +55,19 @@ fn main() {
                 1
             }
         },
+        Some("timer") => match timer(&args[1..].join(" ")) {
+            Ok(()) => 0,
+            Err(e) => {
+                eprintln!("reui-bridge: {e}");
+                1
+            }
+        },
         Some(agent) => {
             hook(agent);
             0
         }
         None => {
-            eprintln!("usage: reui-bridge <agent>  |  reui-bridge install|uninstall <agent> [--scope user|project|local] [--project DIR]  |  reui-bridge test <agent>");
+            eprintln!("usage: reui-bridge <agent>  |  reui-bridge install|uninstall <agent> [--scope user|project|local] [--project DIR]  |  reui-bridge test <agent>  |  reui-bridge timer <length> [label]");
             0
         }
     };
@@ -111,6 +122,28 @@ fn test(agent: Option<&str>) -> Result<String, String> {
         // Let the hub read it before the pipe closes.
         tokio::time::sleep(Duration::from_millis(100)).await;
         Ok("Sent a test event to ReUI".to_string())
+    })
+}
+
+/// `reui-bridge timer <text>`: hands the text to the Timers module, as Settings sends commands.
+fn timer(text: &str) -> Result<(), String> {
+    if text.trim().is_empty() {
+        return Err("say how long, like `reui-bridge timer 10m tea`".into());
+    }
+    let runtime = tokio::runtime::Builder::new_current_thread().enable_all().build().map_err(|e| e.to_string())?;
+    runtime.block_on(async {
+        let pipe = timeout(CONNECT_TIMEOUT, connect()).await.ok().flatten().ok_or("ReUI isn't running")?;
+        let (mut reader, mut writer) = tokio::io::split(pipe);
+        write_frame(&mut writer, &ClientMsg::Hello { version: PROTOCOL_VERSION, surface: SurfaceKind::Settings }).await.map_err(|e| e.to_string())?;
+        match timeout(CONNECT_TIMEOUT, read_frame::<_, HubMsg>(&mut reader)).await {
+            Ok(Ok(HubMsg::Welcome { .. })) => {}
+            Ok(Ok(HubMsg::Rejected { reason })) => return Err(format!("ReUI refused: {reason}")),
+            _ => return Err("ReUI didn't answer".into()),
+        }
+        let action = format!("start:{}", text.trim());
+        write_frame(&mut writer, &ClientMsg::Command { module: "timers".into(), action }).await.map_err(|e| e.to_string())?;
+        tokio::time::sleep(Duration::from_millis(100)).await;
+        Ok(())
     })
 }
 

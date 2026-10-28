@@ -11,6 +11,7 @@ pub mod media;
 pub mod onboarding;
 pub mod osd;
 mod system_events;
+pub mod timers;
 pub mod updates;
 
 use std::future::Future;
