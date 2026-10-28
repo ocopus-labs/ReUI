@@ -8,7 +8,6 @@ use serde_json::{json, Value};
 use super::{button, flag, group, Effect, Page};
 use crate::model::doc::Doc;
 use crate::model::files::File;
-use crate::model::hotkey;
 use crate::state::State;
 use crate::system::{self, Startup};
 use crate::ui::{icons, Act, Block, Part, Role, Row, Target, Tone};
@@ -53,14 +52,7 @@ pub fn build(page: Page, state: &State) -> Vec<Block> {
             blocks.push(next());
         }
         Page::WelcomeShortcut => {
-            let ok = state.files.doc(File::Clipboard).error().is_none();
-            let row = Row::new("hotkey", "Shortcut");
-            let row = match state.hotkey_note.clone() {
-                Some((note, tone)) => row.detail(note).tone(tone),
-                None => row,
-            };
-            let row = row.part(Part::Hotkey { caps: hotkey::caps(&state.files.hotkey()), recording: state.recording }).enabled(ok);
-            blocks.push(group("", vec![row]));
+            blocks.push(group("", vec![super::shortcut::row(state, File::Clipboard, "")]));
             blocks.push(next());
         }
         _ => {
@@ -85,7 +77,7 @@ pub fn act(page: Page, state: &mut State, target: &Target, act: Act) -> Effect {
             let steps = Page::WELCOME;
             return Effect::Navigate(steps[(page.index() + 1).min(steps.len() - 1)]);
         }
-        ("hotkey", _, Act::Press) => return Effect::Record,
+        ("hotkey", _, Act::Press) => return Effect::Record(File::Clipboard),
         ("startup", _, Act::Press) => {
             let result = match state.startup {
                 Startup::DisabledInTaskManager => {

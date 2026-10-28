@@ -3,13 +3,12 @@
 
 use serde_json::Value;
 
-use super::{button, enable, flag, group, head, Effect, Page};
+use super::{button, enable, flag, group, head, shortcut, Effect, Page};
 use crate::ui::icons;
 use crate::keys;
 use crate::model::files::{add_app, File};
-use crate::model::hotkey::{self, Hotkey, Problem};
 use crate::state::State;
-use crate::ui::{Act, Block, Part, Role, Row, Target, Tone};
+use crate::ui::{Act, Block, Part, Role, Row, Target};
 
 /// Days of history; 0 keeps it forever.
 const RETENTION: [u64; 6] = [1, 7, 30, 90, 365, 0];
@@ -19,9 +18,7 @@ pub fn build(state: &State) -> Vec<Block> {
     enable(&mut blocks, state, File::Clipboard, "Clipboard history");
     let ok = state.files.doc(File::Clipboard).error().is_none();
 
-    let hotkey = state.files.hotkey();
-    let (detail, tone) = state.hotkey_note.clone().unwrap_or(("Opens clipboard history".into(), Tone::Secondary));
-    let hotkey_row = Row::new("hotkey", "Shortcut").detail(detail).tone(tone).part(Part::Hotkey { caps: hotkey::caps(&hotkey), recording: state.recording }).enabled(ok);
+    let hotkey_row = shortcut::row(state, File::Clipboard, "Opens clipboard history");
     let retention = Row::new("retention", "Keep history").detail("Pinned items are kept forever").part(Part::Dropdown { label: days(state.files.retention_days()) }).enabled(ok);
     blocks.push(group("History", vec![hotkey_row, retention, flag(state, File::Clipboard, "link_previews", "Link previews", "Fetches the title and image of copied links from their sites")]));
 
@@ -78,7 +75,7 @@ pub fn menu(state: &mut State, target: &Target) -> Option<(Vec<String>, Option<u
 pub fn act(state: &mut State, target: &Target, act: Act) -> Effect {
     let row = target.row.as_str();
     match (row, target.part, act) {
-        ("hotkey", _, Act::Press) => return Effect::Record,
+        ("hotkey", _, Act::Press) => return Effect::Record(File::Clipboard),
         ("retention", _, Act::Choose(i)) => {
             if let Some(&d) = choices(state.files.retention_days()).get(i) {
                 state.set(File::Clipboard, "retention_days", Value::from(d));
@@ -116,37 +113,6 @@ fn add(state: &mut State, name: &str) -> bool {
     }
 }
 
-/// A chord from the recorder: checked, then saved, or why not (P-3).
-pub fn chord(state: &mut State, mods: u32, vk: u32) {
-    state.recording = false;
-    let key = match Hotkey::from_keys(mods, vk, keys::char_of) {
-        Ok(key) => key,
-        Err(Problem::NeedsModifier) => return note(state, "Add Ctrl, Alt, Shift or Win to that key", Tone::Negative),
-        Err(Problem::Unsupported) => return note(state, "That key can't be a shortcut", Tone::Negative),
-    };
-    let current = Hotkey::parse(&state.files.hotkey(), keys::vk_of);
-    if current.as_ref() == Some(&key) {
-        state.hotkey_note = None;
-        return;
-    }
-    let held = Hotkey::parse(&state.held_hotkey, keys::vk_of).is_some_and(|h| h == key);
-    if !held && !keys::hotkey_free(&key) {
-        let free = std::iter::successors(key.alternative(), Hotkey::alternative).find(keys::hotkey_free);
-        let text = match free {
-            Some(alt) => format!("{} is taken by another app; {} is free", key.label(), alt.label()),
-            None => format!("{} is taken by another app", key.label()),
-        };
-        return note(state, &text, Tone::Negative);
-    }
-    state.set(File::Clipboard, "hotkey", Value::String(key.label()));
-    // The hub registers the shortcut when it starts.
-    state.hotkey_note = state.hub_running().then(|| ("Takes effect when ReUI restarts".to_string(), Tone::Warning));
-}
-
-fn note(state: &mut State, text: &str, tone: Tone) {
-    state.hotkey_note = Some((text.to_string(), tone));
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -170,14 +136,5 @@ mod tests {
         assert_eq!(choices(30), RETENTION);
         assert_eq!(choices(45), [1, 7, 30, 45, 90, 365, 0]);
         assert_eq!((days(0).as_str(), days(1).as_str(), days(365).as_str(), days(14).as_str()), ("Forever", "1 day", "1 year", "14 days"));
-    }
-
-    #[test]
-    fn a_plain_letter_is_refused() {
-        let (mut state, dir) = state("clipboard-hotkey");
-        chord(&mut state, 0, u32::from(b'K'));
-        assert_eq!(state.hotkey_note.as_ref().map(|n| n.1), Some(Tone::Negative));
-        assert_eq!(state.files.hotkey(), "Win+Alt+V");
-        _ = std::fs::remove_dir_all(&dir);
     }
 }

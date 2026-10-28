@@ -10,6 +10,7 @@ mod clipboard;
 mod devices;
 mod levels;
 mod music;
+mod timers;
 
 use reui_design::tokens::{color, component, island, opacity, prefs as s};
 use reui_design::Color;
@@ -38,6 +39,7 @@ pub fn draw(p: &Painter, preview: Preview, stage: Rect, tint: Color, enter: f32)
         Preview::Clipboard => (vec![clipboard::panel()], 0.72),
         Preview::Levels => (levels::moments(), 1.0),
         Preview::Devices => (devices::moments(), 0.8),
+        Preview::Timers => (timers::moments(), 0.8),
         Preview::Agents => (agents::moments(), 0.7),
     };
     let e = ease_out(enter);

@@ -291,3 +291,19 @@ mod tests {
         _ = std::fs::remove_dir_all(&dir);
     }
 }
+
+/// Plays a finish sound once, as the Timers module would (`Alarm01` from
+/// `C:\Windows\Media`); "none" stops any preview.
+pub fn play_sound(name: &str) {
+    use windows::Win32::Media::Audio::{PlaySoundW, SND_ASYNC, SND_FILENAME, SND_NODEFAULT};
+    let valid = !name.is_empty() && name.len() <= 32 && name.chars().all(|c| c.is_ascii_alphanumeric());
+    let windows = std::env::var_os("WINDIR").map_or_else(|| std::path::PathBuf::from(r"C:\Windows"), std::path::PathBuf::from);
+    let file = windows.join("Media").join(format!("{name}.wav"));
+    unsafe {
+        if name == "none" || !valid || !file.is_file() {
+            _ = PlaySoundW(PCWSTR::null(), None, Default::default());
+        } else {
+            _ = PlaySoundW(&HSTRING::from(file.as_os_str()), None, SND_FILENAME | SND_ASYNC | SND_NODEFAULT);
+        }
+    }
+}

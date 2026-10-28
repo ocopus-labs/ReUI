@@ -63,6 +63,14 @@ The volume and brightness keys show the level in the island. Hover or click it t
 
 Bluetooth devices show a card with their battery when they connect; this PC and its devices warn at 20 % and 10 %; plugging in shows the time to full; USB drives and memory cards show with **Eject**. **Devices** in the tray menu shows every connected device's battery. AirPods case and bud levels come from a short Bluetooth scan nearby, so that's off until you turn it on.
 
+## Timers
+
+Press **Win+Ctrl+T** (or Tray → Timer → New timer…) and type how long: `10` (minutes), `10m`, `90s`, `1h30`, `5:00`, with a label before or after (`10m tea`). Enter starts it; the island shows it counting down. Several can run at once; the one ending first is in the pill and the open card pages through the rest. When one ends the island opens with a sound: **Stop**, or **+1 min**. Timers keep running through sleep and restarts; one that ended meanwhile is shown quietly as "Finished at …".
+
+Type `focus` for a focus session (25 minutes of work, 5-minute breaks, a 15-minute break after every fourth); the island asks before each break and before going back to work. Settings → Timers can make it go on by itself and turn on Do Not Disturb while you work. Type `sw` for a stopwatch, with laps.
+
+`reui-bridge timer 10m tea` starts one from a script or a coding agent.
+
 ## Coding agents
 
 Claude Code, Codex and OpenCode sessions show in the island: what they're doing, when they finish (with time and tokens), and permission requests you can answer with **Allow** / **Deny** (Claude Code also offers **Always**).

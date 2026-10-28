@@ -46,6 +46,7 @@ pub const MINIMIZE: char = '\u{E921}';
 pub const CLOSE: char = '\u{E8BB}';
 pub const CHECK: char = '\u{E73E}';
 pub const CANCEL: char = '\u{E711}';
+pub const STOPWATCH: char = '\u{E916}';
 pub const SPARKLE: char = '\u{E734}';
 
 pub fn tile(glyph: char, color: reui_design::Color) -> Icon {
@@ -66,6 +67,9 @@ pub fn osd() -> Icon {
 }
 pub fn devices() -> Icon {
     tile(DEVICES, section::DEVICES)
+}
+pub fn timers() -> Icon {
+    tile(STOPWATCH, section::TIMERS)
 }
 pub fn agents() -> Icon {
     tile(CODE, section::AGENTS)

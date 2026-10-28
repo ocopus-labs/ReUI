@@ -409,8 +409,8 @@ impl App {
                 self.set_page(page);
                 return;
             }
-            Effect::Record => {
-                self.state.recording = true;
+            Effect::Record(file) => {
+                self.state.recording = Some(file);
                 self.state.hotkey_note = None;
                 keys::start(self.hwnd);
             }
@@ -487,21 +487,20 @@ impl App {
 
     /// The hotkey recorder heard a chord (`vk` 0: Esc).
     pub fn on_chord(&mut self, mods: u32, vk: u32) {
-        if !self.state.recording {
+        if self.state.recording.is_none() {
             return;
         }
         if vk == 0 {
-            self.state.recording = false;
+            self.state.recording = None;
         } else {
-            pages::clipboard_chord(&mut self.state, mods, vk);
+            pages::chord(&mut self.state, mods, vk);
         }
         self.rebuild();
     }
 
     pub fn cancel_recording(&mut self) {
         keys::stop();
-        if self.state.recording {
-            self.state.recording = false;
+        if self.state.recording.take().is_some() {
             self.rebuild();
         }
     }

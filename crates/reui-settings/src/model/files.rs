@@ -1,4 +1,4 @@
-//! The five settings files and what's in them: the same field names, defaults and
+//! The settings files and what's in them: the same field names, defaults and
 //! fallbacks the island and the hub modules use when they read them (see each module's
 //! `settings.rs`), so this window always shows what ReUI really does.
 
@@ -15,10 +15,11 @@ pub enum File {
     Clipboard,
     Osd,
     Devices,
+    Timers,
 }
 
 impl File {
-    pub const ALL: [File; 5] = [File::Island, File::Media, File::Clipboard, File::Osd, File::Devices];
+    pub const ALL: [File; 6] = [File::Island, File::Media, File::Clipboard, File::Osd, File::Devices, File::Timers];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -27,6 +28,7 @@ impl File {
             File::Clipboard => "clipboard.json",
             File::Osd => "osd.json",
             File::Devices => "devices.json",
+            File::Timers => "timers.json",
         }
     }
 
@@ -38,6 +40,7 @@ impl File {
             File::Clipboard => Some("clipboard"),
             File::Osd => Some("osd"),
             File::Devices => Some("devices"),
+            File::Timers => Some("timers"),
         }
     }
 
@@ -49,6 +52,7 @@ impl File {
             File::Clipboard => "clipboard",
             File::Osd => "osd",
             File::Devices => "devices",
+            File::Timers => "timers",
         }
     }
 
@@ -80,6 +84,28 @@ impl File {
                 "scroll_step": 0.02,
             }),
             File::Devices => json!({ "enabled": true, "connect_cards": true, "low_battery": true, "charging": true, "drives": true, "airpods": true, "phones": true, "slow_charger": false }),
+            File::Timers => json!({
+                "enabled": true,
+                "shortcut": "Win+Ctrl+T",
+                "presets": [1, 5, 10, 25],
+                "sound": "Alarm01",
+                "ring_for_s": 60,
+                "focus_work_min": 25,
+                "focus_short_break_min": 5,
+                "focus_long_break_min": 15,
+                "focus_rounds": 4,
+                "focus_auto_start": false,
+                "focus_dnd": false,
+            }),
+        }
+    }
+
+    /// The key of a file's shortcut, for the files that have one.
+    pub fn shortcut_key(self) -> Option<&'static str> {
+        match self {
+            File::Clipboard => Some("hotkey"),
+            File::Timers => Some("shortcut"),
+            _ => None,
         }
     }
 }
@@ -137,9 +163,33 @@ impl Files {
         number(self.doc(File::Media), "retract_after_pause_min")
     }
 
-    pub fn hotkey(&self) -> String {
-        let doc = self.doc(File::Clipboard);
-        doc.str("hotkey").map(str::trim).filter(|s| !s.is_empty()).or_else(|| doc.default("hotkey").and_then(Value::as_str)).unwrap_or_default().to_string()
+    /// A file's shortcut ("Win+Alt+V"), or "" for a file without one.
+    pub fn shortcut(&self, file: File) -> String {
+        let Some(key) = file.shortcut_key() else { return String::new() };
+        let doc = self.doc(file);
+        doc.str(key).map(str::trim).filter(|s| !s.is_empty()).or_else(|| doc.default(key).and_then(Value::as_str)).unwrap_or_default().to_string()
+    }
+
+    /// Minutes the module accepts (1 to a day), or the default.
+    pub fn minutes(&self, file: File, key: &str) -> u64 {
+        let doc = self.doc(file);
+        doc.get(key).and_then(Value::as_u64).filter(|m| (1..=1440).contains(m)).or_else(|| doc.default(key).and_then(Value::as_u64)).unwrap_or(1)
+    }
+
+    /// The finish sound ("Alarm01"), or "none".
+    pub fn timer_sound(&self) -> String {
+        let doc = self.doc(File::Timers);
+        let valid = |s: &&str| *s == "none" || (!s.is_empty() && s.len() <= 32 && s.chars().all(|c| c.is_ascii_alphanumeric()));
+        doc.str("sound").filter(valid).unwrap_or("Alarm01").to_string()
+    }
+
+    /// Seconds the finish sound rings; 0 until stopped.
+    pub fn ring_for(&self) -> u64 {
+        self.doc(File::Timers).get("ring_for_s").and_then(Value::as_u64).filter(|s| *s <= 600).unwrap_or(60)
+    }
+
+    pub fn focus_rounds(&self) -> u64 {
+        self.doc(File::Timers).get("focus_rounds").and_then(Value::as_u64).filter(|r| (1..=12).contains(r)).unwrap_or(4)
     }
 
     pub fn retention_days(&self) -> u64 {
@@ -198,7 +248,7 @@ mod tests {
         let island = f.doc(File::Island);
         assert!(island.bool("hide_in_fullscreen") && island.bool("check_updates") && island.bool("whats_new"));
         assert!(f.doc(File::Media).bool("enabled") && f.doc(File::Clipboard).bool("enabled") && f.doc(File::Devices).bool("enabled"));
-        assert_eq!((f.hotkey().as_str(), f.retention_days(), f.scroll_step()), ("Win+Alt+V", 30, 0.02));
+        assert_eq!((f.shortcut(File::Clipboard).as_str(), f.retention_days(), f.scroll_step()), ("Win+Alt+V", 30, 0.02));
         assert_eq!(f.ignored_apps().len(), 8);
         assert!(f.doc(File::Osd).bool("volume") && !f.doc(File::Osd).bool("lock_keys"));
         assert!(f.doc(File::Devices).bool("airpods") && !f.doc(File::Devices).bool("slow_charger"));
@@ -214,7 +264,7 @@ mod tests {
         std::fs::write(dir.join("settings.json"), r#"{ "visibility": "when-needed", "paused_until": 99 }"#).unwrap();
         let f = files(&dir);
         assert_eq!((f.visualizer(), f.retract_min()), (1, 0));
-        assert_eq!((f.hotkey().as_str(), f.ignored_apps(), f.retention_days()), ("Win+Alt+V", vec!["foo.exe".to_string()], 30));
+        assert_eq!((f.shortcut(File::Clipboard).as_str(), f.ignored_apps(), f.retention_days()), ("Win+Alt+V", vec!["foo.exe".to_string()], 30));
         assert_eq!(f.scroll_step(), 0.02);
         assert_eq!((f.visibility(), f.paused_until()), (2, Some(99)));
         _ = std::fs::remove_dir_all(&dir);

@@ -25,14 +25,14 @@ pub struct State {
     pub agent_notes: [Option<(String, Tone)>; 3],
     /// A write that failed for a reason other than an invalid file.
     pub write_error: Option<String>,
-    /// The hotkey recorder is listening.
-    pub recording: bool,
-    /// What the recorder last said ("taken by another app"), or that a new hotkey waits for
-    /// a restart.
-    pub hotkey_note: Option<(String, Tone)>,
-    /// The shortcut in the file when the window opened: the running hub holds that one, so
-    /// it never counts as taken.
-    pub held_hotkey: String,
+    /// The hotkey recorder is listening, for this file's shortcut.
+    pub recording: Option<File>,
+    /// What the recorder last said about a file's shortcut ("taken by another app"), or
+    /// that a new hotkey waits for a restart.
+    pub hotkey_note: Option<(File, String, Tone)>,
+    /// The shortcuts in the files when the window opened: the running hub holds those, so
+    /// they never count as taken.
+    pub held_hotkeys: Vec<(File, String)>,
     /// The ignored-apps field.
     pub field: String,
     /// The running apps the open menu lists.
@@ -57,7 +57,7 @@ impl State {
     pub fn new(paths: Paths) -> Self {
         let files = Files::open(&paths);
         let mut state = Self {
-            held_hotkey: files.hotkey(),
+            held_hotkeys: [File::Clipboard, File::Timers].map(|f| (f, files.shortcut(f))).to_vec(),
             files,
             startup: Startup::Off,
             agents: [Status::NotConnected; 3],
@@ -65,7 +65,7 @@ impl State {
             agent_last: [None; 3],
             agent_notes: Default::default(),
             write_error: None,
-            recording: false,
+            recording: None,
             hotkey_note: None,
             field: String::new(),
             menu_apps: Vec::new(),

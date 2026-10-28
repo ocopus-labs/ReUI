@@ -18,12 +18,17 @@
 //!   Alert) when a phase ended and the next waits to be started;
 //! - `stopwatch` (Ongoing).
 //!
+//! Do Not Disturb (opt-in, `dnd.rs`): turned on when a work phase starts if it was off,
+//! put back when the work stops (a break, the end), never touched when the user had it on
+//! already. A change that doesn't read back turns the feature off for the session. That
+//! ReUI turned it on is saved, so a crash doesn't leave it on (E-T14).
+//!
 //! Commands: `start:<text>` (what the launcher's field takes, `parse.rs`), `launcher`,
 //! `reload`. The launcher's hotkey (Win+Ctrl+T by default) lives on the shared
 //! system-events window.
 //!
-//! Files: `parse.rs`, `model.rs` (countdowns), `focus.rs`, `stopwatch.rs`, `store.rs`,
-//! `sound.rs`, `view.rs`, `settings.rs`.
+//! Files: `parse.rs`, `model.rs` (countdowns), `focus.rs`, `stopwatch.rs`, `dnd.rs`,
+//! `store.rs`, `sound.rs`, `view.rs`, `settings.rs`.
 
 use std::future::Future;
 use std::path::PathBuf;
@@ -34,6 +39,7 @@ use reui_protocol::{unix_ms, Priority, ACTION_COLLAPSED, ACTION_EXPANDED, ACTION
 use tokio::sync::mpsc;
 use tokio::time::{sleep_until, Instant};
 
+mod dnd;
 mod focus;
 mod model;
 pub mod parse;
@@ -43,7 +49,7 @@ mod stopwatch;
 mod store;
 mod view;
 
-use self::focus::{Focus, Plan};
+use self::focus::{Focus, Phase, Plan};
 use self::model::{Cancelled, Finished, Timers, LATE_MS};
 use self::parse::Parsed;
 use self::settings::Settings;
@@ -116,6 +122,19 @@ struct State {
     /// The last length typed into the launcher: its placeholder, and what a bare Enter
     /// starts (T4).
     last_typed: Option<String>,
+    dnd: Dnd,
+}
+
+/// Do Not Disturb as far as focus sessions go.
+struct Dnd {
+    /// ReUI turned it on and hasn't put it back.
+    ours: bool,
+    /// A change is on its way (it's checked half a second after).
+    pending: bool,
+    /// A change didn't stick; not tried again until the hub restarts (E-T11).
+    failed: bool,
+    /// Where a change's outcome comes back: (asked for on, it took).
+    results: mpsc::UnboundedSender<(bool, bool)>,
 }
 
 async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
@@ -126,6 +145,7 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
     let mut timers = Timers::default();
     let store = store::path();
     let loaded = store::load(&store, &mut timers, plan(&settings), 0, unix_ms());
+    let (dnd_tx, mut dnd_results) = mpsc::unbounded_channel();
     let mut state = State {
         epoch: Instant::now(),
         settings,
@@ -142,8 +162,11 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
         hotkey: None,
         launcher: None,
         last_typed: None,
+        dnd: Dnd { ours: loaded.dnd_ours, pending: false, failed: false, results: dnd_tx },
     };
     state.register_hotkey();
+    // Also puts back a Do Not Disturb that a crashed run left on (E-T14).
+    state.sync_dnd();
     if !loaded.finished.is_empty() {
         state.finish(loaded.finished);
     }
@@ -166,9 +189,11 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
                 SystemEvent::HotkeyTaken { id: HOTKEY_ID } => eprintln!("timers: the launcher hotkey is taken by another app"),
                 _ => continue,
             },
+            Some((on, took)) = dnd_results.recv() => state.dnd_changed(ctx, on, took),
             _ = sleep_until(deadline.unwrap_or_else(Instant::now)), if deadline.is_some() => {}
         }
         state.tick(ctx);
+        state.sync_dnd();
     }
 }
 
@@ -267,6 +292,7 @@ impl State {
             ("", "reload") => {
                 self.settings = Settings::load();
                 self.register_hotkey();
+                self.sync_dnd();
             }
             ("", "launcher") => return self.open_launcher(ctx),
             ("", command) if command.starts_with("start:") => {
@@ -334,6 +360,7 @@ impl State {
             _ => return,
         }
         self.save();
+        self.sync_dnd();
         self.publish(ctx);
     }
 
@@ -400,6 +427,60 @@ impl State {
         Ok(())
     }
 
+    /// Asks for the Do Not Disturb a focus session wants now: on while working (unless the
+    /// user has it on already, or it failed before), back off when ReUI turned it on and the
+    /// work stopped. A user who turns it off by hand mid-phase keeps it off (E-T12).
+    fn sync_dnd(&mut self) {
+        if self.dnd.pending {
+            return;
+        }
+        let working = self.focus.as_ref().is_some_and(|f| f.phase == Phase::Work && !f.waiting());
+        let wanted = working && self.settings.focus.dnd;
+        if wanted && !self.dnd.ours && !self.dnd.failed && dnd::is_on() == Some(false) {
+            self.request_dnd(true);
+        } else if !wanted && self.dnd.ours {
+            self.request_dnd(false);
+        }
+    }
+
+    fn request_dnd(&mut self, on: bool) {
+        self.dnd.pending = true;
+        let results = self.dnd.results.clone();
+        tokio::spawn(async move {
+            let asked = tokio::task::spawn_blocking(move || dnd::set(on)).await.unwrap_or_else(|_| Err("panicked".into()));
+            if let Err(e) = &asked {
+                eprintln!("timers: can't change Do Not Disturb: {e}");
+            }
+            // The shell takes a moment to apply it.
+            tokio::time::sleep(Duration::from_millis(500)).await;
+            let took = asked.is_ok() && dnd::is_on() == Some(on);
+            _ = results.send((on, took));
+        });
+    }
+
+    fn dnd_changed(&mut self, ctx: &ModuleContext, on: bool, took: bool) {
+        self.dnd.pending = false;
+        println!("timers: Do Not Disturb {} {}", if on { "on" } else { "off" }, if took { "(checked)" } else { "didn't take" });
+        if on && !took {
+            self.dnd.failed = true;
+        }
+        // Off is ours no more even if it didn't read back: the user may have changed it.
+        self.dnd.ours = on && took;
+        self.save();
+        self.publish(ctx);
+    }
+
+    /// The focus card's Do Not Disturb line, while working.
+    fn dnd_line(&self) -> Option<&'static str> {
+        if !self.settings.focus.dnd {
+            return None;
+        }
+        if self.dnd.failed {
+            return Some("Couldn't turn on Do Not Disturb");
+        }
+        (dnd::is_on() == Some(true)).then_some("Do Not Disturb on")
+    }
+
     fn end_focus(&mut self) {
         self.focus = None;
         self.focus_loud = false;
@@ -448,7 +529,7 @@ impl State {
     }
 
     fn save(&self) {
-        let state = store::State { timers: &self.timers, focus: self.focus.as_ref(), stopwatch: self.stopwatch.as_ref(), dnd_ours: false };
+        let state = store::State { timers: &self.timers, focus: self.focus.as_ref(), stopwatch: self.stopwatch.as_ref(), dnd_ours: self.dnd.ours };
         store::save(&self.store, &state, self.now(), unix_ms());
     }
 
@@ -472,7 +553,8 @@ impl State {
             }
             Some(f) => {
                 ctx.retract(FOCUS_NEXT);
-                ctx.publish(FOCUS, Priority::Ongoing, view::focus(f, now, now_unix, None));
+                let dnd = if f.phase == Phase::Work { self.dnd_line() } else { None };
+                ctx.publish(FOCUS, Priority::Ongoing, view::focus(f, now, now_unix, dnd));
             }
             None => {
                 ctx.retract(FOCUS);

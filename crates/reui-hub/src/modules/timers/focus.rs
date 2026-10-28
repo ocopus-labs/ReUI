@@ -127,7 +127,7 @@ impl Focus {
     /// a waiting session starts next.
     pub fn next_phase(&self) -> Phase {
         match self.phase {
-            Phase::Work if self.done_work % self.plan.rounds.max(1) == 0 => Phase::LongBreak,
+            Phase::Work if self.done_work.is_multiple_of(self.plan.rounds.max(1)) => Phase::LongBreak,
             Phase::Work => Phase::ShortBreak,
             _ => Phase::Work,
         }

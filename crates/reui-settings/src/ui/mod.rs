@@ -28,6 +28,7 @@ pub enum Preview {
     Clipboard,
     Levels,
     Devices,
+    Timers,
     Agents,
 }
 

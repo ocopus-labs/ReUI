@@ -138,7 +138,7 @@ impl App {
             }
             return false;
         }
-        if self.state.recording {
+        if self.state.recording.is_some() {
             self.cancel_recording();
         }
         let hit = self.hit(x, y);

@@ -11,10 +11,12 @@ mod general;
 mod now_playing;
 mod osd;
 mod privacy;
+mod shortcut;
+mod timers;
 mod welcome;
 
 pub use self::about::VERSION;
-pub use self::clipboard::chord as clipboard_chord;
+pub use self::shortcut::chord;
 pub use self::welcome::{finish as finish_welcome, start as start_welcome};
 
 use serde_json::Value;
@@ -31,6 +33,7 @@ pub enum Page {
     Clipboard,
     Osd,
     Devices,
+    Timers,
     Agents,
     Privacy,
     About,
@@ -42,7 +45,7 @@ pub enum Page {
 
 impl Page {
     /// The Settings window's pages, in the nav.
-    pub const ALL: [Page; 8] = [Page::General, Page::NowPlaying, Page::Clipboard, Page::Osd, Page::Devices, Page::Agents, Page::Privacy, Page::About];
+    pub const ALL: [Page; 9] = [Page::General, Page::NowPlaying, Page::Clipboard, Page::Osd, Page::Devices, Page::Timers, Page::Agents, Page::Privacy, Page::About];
     /// The welcome's steps, in its nav.
     pub const WELCOME: [Page; 3] = [Page::WelcomeFeatures, Page::WelcomeShortcut, Page::WelcomeStartup];
 
@@ -53,6 +56,7 @@ impl Page {
             Page::Clipboard => "Clipboard",
             Page::Osd => "Volume & brightness",
             Page::Devices => "Devices",
+            Page::Timers => "Timers",
             Page::Agents => "Coding agents",
             Page::Privacy => "Privacy & data",
             Page::About => "About",
@@ -83,7 +87,7 @@ impl Page {
     /// The sidebar's sections: General; the island's features; privacy and About.
     pub fn section(self) -> usize {
         match self {
-            Page::NowPlaying | Page::Clipboard | Page::Osd | Page::Devices | Page::Agents => 1,
+            Page::NowPlaying | Page::Clipboard | Page::Osd | Page::Devices | Page::Timers | Page::Agents => 1,
             Page::Privacy | Page::About => 2,
             _ => 0,
         }
@@ -97,6 +101,7 @@ impl Page {
             Page::Clipboard => icons::clipboard(),
             Page::Osd => icons::osd(),
             Page::Devices => icons::devices(),
+            Page::Timers => icons::timers(),
             Page::Agents => icons::agents(),
             Page::Privacy => icons::privacy(),
             Page::About => Icon::Mark,
@@ -114,6 +119,7 @@ impl Page {
             Page::Clipboard | Page::WelcomeShortcut => Some(Preview::Clipboard),
             Page::Osd => Some(Preview::Levels),
             Page::Devices => Some(Preview::Devices),
+            Page::Timers => Some(Preview::Timers),
             Page::Agents => Some(Preview::Agents),
             _ => None,
         }
@@ -131,8 +137,8 @@ impl Page {
 pub enum Effect {
     None,
     Navigate(Page),
-    /// Start listening for a hotkey.
-    Record,
+    /// Listen for a new shortcut for this file.
+    Record(File),
     /// The welcome is done: close, or carry on into Settings.
     Finish { open_settings: bool },
     /// About's Install: download and verify the update.
@@ -148,6 +154,7 @@ pub fn build(page: Page, state: &State) -> Vec<Block> {
         Page::Clipboard => clipboard::build(state),
         Page::Osd => osd::build(state),
         Page::Devices => devices::build(state),
+        Page::Timers => timers::build(state),
         Page::Agents => agents::build(state),
         Page::Privacy => privacy::build(state),
         Page::About => about::build(state),
@@ -185,6 +192,7 @@ pub fn act(page: Page, state: &mut State, target: &Target, act: Act) -> Effect {
         Page::Clipboard => clipboard::act(state, target, act),
         Page::Osd => osd::act(state, target, act),
         Page::Devices => devices::act(state, target, act),
+        Page::Timers => timers::act(state, target, act),
         Page::Agents => agents::act(state, target, act),
         Page::Privacy => privacy::act(state, target, act),
         Page::About => about::act(state, target, act),
@@ -198,6 +206,7 @@ pub fn menu(page: Page, state: &mut State, target: &Target) -> Option<(Vec<Strin
         Page::NowPlaying => now_playing::menu(state, target),
         Page::Clipboard => clipboard::menu(state, target),
         Page::General => general::menu(state, target),
+        Page::Timers => timers::menu(state, target),
         _ => None,
     }
 }
@@ -305,7 +314,8 @@ pub mod tests {
         assert_eq!(Page::from_arg("about"), Some(Page::About));
         assert_eq!(Page::from_arg("zzz"), None);
         assert_eq!(Page::from_arg("what"), None, "welcome steps aren't Settings pages");
-        assert_eq!((Page::WelcomeShortcut.index(), Page::About.index()), (1, 7));
+        assert_eq!((Page::WelcomeShortcut.index(), Page::About.index()), (1, 8));
+        assert_eq!(Page::from_arg("timers"), Some(Page::Timers));
         assert!(Page::WelcomeStartup.is_welcome() && !Page::General.is_welcome());
     }
 }

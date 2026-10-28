@@ -31,7 +31,7 @@ reui-settings.exe  the Settings window, opened from the tray; single instance
 ## `reui-hub/src`
 
 ```
-main.rs            flags (--no-agents, --no-media, --no-clipboard, --no-osd, --no-devices, …), module list
+main.rs            flags (--no-agents, --no-media, --no-clipboard, --no-osd, --no-devices, --no-timers, …), module list
 hub.rs             activities, ordering, ModuleContext (publish, retract, focus, image store)
 ipc.rs             the pipe: snapshots + images to surfaces, actions/commands/hooks back
 island.rs          launches and supervises reui-island
@@ -41,7 +41,9 @@ modules/
   mod.rs           Module trait, start, supervise (restart on error/panic)
   audio/           shared Core Audio: devices, volume, outputs, per-app volume, change events
   system_events/   shared hidden window: power settings, resume/unlock, volume and phone
-                   arrivals, brightness keys (Raw Input), lock keys, Explorer restarts
+                   arrivals, brightness keys (Raw Input), lock keys, Explorer restarts,
+                   clock changes, module hotkeys
+  hotkey.rs        hotkey settings ("Win+Alt+V") parsed into modifiers + virtual key
   demo.rs
   onboarding/      first run (demo card, "Hover me", the welcome), one-time tips and offers
                    (state + queue, views, system: fullscreen/pause, agent processes, Connect);
@@ -61,6 +63,9 @@ modules/
                    AirPods ads), anti-spam gate, low battery, controllers, laptop power
                    and time to full, drives and Eject, phones, overview, OSD hand-off,
                    settings
+  timers/          countdowns, focus sessions, stopwatch: launcher field parser, state
+                   machines (fake-clock tests), timer-state.json, finish sound, Do Not
+                   Disturb (WNF read, IQuietHoursSettings, checked), views, settings
   updates.rs       daily update check (runs reui-settings --check-updates), "Update
                    available" and "Updated" briefs
 ```
@@ -87,7 +92,7 @@ pill/              the island's behaviour
   input.rs         clicks, wheel, drag, hover
   summon.rs        hotkey-summoned cards, keyboard capture, search
   visibility.rs    size springs, show/hide, reveal, fullscreen, topmost
-  timers.rs        tick, bars, scroll, lyric, level timers
+  timers.rs        tick, clocks, bars, scroll, lyric, level timers
   visuals.rs       level bars, logo
 render/            drawing only (no behaviour state)
   mod.rs           Renderer, surfaces, layouts, hit testing
@@ -99,6 +104,7 @@ features/          per-feature island logic
   music.rs                          scrub, slider, lyric and swipe maths
   visualizer.rs                     per-process audio loopback + FFT
   level.rs                          eased level values
+  clock.rs                          how clocks read, and when they next change
 ```
 
 **Rules:**
@@ -124,7 +130,8 @@ ui/                pages as data: blocks, rows, parts (controls)
   chrome.rs        sidebar and caption geometry      icons.rs   page icons and tile colours
 render/            drawing only: Renderer/Painter primitives, fonts, text (layout cache),
                    shapes, icons, sidebar, frame (caption, scrollbar), page, controls, menu
-  preview/         the hero cards' island previews (music, clipboard, levels, devices, agents)
+  preview/         the hero cards' island previews (music, clipboard, levels, devices,
+                   timers, agents)
 pages/             one file per page: build its rows from State, handle its controls;
                    welcome.rs is the three-step welcome (first run, Replay the tour)
 model/             settings files (read, change a key, atomic write, keep unknown keys,
@@ -145,7 +152,8 @@ stats.rs           idle cost: CPU and private memory of ReUI's processes
 | `%APPDATA%\ReUI\settings.json` | island `visibility`, `hide_in_fullscreen`, `monitor`, and `paused_until` while ReUI is paused |
 | `%APPDATA%\ReUI\onboarding.json` | first run done (`welcomed`), tips shown, offers answered |
 | `%APPDATA%\ReUI\clipboard.db`, `clipboard.json` | clipboard history and settings |
-| `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json` | music, OSD and Devices settings |
+| `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json`, `timers.json` | music, OSD, Devices and Timers settings |
+| `%APPDATA%\ReUI\timer-state.json` | running and paused timers, a focus session, the stopwatch, and whether ReUI turned Do Not Disturb on |
 | `%LOCALAPPDATA%\ReUI\lyrics\` | lyrics cache |
 | `%LOCALAPPDATA%\ReUI\hub.log` | panics |
 | `%LOCALAPPDATA%\ReUI\bin\reui-bridge.exe` | the installed hook bridge |
