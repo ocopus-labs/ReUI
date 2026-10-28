@@ -218,7 +218,7 @@ Agreed Oct 27, 2026. One feature at a time, each end to end (real source → hub
 | 5 | System OSD (volume, brightness) | Spec: [docs/PRD-system-osd.md](docs/PRD-system-osd.md) (M0–M4). Built Oct 28: volume HUD (level bar, bubble ring while music plays, no echo, device moment), brightness (panel events + WMI, DDC/CI set), opt-in Windows flyout hiding with crash-safe restore, optional lock keys / battery saver / mic mute |
 | 6 | Devices (Bluetooth battery, USB, charging) | Spec: [docs/PRD-devices.md](docs/PRD-devices.md) (M0–M4), draft for review |
 | 6.5 | **Product shell** (install, first run, Settings window, trust) | Spec: [docs/PRD-product-shell.md](docs/PRD-product-shell.md) (P0–P5), draft for review. Comes before feature #7 |
-| 7 | Timers and focus | |
+| 7 | Timers and focus | Spec: [docs/PRD-timers-focus.md](docs/PRD-timers-focus.md) (M0–M4): typed timers (`10m tea`), multiple timers, a finish you can't miss, focus sessions with optional Do Not Disturb, stopwatch |
 | 8 | Notifications (needs package identity) | |
 | 9 | Mic / camera in use | |
 | 10 | Calendar | |
