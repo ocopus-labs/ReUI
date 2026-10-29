@@ -20,5 +20,26 @@ pub fn build(state: &State) -> Vec<Block> {
         ],
         "Read from Windows' own record of which apps use them.",
     ));
+    // A call: a call app holding the microphone (docs/PRD-calls.md); the apps below only
+    // matter while calls are on.
+    let calls = state.files.doc(File::Privacy).bool("calls");
+    let app = |key: &str, title: &str, detail: &str| {
+        let row = flag(state, File::Privacy, key, title, detail);
+        if calls { row } else { row.enabled(false) }
+    };
+    blocks.push(footed(
+        "Calls",
+        vec![
+            flag(state, File::Privacy, "calls", "Ongoing calls", "The call's time and a mute in place of the microphone dot").icon(icons::tile(icons::PHONE, system::GREEN)),
+            app("call_teams", "Teams", ""),
+            app("call_zoom", "Zoom", ""),
+            app("call_discord", "Discord", ""),
+            app("call_slack", "Slack", ""),
+            app("call_webex", "Webex", ""),
+            app("call_messengers", "WhatsApp, Telegram and Signal", ""),
+            app("call_browsers", "Browsers", "Any browser using the microphone, such as Meet"),
+        ],
+        "The mute is the microphone's own, so the app may still show itself unmuted.",
+    ));
     blocks
 }

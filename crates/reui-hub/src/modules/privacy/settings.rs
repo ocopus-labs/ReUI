@@ -8,7 +8,20 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
 
+use super::calls::Family;
 use super::consent::Kind;
+
+/// Call apps by family, their keys and defaults. Browsers are off by default (PRD-calls
+/// D2): a browser holding the microphone isn't necessarily a call.
+const CALL_KEYS: [(Family, &str, bool); 7] = [
+    (Family::Teams, "call_teams", true),
+    (Family::Zoom, "call_zoom", true),
+    (Family::Discord, "call_discord", true),
+    (Family::Slack, "call_slack", true),
+    (Family::Webex, "call_webex", true),
+    (Family::Messengers, "call_messengers", true),
+    (Family::Browsers, "call_browsers", false),
+];
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Settings {
@@ -18,11 +31,15 @@ pub struct Settings {
     /// Off by default: Windows' own widgets and Weather hold location for long stretches,
     /// which would keep the island busy for something rarely surprising (D2).
     pub location: bool,
+    /// An ongoing call from a known call app (docs/PRD-calls.md).
+    pub calls: bool,
+    /// Each family in [`CALL_KEYS`] order.
+    pub call_apps: [bool; 7],
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { microphone: true, camera: true, screen: true, location: false }
+        Self { microphone: true, camera: true, screen: true, location: false, calls: true, call_apps: CALL_KEYS.map(|(_, _, on)| on) }
     }
 }
 
@@ -42,6 +59,11 @@ impl Settings {
             Kind::Screen => self.screen,
             Kind::Location => self.location,
         }
+    }
+
+    /// Whether a call app of `family` counts as a call.
+    pub fn calls_from(&self, family: Family) -> bool {
+        self.calls && CALL_KEYS.iter().zip(self.call_apps).any(|((f, _, _), on)| *f == family && on)
     }
 
     pub fn load_from(path: &Path) -> Self {
@@ -69,15 +91,30 @@ impl Settings {
         let Value::Object(map) = serde_json::from_str(text).ok()? else { return None };
         let d = Self::default();
         let flag = |key: &str, default: bool| map.get(key).and_then(Value::as_bool).unwrap_or(default);
-        Some(Self { microphone: flag("microphone", d.microphone), camera: flag("camera", d.camera), screen: flag("screen", d.screen), location: flag("location", d.location) })
+        let mut call_apps = d.call_apps;
+        for (on, (_, key, _)) in call_apps.iter_mut().zip(CALL_KEYS) {
+            *on = flag(key, *on);
+        }
+        Some(Self {
+            microphone: flag("microphone", d.microphone),
+            camera: flag("camera", d.camera),
+            screen: flag("screen", d.screen),
+            location: flag("location", d.location),
+            calls: flag("calls", d.calls),
+            call_apps,
+        })
     }
 
     fn to_map(&self) -> Map<String, Value> {
-        let Value::Object(map) = json!({ "microphone": self.microphone, "camera": self.camera, "screen": self.screen, "location": self.location }) else { unreachable!() };
+        let Value::Object(mut map) = json!({ "microphone": self.microphone, "camera": self.camera, "screen": self.screen, "location": self.location, "calls": self.calls }) else { unreachable!() };
+        for ((_, key, _), on) in CALL_KEYS.iter().zip(self.call_apps) {
+            map.insert((*key).into(), Value::Bool(on));
+        }
         map
     }
 
-    /// Applies a tray command (`microphone:off`, `camera:on`, `screen:`, `location:`).
+    /// Applies a tray command (`microphone:off`, `camera:on`, `screen:`, `location:`,
+    /// `calls:`, `call_teams:` and the other call apps' keys).
     /// `false` if it isn't one.
     pub fn apply(&mut self, command: &str) -> bool {
         let Some((name, value)) = command.split_once(':') else { return false };
@@ -91,7 +128,11 @@ impl Settings {
             "camera" => &mut self.camera,
             "screen" => &mut self.screen,
             "location" => &mut self.location,
-            _ => return false,
+            "calls" => &mut self.calls,
+            _ => match CALL_KEYS.iter().position(|(_, key, _)| *key == name) {
+                Some(i) => &mut self.call_apps[i],
+                None => return false,
+            },
         };
         *field = on;
         true
@@ -141,6 +182,10 @@ mod tests {
         assert_eq!(Settings::parse(r#"{ "camera": false, "location": "yes" }"#), Some(Settings { camera: false, ..d.clone() }));
         assert_eq!(Settings::parse("[1]"), None);
         assert!(!d.shows(Kind::Location) && d.shows(Kind::Screen));
+        assert!(d.calls_from(Family::Teams) && !d.calls_from(Family::Browsers));
+        let s = Settings::parse(r#"{ "call_browsers": true, "call_zoom": false }"#).unwrap();
+        assert!(s.calls_from(Family::Browsers) && !s.calls_from(Family::Zoom));
+        assert!(!Settings::parse(r#"{ "calls": false }"#).unwrap().calls_from(Family::Teams));
     }
 
     #[test]
@@ -149,6 +194,8 @@ mod tests {
         assert!(s.apply("microphone:off") && !s.microphone);
         assert!(s.apply("location:on") && s.location);
         assert!(!s.apply("camera:maybe") && !s.apply("mute") && !s.apply("webcam:on"));
+        assert!(s.apply("call_discord:off") && !s.calls_from(Family::Discord));
+        assert!(s.apply("calls:off") && !s.calls && !s.apply("call_skype:off"));
     }
 
     #[test]
