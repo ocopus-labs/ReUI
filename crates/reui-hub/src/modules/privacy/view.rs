@@ -113,7 +113,8 @@ pub fn indicator(items: &[Item], muted: Option<bool>) -> Option<View> {
             None => others.push((item, vec![item.kind])),
         }
     }
-    let mut rows: Vec<Row> = others.iter().map(|(o, kinds)| Row::Note(format!("{} · {}", o.name, kinds_label(kinds)))).collect();
+    // What they use is said only when it isn't what the eyebrow already says.
+    let mut rows: Vec<Row> = others.iter().map(|(o, kinds)| Row::Note(if *kinds == mine { o.name.clone() } else { format!("{} · {}", o.name, kinds_label(kinds)) })).collect();
     let mut buttons = Vec::new();
     if items.iter().any(|i| i.kind == Kind::Microphone) {
         let (glyph, action, role) = if muted { (GLYPH_MIC_OFF, ACTION_UNMUTE, ButtonRole::Accent) } else { (GLYPH_MIC, ACTION_MUTE, ButtonRole::Secondary) };
@@ -174,6 +175,8 @@ mod tests {
         let e = v.expanded.unwrap();
         assert_eq!((e.eyebrow.as_deref(), e.detail.as_deref()), (Some("Camera and microphone"), Some("Since 10:42")));
         assert_eq!(e.rows[0], Row::Note("chrome · Microphone".into()));
+        let same = indicator(&[item(Kind::Microphone, "a.exe"), item(Kind::Microphone, "b.exe")], None).unwrap().expanded.unwrap();
+        assert_eq!(same.rows[0], Row::Note("b".into()), "the eyebrow already says microphone");
         let Row::Buttons(b) = &e.rows[1] else { panic!() };
         assert_eq!((b[0].action.as_str(), b[1].action.as_str()), (ACTION_MUTE, ACTION_SETTINGS));
         assert!(indicator(&[], None).is_none());
