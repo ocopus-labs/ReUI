@@ -46,11 +46,11 @@ target\release\reui-hub.exe --demo
 
 Release builds of the hub have no console window; debug builds (`cargo build`) keep one for the logs. `pwsh scripts/package.ps1 -OutDir dist` builds the release assets (the setup and the zip) the way `.github/workflows/release.yml` does on a `v*` tag.
 
-The hub starts the island plus the coding-agent and Now Playing modules (`--no-agents`, `--no-media` to skip them). `--demo` enables a module that shows now-playing, a 5-minute timer and, every 25 s, an agent permission request that takes over the pill (it times out and fails open after 20 s). Hover to peek, click to expand, right-click the pill to quit ReUI. `--no-island` runs the hub alone so you can start `reui-island.exe` yourself.
+The hub starts the island plus the coding-agent and Now Playing modules (`--no-agents`, `--no-media` to skip them). `--demo` enables a module that shows now-playing, a 5-minute timer and, 25 s after each one is settled, the next agent moment: a permission with a scrolling script, a three-step question (one step multi-select) and a plan to approve. They take over the pill, answer nothing real, and time out and fail open (20 s for the permission, 60 s for the others). Hover to peek, click to expand, right-click the pill to quit ReUI. `--no-island` runs the hub alone so you can start `reui-island.exe` yourself.
 
 ## Coding agents (Claude Code, Codex, OpenCode)
 
-One `agent` module per agent shows each session (thinking, the current tool, waiting on you, done with time and tokens, failed), lets you answer permission requests from the pill, and counts token usage. Claude Code offers Deny / Always / Allow; Codex and OpenCode take Deny / Allow (their hooks don't accept "always").
+One `agent` module per agent tracks each session and shows it only when it needs you (see [docs/PRD-agent-moments.md](docs/PRD-agent-moments.md)): permission requests you answer from the island, a question, a failed turn. Each such card starts with the session strip (agent, project, what you asked, time in turn), so two sessions never get confused; a permission shows the full command or an edit's changed lines in a scrolling block. Claude Code offers Deny / Always / Allow; Codex and OpenCode take Deny / Allow (their hooks don't accept "always"). Sessions at work (thinking, running a tool) and finished turns stay out of the island unless `%APPDATA%\ReUI\coding.json` asks for them (`show_sessions`: `needed` | `working`, `show_finished`), which Settings → Coding agents sets. Token usage is still counted.
 
 ```
 %LOCALAPPDATA%\ReUI\bin\reui-bridge.exe install claude   [--scope user|project|local] [--project DIR]

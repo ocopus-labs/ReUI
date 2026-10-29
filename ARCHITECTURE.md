@@ -44,12 +44,15 @@ modules/
                    arrivals, brightness keys (Raw Input), lock keys, Explorer restarts,
                    clock changes, module hotkeys
   hotkey.rs        hotkey settings ("Win+Alt+V") parsed into modifiers + virtual key
-  demo.rs
+  demo/            --demo: music, a timer, and agent moments (moments.rs: a permission
+                   with a body, a 3-step question, a plan) that answer nothing real
   onboarding/      first run (demo card, "Hover me", the welcome), one-time tips and offers
                    (state + queue, views, system: fullscreen/pause, agent processes, Connect);
                    other modules report moments with `onboarding::note`
-  agent/           Claude Code / Codex / OpenCode sessions; view; token usage; status
-                   (agents.json, the bridge's test event)
+  agent/           Claude Code / Codex / OpenCode: sessions tracked, published only when
+                   they need you; view (what shows, the session strip, the permission
+                   card), describe (a tool request: hero, facts, body), settings
+                   (coding.json), token usage, status (agents.json, the test event)
   clipboard/       history: module loop, notch panel, toast, paste stack, view model,
                    settings, secrets, link previews, paste-as transforms, OCR
     os/            the OS side: window thread, hotkeys, target/caret, capture, formats,
@@ -97,10 +100,12 @@ pill/              the island's behaviour
 render/            drawing only (no behaviour state)
   mod.rs           Renderer, surfaces, layouts, hit testing
   fonts.rs  text.rs  images.rs  elements.rs
-  compact.rs  minimal.rs  expanded.rs (header + row layout)
-  rows/            timeline, controls, slider, lyrics, cards, search, tabs, note
+  compact.rs  minimal.rs  expanded.rs (strip + header + row layout)
+  rows/            timeline, controls, slider, lyrics, cards, search, tabs, note,
+                   context (session strip), choices, block (scrolling text)
 features/          per-feature island logic
   clipboard.rs  clipboard_keys.rs   panel selection/scroll, keyboard hook
+  choices.rs                        keys in a card that asks something (once clicked)
   music.rs                          scrub, slider, lyric and swipe maths
   visualizer.rs                     per-process audio loopback + FFT
   level.rs                          eased level values
@@ -152,7 +157,7 @@ stats.rs           idle cost: CPU and private memory of ReUI's processes
 | `%APPDATA%\ReUI\settings.json` | island `visibility`, `hide_in_fullscreen`, `monitor`, and `paused_until` while ReUI is paused |
 | `%APPDATA%\ReUI\onboarding.json` | first run done (`welcomed`), tips shown, offers answered |
 | `%APPDATA%\ReUI\clipboard.db`, `clipboard.json` | clipboard history and settings |
-| `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json`, `timers.json` | music, OSD, Devices and Timers settings |
+| `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json`, `timers.json`, `coding.json` | music, OSD, Devices, Timers and coding agent settings (`coding.json` is read by all three agent modules) |
 | `%APPDATA%\ReUI\timer-state.json` | running and paused timers, a focus session, the stopwatch, and whether ReUI turned Do Not Disturb on |
 | `%LOCALAPPDATA%\ReUI\lyrics\` | lyrics cache |
 | `%LOCALAPPDATA%\ReUI\hub.log` | panics |
