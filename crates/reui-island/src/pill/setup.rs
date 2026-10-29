@@ -226,6 +226,7 @@ impl Pill {
             choice_cursor: None,
             block_scroll: 0.0,
             block_max: 0.0,
+            choice_spans: None,
             to_hub,
             events,
         })

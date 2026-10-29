@@ -377,6 +377,11 @@ pub const ACTION_SEARCH: &str = "search:";
 /// Enter in a search field with no cards to choose from: act on what was typed (start the
 /// timer it describes).
 pub const ACTION_SUBMIT: &str = "submit";
+/// Prefix of a button's action pressed for its second meaning: Alt+click, or Shift+Enter
+/// in a card that has the keyboard (which means its first button that isn't `Plain`, the
+/// "no" side). Only for cards with a session strip (`context`, agent moments: Alt+click
+/// Deny is "deny, and say why"); elsewhere Alt+click is a plain click.
+pub const ACTION_ALT: &str = "alt:";
 /// Ctrl+Z in a card that has a search field: undo the module's last removal.
 pub const ACTION_UNDO: &str = "undo";
 /// A horizontal swipe (trackpad) on the compact pill, to the front activity: next / previous.

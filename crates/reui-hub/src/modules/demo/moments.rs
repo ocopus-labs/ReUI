@@ -150,8 +150,10 @@ impl Moments {
                     context: context("get the release build green"),
                     leading: glyph(GLYPH_TERMINAL),
                     eyebrow: Some("Permission".into()),
-                    headline: Headline::Code(SCRIPT.lines().next().unwrap_or_default().into()),
-                    detail: Some("Check, test and package the release".into()),
+                    // The body has the script, so the hero says what it's for (as
+                    // `agent::describe` does).
+                    headline: Headline::Text("Check, test and package the release".into()),
+                    detail: Some(format!("PowerShell · {} lines", SCRIPT.lines().count())),
                     trailing: Element::Empty,
                     rows: vec![
                         Row::Block { text: SCRIPT.into(), kind: BlockKind::Code },

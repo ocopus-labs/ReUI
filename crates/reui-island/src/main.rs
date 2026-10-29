@@ -26,7 +26,7 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::WinRT::*;
 use windows::Win32::UI::Accessibility::{SetWinEventHook, UnhookWinEvent, HWINEVENTHOOK};
 use windows::Win32::UI::HiDpi::*;
-use windows::Win32::UI::Input::KeyboardAndMouse::{ReleaseCapture, SetCapture};
+use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, ReleaseCapture, SetCapture, VK_MENU};
 use windows::Win32::UI::WindowsAndMessaging::*;
 
 
@@ -292,6 +292,8 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         WM_LBUTTONUP => {
             let (x, y) = client_point(lparam);
             let shift = wparam.0 & 0x0004 != 0; // MK_SHIFT
+            // The island never has focus, so Alt is read from the hardware state.
+            let alt = GetAsyncKeyState(VK_MENU.0 as i32) as u16 & 0x8000 != 0;
             let (mut dragged, mut menu) = (false, None);
             with_pill(|pill| {
                 dragged = pill.on_release(x, y);
@@ -304,7 +306,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             } else if let Some(entries) = menu {
                 card_menu(hwnd, entries);
             } else {
-                with_pill(|pill| pill.on_click(x, y, shift));
+                with_pill(|pill| pill.on_click(x, y, shift, alt));
             }
             LRESULT(0)
         }

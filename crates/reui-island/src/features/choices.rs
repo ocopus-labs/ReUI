@@ -5,9 +5,9 @@
 //! A card that arrives by itself never gets here: a stray Enter while typing in an editor
 //! must not answer anything (agent moments PRD §5.7).
 
-use reui_protocol::{ButtonRole, Choice, ExpandedView, Row};
+use reui_protocol::{Button, ButtonRole, Choice, ExpandedView, ItemKey, Row, ACTION_ALT};
 
-use crate::features::clipboard::Key;
+use crate::features::keys::Key;
 
 /// What a key does in such a card.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -25,9 +25,11 @@ pub enum Effect {
     Release,
 }
 
-/// Whether a card can use the keyboard at all: it has a choice list or a field.
+/// Whether a card can use the keyboard at all: it has a choice list or a field, or it's a
+/// moment (a session strip) with buttons to press (Enter for the main one, Shift+Enter for
+/// the second meaning of its first: deny and say why).
 pub fn wants_keys(view: &ExpandedView) -> bool {
-    view.rows.iter().any(|r| matches!(r, Row::Choices { .. } | Row::Search { .. }))
+    view.rows.iter().any(|r| matches!(r, Row::Choices { .. } | Row::Search { .. }) || (view.context.is_some() && matches!(r, Row::Buttons(b) if !b.is_empty())))
 }
 
 fn list(view: &ExpandedView) -> Option<(&[Choice], bool)> {
@@ -37,12 +39,22 @@ fn list(view: &ExpandedView) -> Option<(&[Choice], bool)> {
     })
 }
 
-/// The card's primary button, which Enter presses when no single choice is under the cursor.
+fn buttons(view: &ExpandedView) -> &[Button] {
+    view.rows.iter().rev().find_map(|r| if let Row::Buttons(b) = r { Some(b.as_slice()) } else { None }).unwrap_or_default()
+}
+
+/// The card's main button, which Enter presses when no single choice is under the cursor:
+/// the `Primary` one, else the accent-tinted one (an alert's preferred action).
 fn primary(view: &ExpandedView) -> Option<String> {
-    view.rows.iter().find_map(|r| match r {
-        Row::Buttons(buttons) => buttons.iter().find(|b| b.role == ButtonRole::Primary).map(|b| b.action.clone()),
-        _ => None,
-    })
+    let b = buttons(view);
+    b.iter().find(|b| b.role == ButtonRole::Primary).or_else(|| b.iter().find(|b| b.role == ButtonRole::Accent)).map(|b| b.action.clone())
+}
+
+/// What Shift+Enter sends in a moment: the first button that isn't `Plain` (the "no"
+/// side, Deny), pressed for its second meaning.
+fn second(view: &ExpandedView) -> Option<String> {
+    view.context.as_ref()?;
+    buttons(view).iter().find(|b| b.role != ButtonRole::Plain).map(|b| format!("{ACTION_ALT}{}", b.action))
 }
 
 /// What `key` does. `cursor` is the choice under the keyboard cursor, `typing` whether the
@@ -53,6 +65,9 @@ pub fn on_key(key: Key, view: &ExpandedView, cursor: Option<usize>, typing: bool
     let pass_or_ignore = if field { Effect::Pass } else { Effect::Ignore };
     if key == Key::Escape {
         return if typing || summoned { Effect::Pass } else { Effect::Release };
+    }
+    if key == Key::Item(ItemKey::ShiftEnter) && !typing {
+        return second(view).map_or(pass_or_ignore, |action| Effect::Send { action, at: None });
     }
     let Some((options, multi)) = list(view).filter(|(o, _)| !o.is_empty()) else {
         return match key {
@@ -81,6 +96,18 @@ pub fn on_key(key: Key, view: &ExpandedView, cursor: Option<usize>, typing: bool
             _ => primary(view).map_or(Effect::Ignore, |action| Effect::Send { action, at: None }),
         },
         _ => pass_or_ignore,
+    }
+}
+
+/// The scroll that shows the span `top`..`bottom` (a choice, in list coordinates) in a
+/// list window `shown` tall now scrolled by `scroll`: as little movement as it takes.
+pub fn reveal(scroll: f32, shown: f32, (top, bottom): (f32, f32)) -> f32 {
+    if top < scroll {
+        top
+    } else if bottom > scroll + shown {
+        bottom - shown
+    } else {
+        scroll
     }
 }
 
@@ -167,5 +194,27 @@ mod tests {
         let next = ExpandedView { headline: Headline::Text("And?".into()), ..a.clone() };
         assert!(!same_list(Some(&a), Some(&next)));
         assert!(wants_keys(&a));
+    }
+
+    #[test]
+    fn moments_take_enter_for_the_main_button_and_shift_enter_for_the_second_meaning() {
+        let text = |action: &str, role| Button { action: action.into(), content: ButtonContent::Text(action.into()), role };
+        let mut v = view(false, false);
+        v.rows = vec![Row::Buttons(vec![text("7:deny", ButtonRole::Secondary), text("7:always", ButtonRole::Secondary), text("7:allow", ButtonRole::Accent)])];
+        assert!(!wants_keys(&v), "buttons alone aren't enough outside a moment");
+        v.context = Some(reui_protocol::Context { mark: Element::Empty, title: "ReUI".into(), facts: vec![] });
+        assert!(wants_keys(&v));
+        assert_eq!(on_key(Key::Activate, &v, None, false, false), send("7:allow", None), "the accent one is the main one");
+        assert_eq!(on_key(Key::Item(ItemKey::ShiftEnter), &v, None, false, false), send("alt:7:deny", None));
+        // A question's quiet Answer in terminal is never the one.
+        v.rows = vec![Row::Buttons(vec![text("3:terminal", ButtonRole::Plain), text("3:back", ButtonRole::Secondary)])];
+        assert_eq!(on_key(Key::Item(ItemKey::ShiftEnter), &v, None, false, false), send("alt:3:back", None));
+    }
+
+    #[test]
+    fn the_cursor_scrolls_into_view_with_as_little_movement_as_it_takes() {
+        assert_eq!(reveal(0.0, 100.0, (20.0, 60.0)), 0.0);
+        assert_eq!(reveal(0.0, 100.0, (90.0, 140.0)), 40.0);
+        assert_eq!(reveal(80.0, 100.0, (20.0, 60.0)), 20.0);
     }
 }

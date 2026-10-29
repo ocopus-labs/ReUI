@@ -1,6 +1,6 @@
 # PRD: Agent moments (the island only when an agent needs you)
 
-Status: draft for review · Owner: Rohit · Revises the Agents feature in [PLAN.md](../PLAN.md) · Oct 29, 2026
+Status: M0–M3 built (see §9; real-session checks V1–V3 pending), M4–M5 open · Owner: Rohit · Revises the Agents feature in [PLAN.md](../PLAN.md) · Oct 29, 2026
 
 **References** (checked Oct 29, 2026; sources in the appendix):
 - **Claude Code hooks:**
@@ -76,7 +76,7 @@ Today every Claude Code, Codex and OpenCode session is an activity for its whole
 | Turn finished ("Your turn") | Brief | **off** (Settings) | Open terminal |
 | Working (thinking, tool, compacting) | Ongoing | **off** (Settings: "While they work") | — |
 
-Each moment is its own activity (`ask:<id>`), gone the moment it's settled: answered here, answered elsewhere, or timed out.
+An agent's moments wait in one queue, oldest first; the one in front is the activity `moment-<id>` (one per moment, so the next one opens by itself and never inherits a keyboard a click gave the last) and the rest wait behind its pager. Each is gone the moment it's settled: answered here, answered elsewhere, or timed out.
 
 ### 5.2 The card: session strip, then three levels
 
@@ -99,22 +99,26 @@ Every moment uses the same anatomy, in the **roomy** width (wider than a timer c
 - **Session strip** (quiet, one line): the agent's logo, the project folder, the first line of the prompt that started the turn, and how long the turn has run. It answers "which one?" before you read anything else. The pager sits on it when several moments wait.
 - **Eyebrow:** "Permission", "Question", "Plan", "Jira (MCP)", "Stopped". The agent's name is in the strip, not repeated here.
 - **Hero:** what you decide about, never a sentence written by us.
-- **Compact** (when the card folds after the decision hold): the logo, then the kind in the accent ("Allow?", "Question", "Plan", "Input"). With several waiting, a count. The pill is a little wider than for other activities only because the text is.
+- **Compact** (when the card folds after the decision hold): the logo, then the kind in the accent ("Allow?", "Question", "Plan", "Input"). With several waiting, the count in its place ("2"). The pill is a little wider than for other activities only because the text is.
 
 ### 5.3 Permission
 
 - Hero per tool, as `describe_tool` does today: commands as a code chip, files by name, hosts for fetches, MCP tool names.
-- **Body (new):** a code block under the header for what the hero cuts off: the full command (multi-line scripts), the first changed lines of an edit with `+`/`−` lines, a patch's file list. It scrolls with the wheel; it doesn't grow the card past max-height.
-- Buttons: Deny (Destructive), Always (Secondary, only where the agent supports it and offered a suggestion), Allow (Primary).
-- Deny sends a message the agent shows to the model ("Denied from the ReUI island."). **Alt+click Deny** (or Shift+Enter) opens a field: "Tell Claude what to do instead", sent as the deny `message`.
+- **Body (new):** a code block under the header for what the hero cuts off: the full command (multi-line scripts), the first changed lines of an edit with `+`/`−` lines, a patch's lines (its file headers only when it touches several). It scrolls with the wheel; it doesn't grow the card past max-height.
+- **The hero never repeats the body** (M2 fix: the first build showed a script's first line twice). With the command in the body, the hero is the agent's description ("Test and publish the release") and the detail the shell and line count ("Bash · 4 lines"); without a description, the hero is the shell ("Bash") and the detail the line count. Edits and patches keep the file as hero and "Edit · src · +12 −3" / "Patch · 3 files · +4 −1" as detail; the body has only the changed lines.
+- **Secrets are masked** in hero, detail and body with the clipboard's rules (`clipboard::secrets::mask`): known token shapes, long random tokens (also as `KEY=value`), a private key's body.
+- Buttons: Deny (Secondary), Always (Secondary, only where the agent supports it and offered a suggestion), Allow (Accent, the tinted main action per §5.8).
+- Deny sends a message the agent shows to the model ("Denied from the ReUI island."). **Alt+click Deny** (or Shift+Enter) opens a field: "Tell Claude what to do instead" (Cancel / Deny), sent as the deny `message`. On the wire: the island sends the button's action with the `alt:` prefix (`ACTION_ALT`), only on cards with a session strip.
 
 ### 5.4 Question
 
 - One question per step. Hero: the question; detail: its header ("Framework"); then the **choice list**: each option a row with its label and the description in secondary. Single select: a click answers that step. Multi-select: rows toggle with a check, and a Next / Send button appears.
 - A field under the list, "Type an answer", when the agent allows free text (Claude: always; OpenCode: `custom`, default true; Codex: `isOther`). Enter sends the text as the answer.
-- Several questions: the strip's pager becomes the step ("1 of 3"), ‹ goes back with answers kept; the answer goes to the agent only after the last step.
+- Several questions: the strip's pager becomes the step ("1 of 3"), ‹ goes back with answers kept; the answer goes to the agent only after the last step. When other moments also wait, the pager pages them instead, the step moves into the detail ("Features · 2 of 3") and Back becomes a button.
+- Long lists (E-A6): the list stops at `choice.max-height` (184, about three options with descriptions, which is what `roomy-max-height` 440 leaves after the strip, header, field and buttons; the earlier "four two-line choices" estimate didn't count the field) and scrolls; the keyboard cursor scrolls its option into view.
 - **Answer in terminal** (quiet, at the end of the list): replies "no decision" right away, so the agent shows its own prompt.
-- `isSecret` (Codex) and anything that looks like a password prompt: never shown, only "Answer in terminal".
+- `isSecret` (Codex) and anything that looks like a password prompt: never shown, only "Answer in terminal". (Built so far: question text, labels and descriptions go through the secret mask; Codex questions arrive with M5.)
+- Questions whose texts aren't distinct (E-A7), or that came without a waiting bridge (older hooks, E-A13): the options show without actions and the only button is "Answer in terminal".
 
 ### 5.5 Plan approval (Claude)
 
@@ -162,9 +166,9 @@ Differences we keep: the session strip (iOS alerts don't need to say which app i
 
 | Need | How | Notes |
 |---|---|---|
-| Claude questions and plans | A **second, blocking** `PreToolUse` entry with matcher `AskUserQuestion\|ExitPlanMode`, timeout 300 s, next to the existing async `*` one. The bridge waits when `hook_event_name` is `PermissionRequest` or `Elicitation`, or `PreToolUse` for those two tools | The async `*` entry still fires for them; the hub ignores its duplicate. While this hook waits, Claude's own dialog isn't shown yet (*V1*), hence "Answer in terminal" and a shorter wait than for permissions |
+| Claude questions and plans | A **second, blocking** `PreToolUse` entry with matcher `AskUserQuestion\|ExitPlanMode`, timeout 300 s, next to the existing async `*` one, run as `reui-bridge claude ask`. The bridge waits when `hook_event_name` is `PermissionRequest` or `Elicitation`, or `PreToolUse` for those two tools **only when run with `ask`** (correction: the async `*` entry gets the same event, and without the flag its bridge would wait too) | The async `*` entry still fires for them; the hub makes the two one moment by `tool_use_id` (whichever comes first: the blocking call upgrades a read-only moment in place; an async duplicate of one waiting or just settled is ignored). A `PermissionRequest` for either tool gets "no decision" at once. While this hook waits, Claude's own dialog isn't shown yet (*V1*), hence "Answer in terminal" and a shorter wait than for permissions |
 | Claude answers | `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"questions":[…as received…],"answers":{"<question>":"<label>, <label>"}}}}`. Plans: `allow` + `updatedInput` echoing `plan`, or `deny` + `permissionDecisionReason` | Typed answers go in as the answer text (*V2*) |
-| Claude elicitation | Blocking `Elicitation` hook (matcher `*`, 300 s); reply `{"hookSpecificOutput":{"hookEventName":"Elicitation","action":"accept","content":{…}}}` or `decline` | `ElicitationResult` isn't needed |
+| Claude elicitation | Blocking `Elicitation` hook (matcher `*`, 300 s); reply `{"hookSpecificOutput":{"hookEventName":"Elicitation","action":"accept","content":{…}}}` or `decline` | `ElicitationResult` isn't needed. Installed since M2; until M4 the hub answers "no decision" at once (no output: Claude's own dialog, per the hooks reference) |
 | Codex | `PermissionRequest` as today, plus `message` on deny. A `PreToolUse` with `tool_name` `request_user_input` publishes the read-only question; its `PostToolUse` (or `Stop`) retracts it | Matching `^request_user_input$` in the existing async `*` hook is enough; nothing new to install |
 | OpenCode | The plugin drops `permission.ask` and listens to `permission.asked`, `question.asked`, `permission.replied`, `question.replied`, `question.rejected`. It forwards the first two as `PermissionRequest` / a new `Question` event and waits for the bridge; it answers with the plugin's `client` (`postSessionIdPermissionsPermissionId` with `once`/`always`/`reject`; questions through `client._client.post` to `/question/{id}/reply`, *V4*) | The `*.replied` events retract the card when you answer in OpenCode. A reply that loses the race gets NotFound, which is ignored |
 | Waits | Hub deadline < bridge deadline < hook timeout, per kind: permissions 100 / 110 / 120 s (today), questions, plans and forms 280 / 290 / 300 s | Codex and OpenCode keep their current limits |
@@ -194,8 +198,9 @@ New pieces, all semantic:
 - **`Row::Choices { options: Vec<Choice>, multi: bool }`**, `Choice { label, detail: Option<String>, selected: bool, action }`. A click sends `action`; with `multi`, the module answers by re-publishing with `selected` flipped.
 - **`Row::Block { text: String, kind: BlockKind { Prose, Code, Diff } }`**: a body of text that scrolls inside the card. `Diff` lines starting with `+` / `−` take the Positive / Negative tones.
 - **The answer field reuses `Row::Search`** (placeholder, glyph, `search:<text>` as you type, `submit` on Enter), as the timer launcher does.
-- **`Button.role` gains nothing**; "Answer in terminal" is a `Plain` text button.
-- Keyboard capture for any card with `Choices` or a field, granted on click or by the hub's `Focus` (Win+Alt+A).
+- **`Button.role` gains nothing**; "Answer in terminal" is a `Plain` text button (`Secondary` when it's the only one).
+- **`ACTION_ALT` (`"alt:"`)** (added in M2, no wire change): a button pressed for its second meaning, Alt+click or Shift+Enter (the first non-`Plain` button), only on cards with a `context`.
+- Keyboard capture for any card with `Choices` or a field, or a moment (a `context`) with buttons, granted on click or by the hub's `Focus` (Win+Alt+A). Enter presses the `Primary` button, else the `Accent` one.
 
 ## 8. Edge cases
 
@@ -213,18 +218,18 @@ New pieces, all semantic:
 | E-A10 | ReUI paused or the agent module off | No hooks wait: the hub answers `None` at once |
 | E-A11 | The island is in "Only when it needs me" mode | Moments are exactly what it needs you for: they show |
 | E-A12 | `--no-agents` | The module doesn't run; the bridge finds no handler and gets `None` |
-| E-A13 | Upgrade from a build whose hooks are installed without the new entries | The hub's bridge sync notices the old hook set and Settings offers "Update hooks" once; until then, questions say "Answer in terminal" |
+| E-A13 | Upgrade from a build whose hooks are installed without the new entries | Settings → Coding agents reads the old hook set (no blocking `AskUserQuestion` entry) and offers "Update hooks"; until then, questions say "Answer in terminal". (Built differently from the draft: the hub needs no check of its own, since a question that arrives without a waiting bridge is read-only by itself.) |
 
 ## 9. Milestones
 
-| # | What | Done when |
-|---|---|---|
-| M0 | Protocol v18 and island components: the strip, roomy size, `Choices`, `Block`, keyboard on click; the demo module shows a permission, a 3-step question and a plan | Demo cards render and answer with mouse and keyboard; the design review sheet (`tools/claude-states.ps1`) updated |
-| M1 | Quiet sessions: nothing published while working; Show sessions / Show finished settings; the permission card rebuilt with the strip and the body block; deny with a message | Two real Claude sessions in this repo: nothing shows until a permission |
-| M2 | Claude questions: the blocking `PreToolUse` hook, steps, multi-select, typed answers, Answer in terminal; installer and bridge sync | *V1*, *V2* answered; a real AskUserQuestion answered from the island lands in Claude |
-| M3 | Plan approval with feedback | A real plan approved, and one sent back with feedback, from the island |
-| M4 | MCP forms and URLs | A test MCP server's form (enum, boolean, string) and URL request answered |
-| M5 | OpenCode rewrite (permissions work again, questions), Codex read-only questions, Open terminal | Real OpenCode 1.18 permission and question answered; Codex question shown and retracted |
+| # | What | Done when | State |
+|---|---|---|---|
+| M0 | Protocol v18 and island components: the strip, roomy size, `Choices`, `Block`, keyboard on click; the demo module shows a permission, a 3-step question and a plan | Demo cards render and answer with mouse and keyboard; the design review sheet (`tools/claude-states.ps1`) updated | Built |
+| M1 | Quiet sessions: nothing published while working; Show sessions / Show finished settings; the permission card rebuilt with the strip and the body block; deny with a message | Two real Claude sessions in this repo: nothing shows until a permission | Built; deny with a message, several moments paged (S10), long choice lists and secret masking added with M2 |
+| M2 | Claude questions: the blocking `PreToolUse` hook, steps, multi-select, typed answers, Answer in terminal; installer and bridge sync | *V1*, *V2* answered; a real AskUserQuestion answered from the island lands in Claude | Built; the bridge's output checked against the documented shape with a recorded-shape event through a sandboxed hub. Pending: V1, V2 and a real session |
+| M3 | Plan approval with feedback | A real plan approved, and one sent back with feedback, from the island | Built (Approve echoes the input; Keep planning denies with the reason; no permission mode set). Pending: a real plan, V3 |
+| M4 | MCP forms and URLs | A test MCP server's form (enum, boolean, string) and URL request answered | Open (the blocking `Elicitation` hook is installed and answered "no decision" at once) |
+| M5 | OpenCode rewrite (permissions work again, questions), Codex read-only questions, Open terminal | Real OpenCode 1.18 permission and question answered; Codex question shown and retracted | Open |
 
 ## 10. To verify
 

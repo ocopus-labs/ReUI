@@ -27,10 +27,9 @@ pub fn moments() -> Vec<Moment> {
     vec![Moment { w: compact(), draw: draw_compact }, Moment { w: WIDTH, draw: draw_card }]
 }
 
-/// The mark on an accent-tinted circle or tile.
-fn mark(p: &Painter, r: Rect, radius: f32) -> Result<()> {
-    p.fill(r, radius, ACCENT.with_alpha(opacity::TINT_FILL))?;
-    let m = r.w() * opacity::LOGO;
+/// The mark alone, as the island draws agent logos (no tile).
+fn mark(p: &Painter, r: Rect, _radius: f32) -> Result<()> {
+    let m = r.w() * opacity::LOGO_BARE;
     p.claude(Rect::at(r.l + (r.w() - m) / 2.0, r.t + (r.h() - m) / 2.0, m, m))
 }
 

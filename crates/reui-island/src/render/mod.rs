@@ -147,7 +147,8 @@ pub struct Interaction<'a> {
     pub lyric: Option<(usize, f32)>,
     /// The front activity's level as shown right now (eased), over the view's own.
     pub level: Option<f32>,
-    /// How far the text block is scrolled, in DIPs (the renderer clamps it).
+    /// How far the card's scrolling body (its text block or choice list) is scrolled, in
+    /// DIPs (the renderer clamps it).
     pub block_scroll: f32,
     /// The choice under the keyboard cursor, while the card has the keyboard.
     pub choice: Option<usize>,
@@ -167,8 +168,11 @@ pub struct ExpandedLayout {
     pub hits: Vec<Hit>,
     /// Left edge, vertical centre and liveness of the level bars, in expanded-surface DIPs.
     pub bars: Option<(f32, f32, bool)>,
-    /// How far the text block can scroll (content taller than what shows), in DIPs.
+    /// How far the scrolling body (a text block or choice list) can scroll, in DIPs.
     pub block_max: f32,
+    /// Each choice's top and bottom in the list (unscrolled) and how tall the list shows,
+    /// so the keyboard cursor can scroll its choice into view.
+    pub choices: Option<(Vec<(f32, f32)>, f32)>,
 }
 
 pub struct Renderer {
@@ -253,6 +257,7 @@ impl Renderer {
             context: f(typography::CONTEXT, false)?,
             choice: f(typography::CHOICE, false)?,
             choice_detail: f(typography::CHOICE_DETAIL, false)?,
+            choice_detail_wrap: wrapped(typography::CHOICE_DETAIL)?,
             icon_check: f(icons(component::choice::CHECK), false)?,
             block_code: f(typography::BLOCK_CODE, false)?,
             block_prose: wrapped(typography::BLOCK_PROSE)?,

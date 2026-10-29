@@ -16,7 +16,7 @@ use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Input::KeyboardAndMouse::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
-use crate::features::clipboard::{map_key, Key, Mods};
+use crate::features::keys::{map_key, Key, Mods};
 
 /// Posted to the island window when keys are queued.
 pub const WM_KEYS: u32 = WM_APP + 3;

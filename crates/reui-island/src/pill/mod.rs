@@ -1,6 +1,6 @@
 //! The pill: its state, and how hub snapshots map onto presentations (idle core, compact,
-//! peek, expanded, plus the minimal bubble). Building it, input, summoning, visibility,
-//! timers and self-animated visuals live in the child modules.
+//! peek, expanded, plus the minimal bubble). Building it, the hub link, input, summoning,
+//! visibility, timers and self-animated visuals live in the child modules.
 //!
 //! Animated values live in one property set: the pill's width `w` and height `h`, the
 //! minimal bubble's presence `m`, and the current expanded height `eh`. Everything else
@@ -8,7 +8,6 @@
 //! Layer offsets are rounded to whole pixels: a fractional offset makes the compositor
 //! resample the content bitmaps, which visibly softens thin strokes and text.
 
-use std::collections::HashSet;
 use std::sync::mpsc::Receiver;
 use std::time::Instant;
 
@@ -26,7 +25,8 @@ use windows::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
 use crate::features::choices;
-use crate::features::clipboard::{self, Key, Panel};
+use crate::features::clipboard::Panel;
+use crate::features::keys::Key;
 use crate::features::clipboard_keys;
 use crate::features::level::Levels;
 use crate::features::music::{self, SeekHold, Swipe, Throttle};
@@ -36,9 +36,10 @@ use crate::render::{self, Hit, Interaction, Renderer, Thumb};
 use crate::drag_guard::DragGuard;
 use crate::place::MonitorChoice;
 use crate::settings::Visibility;
-use crate::{images, order};
+use crate::order;
 
 mod input;
+mod link;
 mod setup;
 mod summon;
 mod timers;
@@ -191,9 +192,12 @@ pub struct Pill {
     engaged: bool,
     /// The choice under the keyboard cursor in the open card's list.
     choice_cursor: Option<usize>,
-    /// How far the open card's text block is scrolled, and how far it can go.
+    /// How far the open card's scrolling body (text block or choice list) is scrolled, and
+    /// how far it can go.
     block_scroll: f32,
     block_max: f32,
+    /// The choice list's spans and shown height, to scroll the cursor's choice into view.
+    choice_spans: Option<(Vec<(f32, f32)>, f32)>,
     to_hub: UnboundedSender<ClientMsg>,
     events: Receiver<Event>,
 }
@@ -206,75 +210,6 @@ impl Pill {
     /// Nothing is happening (no activities from the hub).
     pub fn idle(&self) -> bool {
         self.raw.activities.is_empty()
-    }
-
-    /// Hands over the hub link and the last snapshot, for a pill rebuilt at another scale
-    /// (see `main::rebuild`). This pill is left without a link.
-    pub fn take_link(&mut self) -> (UnboundedSender<ClientMsg>, Receiver<Event>, Snapshot) {
-        let to_hub = std::mem::replace(&mut self.to_hub, tokio::sync::mpsc::unbounded_channel().0);
-        let events = std::mem::replace(&mut self.events, std::sync::mpsc::channel().1);
-        (to_hub, events, std::mem::take(&mut self.raw))
-    }
-
-    /// Shows `snapshot` on a freshly built pill: its images are decoded again from the
-    /// encoded copies the link keeps.
-    pub fn restore(&mut self, snapshot: Snapshot) {
-        for id in clipboard::referenced(&snapshot) {
-            if let Some(bytes) = images::get(id) {
-                if let Err(e) = self.renderer.add_image(id, &bytes) {
-                    eprintln!("island: can't decode image: {e}");
-                }
-            }
-        }
-        if let Err(e) = self.apply(snapshot) {
-            eprintln!("island: render failed: {e}");
-        }
-    }
-
-    /// Apply everything the hub link queued; only the newest snapshot matters. Messages for
-    /// module windows are returned, in order, for the caller to deliver outside this borrow.
-    pub fn drain_hub(&mut self) {
-        let mut latest = None;
-        let mut focus = None;
-        while let Ok(event) = self.events.try_recv() {
-            match event {
-                Event::Connected => eprintln!("island: connected to hub"),
-                Event::Focus(id) => focus = Some(id),
-                // Kept encoded; the pill decodes what a snapshot shows (below).
-                Event::Image(id, bytes) => images::put(id, bytes),
-                // Evict in stream order, exactly where the hub does, so images that arrived
-                // for a later snapshot survive.
-                Event::Snapshot(snapshot) => {
-                    let shown = clipboard::referenced(&snapshot);
-                    images::evict(&shown);
-                    for &id in &shown {
-                        if self.renderer.has_image(id) {
-                            continue;
-                        }
-                        if let Some(bytes) = images::get(id) {
-                            if let Err(e) = self.renderer.add_image(id, &bytes) {
-                                eprintln!("island: can't decode image: {e}");
-                            }
-                        }
-                    }
-                    self.renderer.retain_images(&shown);
-                    latest = Some(snapshot);
-                }
-                Event::Disconnected => {
-                    images::clear();
-                    self.renderer.retain_images(&HashSet::new());
-                    latest = Some(Snapshot::default());
-                }
-            }
-        }
-        if let Some(snapshot) = latest {
-            if let Err(e) = self.apply(snapshot) {
-                eprintln!("island: render failed: {e}");
-            }
-        }
-        if let Some(id) = focus {
-            self.focus(id);
-        }
     }
 
     fn apply(&mut self, snapshot: Snapshot) -> Result<()> {
@@ -328,7 +263,8 @@ impl Pill {
             self.engaged = false;
             self.block_scroll = 0.0;
         }
-        if !choices::same_list(previous_view.as_ref(), self.front_view()) {
+        let new_list = !choices::same_list(previous_view.as_ref(), self.front_view());
+        if new_list {
             // The next step of a question starts at its first choice (shown only while the
             // card has the keyboard).
             let asks = self.front_view().is_some_and(|v| v.rows.iter().any(|r| matches!(r, Row::Choices { .. })));
@@ -340,6 +276,12 @@ impl Pill {
         self.minimal_audio = self.snapshot.activities.get(1).and_then(|a| a.audio);
         let front = self.snapshot.activities.first();
         self.panel.sync(front.map(|a| &a.id), front.and_then(|a| a.expanded.as_ref()), clipboard_keys::captured());
+        if new_list && self.panel.query.is_some() {
+            // A new step's field starts from the module's text, not what was typed for the
+            // last one.
+            self.panel.query = Some(self.panel.module_query().unwrap_or_default().to_string());
+            self.search_dirty = false;
+        }
         let accent = |a: Option<&Activity>| a.and_then(|a| a.accent).map(render::rgb).unwrap_or(color::accent::DEFAULT);
         let front = self.snapshot.activities.first();
         let second = self.snapshot.activities.get(1);
@@ -356,11 +298,12 @@ impl Pill {
 
         self.compact_width = compact.width;
         self.place_bars(compact.bars, card.bars, minimal_bars, front_accent, second_accent)?;
-        self.place_logo(compact.logo, front_accent)?;
+        self.place_logo(compact.logo)?;
         self.expanded_height = card.height;
         self.expanded_width = card.width;
         self.hits = card.hits;
         self.block_max = card.block_max;
+        self.choice_spans = card.choices;
         self.props.InsertScalar(h!("eh"), card.height * self.scale)?;
         self.props.InsertScalar(h!("r"), card.radius * self.scale)?;
         self.set_minimal(has_second);
@@ -492,6 +435,15 @@ impl Pill {
         self.update_capture();
     }
 
+    /// Moves the keyboard cursor to choice `i`, scrolling the list to show it.
+    fn set_choice_cursor(&mut self, i: usize) {
+        self.choice_cursor = Some(i);
+        if let Some(span) = self.choice_spans.as_ref().and_then(|(spans, shown)| spans.get(i).map(|s| (*s, *shown))) {
+            let (span, shown) = span;
+            self.block_scroll = choices::reveal(self.block_scroll.min(self.block_max), shown, span).clamp(0.0, self.block_max);
+        }
+    }
+
     fn redraw_expanded(&mut self) {
         self.note_lyric();
         self.prune_hold();
@@ -501,6 +453,7 @@ impl Pill {
             Ok(card) => {
                 self.hits = card.hits;
                 self.block_max = card.block_max;
+                self.choice_spans = card.choices;
             }
             Err(e) => eprintln!("island: redraw failed: {e}"),
         }
