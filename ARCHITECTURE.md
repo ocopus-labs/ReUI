@@ -25,7 +25,7 @@ reui-settings.exe  the Settings window, opened from the tray; single instance
 | `reui-design` | `design/tokens.json` compiled into constants at build time (plus a `Palette` per theme); `look.rs` turns the Appearance settings into a `Look` (palette, radii, insets, the concentric maths) for the island and Settings' previews alike; `layout/` is the island's geometry over that `Look` (compact pill and bubble, the expanded header, every row, the card row, each card's width and height), pure and tested, which both lay out with; `icon.rs` turns `design/logo/reui.ico` into the icon resource every program's `build.rs` links in |
 | `reui-hub` | Feature modules and the hub that orders their activities |
 | `reui-island` | The island window: Windows.UI.Composition + Direct2D/DirectWrite |
-| `reui-bridge` | Hook entry point for coding agents, and the hook installer |
+| `reui-bridge` | Hook entry point for coding agents (`main.rs`; `parents.rs`: its parent process chain, sent for "Open terminal"), the hook installer (`install.rs`), and the OpenCode plugin it installs (`opencode-plugin.js`, tested by `tools/opencode-plugin-test.mjs`) |
 | `reui-settings` | The Settings window: Direct2D/DirectWrite in the island's design language, every setting in one place |
 
 ## `reui-hub/src`
@@ -35,7 +35,8 @@ main.rs            flags (--no-agents, --no-media, --no-clipboard, --no-osd, --n
 hub.rs             activities, ordering, ModuleContext (publish, retract, focus, image store)
 ipc.rs             the pipe: snapshots + images to surfaces, actions/commands/hooks back
 island.rs          launches and supervises reui-island
-bridge_sync.rs     keeps the installed reui-bridge in step with this build
+bridge_sync.rs     keeps the installed reui-bridge (and an installed OpenCode plugin) in step
+                   with this build
 paths.rs           %APPDATA% / %LOCALAPPDATA% / home, or REUI_CONFIG_DIR's sandbox (own pipe and lock)
 modules/
   mod.rs           Module trait, start, supervise (restart on error/panic)
@@ -52,11 +53,15 @@ modules/
   agent/           Claude Code / Codex / OpenCode: sessions tracked, published only when
                    they need you; events (a hook event into sessions and moments), queue
                    (the moments in line, paged as one card; the async and blocking
-                   PreToolUse duplicates made one), moments (a permission, question or
-                   plan: steps, answers, the field), answer (the reply JSON in each
-                   agent's documented shape), card (a moment's card), plan (a plan's
-                   title, steps, prose), view (what shows, the session strip), describe
-                   (a tool request: hero, facts, body; secrets masked), settings
+                   PreToolUse duplicates made one), moments (a permission, question, plan,
+                   MCP form or link: steps, answers, the field; Codex questions read-only),
+                   form (an MCP form being filled in), schema (an MCP requested_schema as
+                   fields, or "can't show"), link (an MCP link opened, http(s) only),
+                   answer (the reply JSON in each agent's documented shape), card (a
+                   moment's card), plan (a plan's title, steps, prose), view (what shows,
+                   the session strip, a failed turn's Open terminal), terminal (the
+                   bridge's parent chain to the window to bring forward), describe (a
+                   tool request: hero, facts, body; secrets masked), settings
                    (coding.json), token usage, status (agents.json, the test event)
   clipboard/       history: module loop, notch panel, toast, paste stack, view model,
                    settings, secrets, link previews, paste-as transforms, OCR
