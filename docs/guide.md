@@ -11,7 +11,7 @@ ReUI puts a dynamic island at the top of your screen: a small black pill that sh
 | Move the pointer away | The card folds back |
 | Scroll the wheel over the island | Steps through everything that's going on; over a row of cards it scrolls the row |
 | Click the small bubble beside the pill | Brings that activity into the pill |
-| Right-click the pill or the tray icon | Settings, Pause ReUI for 1 hour, Clipboard history, Devices, System stats, Quit |
+| Right-click the pill or the tray icon | Settings, Pause ReUI for 1 hour, Hide the island (Show the island while hidden), Clipboard history, Devices, System stats, Quit |
 | Push the pointer against the top edge | Shows a hidden island (Settings → General → Show the island: When active / When needed) |
 | Click a glyph under an open card | Goes to that view: Clipboard, Timers, Devices, System stats, and Now Playing while something plays. The wheel over the glyphs steps through them; Ctrl+Tab / Ctrl+Shift+Tab does too while the card has the keyboard (clipboard history, the timer field). Off in Settings → General → View switcher |
 | Click the dot beside the glyphs | A permission request or question arrived while you were in a view: the dot (in its colour) says it's waiting, and a click brings it forward |
@@ -27,6 +27,8 @@ The island hides while a game, video or presentation fills the screen (Settings 
 The island picks up a change within a moment; nothing else restarts.
 
 **Pause ReUI** (tray, or Settings → General) quiets the island and stops recording the clipboard for an hour. Permission requests from coding agents still show.
+
+**Win+Alt+I** hides the island until you press it again (or pick Tray → Show the island). Unlike a pause, everything keeps working: the clipboard is still recorded, timers still run, and permission requests and questions from coding agents still show; a card you open with its shortcut (Win+Alt+V, Win+Ctrl+T, Win+Alt+S) shows too. Change it in Settings → General → Hide the island. (Not Win+Alt+H: Windows uses that for voice typing.)
 
 ## Now Playing
 

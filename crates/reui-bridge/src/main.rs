@@ -21,7 +21,8 @@
 //!
 //! `reui-bridge timer <length and label>` starts a timer (`10m tea`, `1h30`, `focus`,
 //! `stopwatch`), the same text the island's timer field takes, for scripts and agents; with
-//! nothing after it, it opens that field. `reui-bridge stats` opens the system stats card.
+//! nothing after it, it opens that field. `reui-bridge stats` opens the system stats card;
+//! `reui-bridge hide` hides the island until asked again, or shows it (its shortcut's path).
 //! Both exit 1 if ReUI isn't running.
 
 mod install;
@@ -74,6 +75,13 @@ fn main() {
                 1
             }
         },
+        Some("hide") => match command("island", "toggle-hidden") {
+            Ok(()) => 0,
+            Err(e) => {
+                eprintln!("reui-bridge: {e}");
+                1
+            }
+        },
         Some("timer") => match timer(&args[1..].join(" ")) {
             Ok(()) => 0,
             Err(e) => {
@@ -86,7 +94,7 @@ fn main() {
             0
         }
         None => {
-            eprintln!("usage: reui-bridge <agent>  |  reui-bridge install|uninstall <agent> [--scope user|project|local] [--project DIR]  |  reui-bridge test <agent>  |  reui-bridge timer <length> [label]  |  reui-bridge stats");
+            eprintln!("usage: reui-bridge <agent>  |  reui-bridge install|uninstall <agent> [--scope user|project|local] [--project DIR]  |  reui-bridge test <agent>  |  reui-bridge timer <length> [label]  |  reui-bridge stats  |  reui-bridge hide");
             0
         }
     };

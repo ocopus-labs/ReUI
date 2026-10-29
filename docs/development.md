@@ -107,6 +107,8 @@ The hub's `privacy` module shows which app is using the microphone, the camera o
 
 ## System stats internals
 
+The hub's `island` module (`modules/hide.rs`) registers the island's hide shortcut (`hide_shortcut` in `settings.json`, Win+Alt+I by default; Win+Alt+H is Windows' voice typing) and relays a press as `HubMsg::ToggleHidden`; the island keeps the state (`hidden` in `settings.json`). `reui-bridge hide` sends the same request through the pipe, which is how scripts test it without pressing keys.
+
 The hub's `stats` module shows CPU, GPU, memory, disk and network in a card: **Win+Alt+S**, Tray → System stats, or `reui-bridge stats`. Stats have no OS events, so they're polled, but only while the card is open: opening it starts a sampler thread that reads once a second (like Task Manager), and the island's "collapsed" ends it. With the card closed the module costs nothing (measured). CPU matches Windows 11's Task Manager (`GetSystemTimes`, i.e. `% Processor Time`); GPU is the busiest engine with its processes summed, from PDH's English counter names. Settings: `%APPDATA%\ReUI\stats.json` (`shortcut`, `gpu`, `disk`, `network`, `power`). `--no-stats` turns it off. The full spec and the costs are in [docs/PRD-system-stats.md](docs/PRD-system-stats.md).
 
 ## Adding a module

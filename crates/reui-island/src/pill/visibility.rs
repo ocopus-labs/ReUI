@@ -143,6 +143,15 @@ impl Pill {
                 None => _ = KillTimer(Some(self.hwnd), TIMER_PAUSE),
             }
         }
+        if settings.hidden != self.hidden_by_user {
+            self.hidden_by_user = settings.hidden;
+            eprintln!("island: {}", if self.hidden_by_user { "hidden" } else { "shown again" });
+            // What was held back (or let through) changes with it.
+            let ordered = self.ordered();
+            if let Err(e) = self.render(ordered) {
+                eprintln!("island: render failed: {e}");
+            }
+        }
         if self.visibility != settings.visibility {
             eprintln!("island: showing {:?}", settings.visibility);
         }
@@ -203,14 +212,32 @@ impl Pill {
         self.apply_settings(settings);
     }
 
+    /// The hide shortcut (via the hub) or the tray: hide the island until asked again, or
+    /// show it. Saved, so the Settings window, the tray and a restarted island agree; the
+    /// island applies it from the file at once rather than waiting for the watcher.
+    pub fn toggle_hidden(&mut self) {
+        let mut settings = Settings::load();
+        settings.hidden = !self.hidden_by_user;
+        settings.save();
+        self.apply_settings(settings);
+    }
+
+    pub fn hidden_by_user(&self) -> bool {
+        self.hidden_by_user
+    }
+
     fn wants_shown(&self) -> bool {
         if self.hidden {
             return false;
         }
-        // A pause quiets everything except questions only the user can answer (an agent
-        // asking for permission); those still come through.
+        // A pause, or hiding the island, quiets everything except questions only the user
+        // can answer (an agent asking for permission); those still come through.
         if self.paused {
             return self.snapshot.activities.iter().any(|a| a.priority == reui_protocol::Priority::Decision);
+        }
+        // Hidden: what got through `ordered` (decisions, a card the user summoned).
+        if self.hidden_by_user {
+            return !self.snapshot.activities.is_empty();
         }
         self.revealed || self.desktop_shows() || self.visibility.shows(&self.snapshot.activities)
     }

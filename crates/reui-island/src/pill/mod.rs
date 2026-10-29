@@ -167,6 +167,9 @@ pub struct Pill {
     visibility: Visibility,
     /// "Pause ReUI" is on (settings.json): hidden whatever happens until it ends.
     paused: bool,
+    /// Hidden with the hide shortcut or the tray (settings.json `hidden`): like a pause for
+    /// the island alone, until asked again.
+    hidden_by_user: bool,
     /// Pushed to the top edge in a hidden mode: shown until the pointer has been away a while.
     revealed: bool,
     /// What the island currently shows (faded in), after visibility mode, reveal and fullscreen.
@@ -245,9 +248,11 @@ impl Pill {
         // waiting in the bubble beside something the user can't see.
         let briefs_lead = self.visibility == Visibility::WhenNeeded && !self.desktop_shows() && !self.raw.activities.iter().any(|a| a.priority >= reui_protocol::Priority::Alert);
         let mut raw = self.raw.activities.clone();
-        if self.paused {
-            // Paused: only decisions show (see `wants_shown`), alone in the pill.
-            raw.retain(|a| a.priority == reui_protocol::Priority::Decision);
+        if self.paused || self.hidden_by_user {
+            // Paused or hidden: only decisions show (see `wants_shown`), alone in the pill;
+            // hidden, so does a card the user summons (a hotkey asks for exactly that).
+            let asked = self.pinned.clone().filter(|_| self.hidden_by_user && !self.paused && self.summoned);
+            raw.retain(|a| a.priority == reui_protocol::Priority::Decision || Some(&a.id) == asked.as_ref());
         }
         let (activities, pin_alive) = order::arrange(raw, self.pinned.as_ref(), self.summoned, open.as_ref(), briefs_lead);
         if !pin_alive {

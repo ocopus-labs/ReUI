@@ -8,6 +8,7 @@ pub mod clipboard;
 pub mod demo;
 pub mod destinations;
 pub mod devices;
+pub mod hide;
 pub mod hotkey;
 pub mod media;
 pub mod onboarding;

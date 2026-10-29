@@ -26,6 +26,8 @@ pub enum Event {
     Focus(ActivityId),
     /// The places to switch between (the view switcher).
     Destinations(Vec<Destination>),
+    /// The hide shortcut was pressed: hide the island, or show it again.
+    ToggleHidden,
     Disconnected,
 }
 
@@ -101,6 +103,7 @@ async fn read_loop(reader: &mut ReadHalf<NamedPipeClient>, notifier: &Notifier) 
             HubMsg::Image { id, bytes } => notifier.send(Event::Image(id, bytes)),
             HubMsg::Focus { id } => notifier.send(Event::Focus(id)),
             HubMsg::Destinations(places) => notifier.send(Event::Destinations(places)),
+            HubMsg::ToggleHidden => notifier.send(Event::ToggleHidden),
             _ => {}
         }
     }

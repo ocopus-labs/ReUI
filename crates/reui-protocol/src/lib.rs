@@ -15,7 +15,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-pub const PROTOCOL_VERSION: u32 = 20;
+pub const PROTOCOL_VERSION: u32 = 21;
 const MAX_FRAME: usize = 16 * 1024 * 1024;
 
 /// Per-user pipe name; the hub also restricts the pipe's ACL to the current user. A test
@@ -566,6 +566,9 @@ pub enum HubMsg {
     /// The places a surface may offer to switch between (a view switcher), in order. Sent
     /// after `Welcome` and whenever the list changes, never per snapshot.
     Destinations(Vec<Destination>),
+    /// Hide the island until asked again, or show it again (the hide shortcut, or
+    /// `reui-bridge hide`). The surface keeps the state; the hub only relays the request.
+    ToggleHidden,
 }
 
 /// A place the user can go to on purpose (clipboard history, the timer launcher), as

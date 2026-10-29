@@ -92,6 +92,8 @@ async fn main() -> Result<()> {
     if !has("--no-updates") {
         enabled.push(Box::new(modules::updates::Updates));
     }
+    // The island's hide shortcut: the island is always there to hide.
+    enabled.push(Box::new(modules::hide::HideIsland));
     if has("--demo") {
         enabled.push(Box::new(modules::demo::Demo));
     }

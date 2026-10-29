@@ -46,6 +46,8 @@ modules/
                    arrivals, brightness keys (Raw Input), lock keys, Explorer restarts,
                    clock changes, module hotkeys
   hotkey.rs        hotkey settings ("Win+Alt+V") parsed into modifiers + virtual key
+  hide.rs          the island's hide shortcut (settings.json `hide_shortcut`, Win+Alt+I) and
+                   `toggle-hidden` (`reui-bridge hide`), relayed as HubMsg::ToggleHidden
   destinations.rs  the places the view switcher offers (module, glyph, name, open command),
                    from the running modules and Now Playing's card; the hub sends them as
                    HubMsg::Destinations when they change (pure, tested)
@@ -211,7 +213,7 @@ stats.rs           idle cost: CPU and private memory of ReUI's processes
 
 | Path | What |
 |---|---|
-| `%APPDATA%\ReUI\settings.json` | island `visibility`, `show_on_desktop`, `hide_in_fullscreen`, `monitor`, `paused_until` while ReUI is paused, `view_switcher`, and the look: `style` (island / notch), `theme` (auto / dark / light), `accent` (reui / windows), `roundness` (0..1), `top_gap` (0..24), `padding` (compact / regular / roomy), `scale` (0.9..1.25) |
+| `%APPDATA%\ReUI\settings.json` | island `visibility`, `show_on_desktop`, `hide_in_fullscreen`, `monitor`, `paused_until` while ReUI is paused, `hidden` while it's hidden with its shortcut (written by the island), `hide_shortcut` (read by the hub), `view_switcher`, and the look: `style` (island / notch), `theme` (auto / dark / light), `accent` (reui / windows), `roundness` (0..1), `top_gap` (0..24), `padding` (compact / regular / roomy), `scale` (0.9..1.25) |
 | `%APPDATA%\ReUI\onboarding.json` | first run done (`welcomed`), tips shown, offers answered |
 | `%APPDATA%\ReUI\clipboard.db`, `clipboard.json` | clipboard history and settings |
 | `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json`, `timers.json`, `privacy.json`, `stats.json`, `coding.json` | music, OSD, Devices, Timers, privacy indicator, System stats and coding agent settings (`coding.json` is read by all three agent modules) |

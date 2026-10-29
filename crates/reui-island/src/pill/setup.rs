@@ -367,6 +367,7 @@ impl Pill {
             drag_guard: DragGuard::default(),
             visibility,
             paused: false,
+            hidden_by_user: false,
             revealed: false,
             shown: true,
             clickthrough: true,

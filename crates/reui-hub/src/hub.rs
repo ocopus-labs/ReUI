@@ -82,6 +82,8 @@ pub struct Hub {
     focus: broadcast::Sender<ActivityId>,
     /// The places surfaces may switch between (see `modules::destinations`).
     destinations: Arc<watch::Sender<Arc<Vec<Destination>>>>,
+    /// "Hide or show the island" requests (the hide shortcut); the island keeps the state.
+    hide: broadcast::Sender<()>,
 }
 
 impl Hub {
@@ -89,7 +91,13 @@ impl Hub {
         let (snapshots, _) = watch::channel(Arc::new(Snapshot::default()));
         let (focus, _) = broadcast::channel(8);
         let (destinations, _) = watch::channel(Arc::new(Vec::new()));
-        Self { state: Arc::default(), snapshots: Arc::new(snapshots), focus, destinations: Arc::new(destinations) }
+        let (hide, _) = broadcast::channel(4);
+        Self { state: Arc::default(), snapshots: Arc::new(snapshots), focus, destinations: Arc::new(destinations), hide }
+    }
+
+    /// Requests to hide or show the island, for the surfaces to relay.
+    pub fn subscribe_hide(&self) -> broadcast::Receiver<()> {
+        self.hide.subscribe()
     }
 
     /// Latest snapshot plus change notifications. `watch` keeps only the newest value,
@@ -279,6 +287,11 @@ impl ModuleContext {
     /// Asks surfaces to bring this (published) activity to the front and open it.
     pub fn focus(&self, key: &str) {
         _ = self.hub.focus.send(ActivityId { module: self.module.to_string(), key: key.to_string() });
+    }
+
+    /// Asks the island to hide until asked again, or to show again if it's hidden.
+    pub fn toggle_hidden(&self) {
+        _ = self.hub.hide.send(());
     }
 
     /// Sends another module a command, as the tray and the Settings window do (`reload`,

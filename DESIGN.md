@@ -84,7 +84,7 @@ Layout templates fall out of the content, so modules don't pick them:
 | Pointer leaves expanded | Collapse after `motion.delay.collapse` |
 | Fullscreen app in front (game, video, browser video, presentation) | Hide entirely (`hide_in_fullscreen`, on by default) |
 | Something dragged over it (a tab, a file, a selection) | Nothing: no peek, no clicks, until the button is up and the pointer rests |
-| Right-click the pill, or the tray icon | Short menu: Settings, Pause ReUI for 1 hour / Resume, Clipboard history, Devices, Quit. A left-click on the tray icon opens Settings |
+| Right-click the pill, or the tray icon | Short menu: Settings, Pause ReUI for 1 hour / Resume, Hide the island / Show the island, Clipboard history, Devices, Quit. A left-click on the tray icon opens Settings |
 | Click the minimal bubble | Swaps that activity into the pill |
 | Click a tab on the view switcher (or wheel over it; Ctrl+Tab while the card has the keyboard) | Sends that place's own open command (the tray's); its card replaces the open one as a summoned card. The switcher and the gap above it count as the card for hover; a press there isn't "outside" |
 | A brief confirmation (copied) while something else is in the pill | Shows in the minimal bubble for its moment (copy icon), never takes the pill; alone, it takes the pill with a glimpse of what was copied |
@@ -101,6 +101,8 @@ Layout templates fall out of the content, so modules don't pick them:
 | Always | The resting pill is always there (the default when settings.json has no `visibility`; a brand-new user's first run writes "When something is happening") |
 | When something is happening | Only while there's at least one activity |
 | Only when it needs me | Only for decisions and alerts (permission requests, questions, done, failed) |
+
+**Hidden** (the hide shortcut, Win+Alt+I by default, or the tray; settings.json `hidden`, `hide_shortcut`): over any mode, the island stays out of sight until asked again, like a pause for the island alone: modules and clipboard recording carry on, decisions still come through, and a card the user summons with its own shortcut shows. The top edge doesn't reveal it. The hub registers the shortcut on its shared hotkey window and sends the island `ToggleHidden`; the island keeps the state.
 
 In the hidden modes, pushing the pointer against the top edge above the island reveals it; it hides again `motion.delay.reveal-hold` after the pointer leaves. Showing and hiding use the presence animation (`motion.show`): the island emerges from the top edge (slides down, scales up from `from-scale` with a slight overshoot) and retracts into it, quicker, on hide.
 

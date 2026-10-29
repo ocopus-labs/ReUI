@@ -174,11 +174,12 @@ fn rebuild(hwnd: HWND, placement: &Placement) {
 }
 
 fn open_menu(hwnd: HWND) {
-    let mut paused = false;
-    with_pill(|pill| paused = pill.paused());
-    match tray::menu(hwnd, paused) {
+    let (mut paused, mut hidden) = (false, false);
+    with_pill(|pill| (paused, hidden) = (pill.paused(), pill.hidden_by_user()));
+    match tray::menu(hwnd, paused, hidden) {
         Some(tray::Command::Settings) => tray::open_settings(),
         Some(tray::Command::TogglePause) => with_pill(|pill| pill.set_paused(!paused)),
+        Some(tray::Command::ToggleHidden) => with_pill(|pill| pill.toggle_hidden()),
         Some(tray::Command::Module(module, action)) => with_pill(|pill| pill.command(module, &action)),
         Some(tray::Command::Quit) => unsafe { _ = DestroyWindow(hwnd) },
         None => {}

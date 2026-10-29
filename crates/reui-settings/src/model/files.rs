@@ -41,10 +41,10 @@ impl File {
     }
 
     /// The hub modules told to `reload` after a write; the island notices on its own
-    /// (updates reads `check_updates` from the island's file).
+    /// (updates reads `check_updates` from the island's file, `island` its hide shortcut).
     pub fn modules(self) -> &'static [&'static str] {
         match self {
-            File::Island => &["updates"],
+            File::Island => &["updates", "island"],
             File::Media => &["media"],
             File::Clipboard => &["clipboard"],
             File::Osd => &["osd"],
@@ -82,6 +82,7 @@ impl File {
                 "hide_in_fullscreen": true,
                 "show_on_desktop": true,
                 "view_switcher": true,
+                "hide_shortcut": "Win+Alt+I",
                 "monitor": "primary",
                 "check_updates": true,
                 "whats_new": true,
@@ -139,6 +140,7 @@ impl File {
         match self {
             File::Clipboard => Some("hotkey"),
             File::Timers | File::Stats => Some("shortcut"),
+            File::Island => Some("hide_shortcut"),
             _ => None,
         }
     }

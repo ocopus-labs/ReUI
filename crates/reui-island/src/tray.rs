@@ -20,6 +20,7 @@ const CMD_FOCUS: usize = 106;
 const CMD_STOPWATCH: usize = 107;
 const CMD_UPDATE: usize = 108;
 const CMD_STATS: usize = 109;
+const CMD_HIDE: usize = 110;
 /// Timer presets: this plus the preset's index.
 const CMD_PRESET: usize = 200;
 const CMD_ITEM: usize = 400;
@@ -28,6 +29,8 @@ pub enum Command {
     Settings,
     /// Pause ReUI for an hour, or resume it when paused.
     TogglePause,
+    /// Hide the island until asked again (as its shortcut does), or show it.
+    ToggleHidden,
     /// (module, action)
     Module(&'static str, String),
     Quit,
@@ -102,13 +105,16 @@ pub fn open_settings() {
 }
 
 /// Shows the menu at the pointer and returns what was picked. `paused`: ReUI is paused, so
-/// the pause entry resumes.
-pub fn menu(hwnd: HWND, paused: bool) -> Option<Command> {
+/// the pause entry resumes. `hidden`: the island is hidden (its shortcut), so the entry
+/// shows it again: the tray is the one place a hidden island can be found.
+pub fn menu(hwnd: HWND, paused: bool, hidden: bool) -> Option<Command> {
     unsafe {
         let menu = CreatePopupMenu().ok()?;
         _ = AppendMenuW(menu, MF_STRING, CMD_SETTINGS, w!("Settings"));
         let pause = if paused { w!("Resume ReUI") } else { w!("Pause ReUI for 1 hour") };
         _ = AppendMenuW(menu, MF_STRING, CMD_PAUSE, pause);
+        let hide = if hidden { w!("Show the island") } else { w!("Hide the island") };
+        _ = AppendMenuW(menu, MF_STRING, CMD_HIDE, hide);
         if let Some(version) = known_update() {
             let label: Vec<u16> = format!("Install update ({version})").encode_utf16().chain([0]).collect();
             _ = AppendMenuW(menu, MF_STRING, CMD_UPDATE, PCWSTR(label.as_ptr()));
@@ -144,6 +150,7 @@ pub fn menu(hwnd: HWND, paused: bool) -> Option<Command> {
         match picked {
             CMD_SETTINGS => Some(Command::Settings),
             CMD_PAUSE => Some(Command::TogglePause),
+            CMD_HIDE => Some(Command::ToggleHidden),
             CMD_CLIPBOARD => Some(Command::Module("clipboard", "open".into())),
             CMD_DEVICES => Some(Command::Module("devices", "overview".into())),
             CMD_STATS => Some(Command::Module("stats", "open".into())),
