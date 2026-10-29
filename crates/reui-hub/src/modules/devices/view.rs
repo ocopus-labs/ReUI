@@ -6,6 +6,7 @@ use reui_protocol::{Art, Button, ButtonContent, ButtonRole, CardSize, CompactVie
 
 use super::airpods::Pods;
 use super::drives::{self, Drive};
+use super::registry::Device;
 use super::kinds::{Kind, GLYPH_BOLT, GLYPH_DEVICES, GLYPH_DRIVE, GLYPH_SD_CARD};
 use crate::hub::View;
 
@@ -39,9 +40,25 @@ fn expanded(leading: Element, eyebrow: Option<&str>, headline: Headline, detail:
 pub struct DeviceInfo {
     pub name: String,
     pub kind: Kind,
+    /// The exact model, when the catalog knows it.
+    pub model: Option<&'static str>,
     /// The PnP level (or the buds' lowest).
     pub level: Option<u8>,
     pub pods: Option<Pods>,
+}
+
+impl DeviceInfo {
+    pub fn of(d: &Device) -> DeviceInfo {
+        DeviceInfo { name: d.name.clone(), kind: d.kind, model: d.model(), level: d.level(), pods: d.pods }
+    }
+}
+
+/// The model, when it says more than the name the user gave the device ("AirPods Pro" adds
+/// nothing to "Rohit's AirPods Pro (2nd generation)", "AirPods Pro (2nd generation)" does
+/// to "Rohit's AirPods").
+fn model_line(name: &str, model: Option<&str>) -> Option<String> {
+    let words = |s: &str| s.to_lowercase().split(|c: char| !c.is_alphanumeric()).filter(|w| !w.is_empty()).collect::<Vec<_>>().join(" ");
+    model.filter(|m| !words(name).contains(&words(m))).map(str::to_owned)
 }
 
 /// Left, right and case as progress rows ("Left · 80%"), the parts that are known.
@@ -56,13 +73,17 @@ fn pod_rows(pods: &Pods) -> Vec<Row> {
         .collect()
 }
 
-/// S1: glyph, and the battery ring once it's known (never a placeholder). Open: the name,
-/// and the buds and case when read.
+/// S1: glyph, and the battery ring once it's known (never a placeholder). Open: the user's
+/// name for it as the hero; the detail is the exact model when that adds something, and the
+/// level unless the buds and case have rows of their own ("AirPods Pro (2nd generation) ·
+/// 80%").
 pub fn connect_view(d: &DeviceInfo) -> View {
     let glyph = art(d.kind.glyph());
     let level = d.level.map_or(Element::Empty, ring);
     let rows = d.pods.as_ref().map(pod_rows).unwrap_or_default();
-    let detail = if rows.is_empty() { d.level.map(percent) } else { None };
+    let percent = if rows.is_empty() { d.level.map(percent) } else { None };
+    let parts: Vec<String> = model_line(&d.name, d.model).into_iter().chain(percent).collect();
+    let detail = (!parts.is_empty()).then(|| parts.join(" · "));
     View {
         accent: low_accent(d.level),
         compact: CompactView { leading: glyph.clone(), trailing: level.clone() },
@@ -208,11 +229,31 @@ mod tests {
     use super::*;
 
     fn device(name: &str, kind: Kind, level: Option<u8>) -> DeviceInfo {
-        DeviceInfo { name: name.into(), kind, level, pods: None }
+        DeviceInfo { name: name.into(), kind, model: None, level, pods: None }
     }
 
     fn pods() -> Pods {
-        Pods { model: 0x0E20, left: Some(80), right: Some(70), case: None, left_charging: false, right_charging: false, case_charging: false }
+        Pods { model: 0x200E, left: Some(80), right: Some(70), case: None, left_charging: false, right_charging: false, case_charging: false, lid_open: None, colour: None }
+    }
+
+    #[test]
+    fn devices_connect_card_names_the_model_when_it_adds_something() {
+        let detail = |name: &str, model, level, pods| {
+            let d = DeviceInfo { model, pods, ..device(name, Kind::Earbuds, level) };
+            connect_view(&d).expanded.unwrap().detail
+        };
+        let pro2 = Some("AirPods Pro (2nd generation)");
+        // The user's name stays the hero; the model and level are the detail.
+        assert_eq!(detail("Rohit's AirPods", pro2, Some(82), None).as_deref(), Some("AirPods Pro (2nd generation) · 82%"));
+        let v = connect_view(&DeviceInfo { model: pro2, ..device("Rohit's AirPods", Kind::Earbuds, Some(82)) });
+        assert_eq!(v.expanded.unwrap().headline, Headline::Text("Rohit's AirPods".into()));
+        // With bud rows, the model alone.
+        assert_eq!(detail("Rohit's AirPods", pro2, Some(70), Some(pods())).as_deref(), Some("AirPods Pro (2nd generation)"));
+        // A name that already says it all, ignoring case and punctuation.
+        assert_eq!(detail("rohit's airpods pro (2nd generation)", pro2, Some(82), None).as_deref(), Some("82%"));
+        assert_eq!(detail("Beats Fit Pro", Some("Beats Fit Pro"), None, None), None);
+        // No model, no battery yet: no detail at all.
+        assert_eq!(detail("Buds 3r", None, None, None), None);
     }
 
     #[test]

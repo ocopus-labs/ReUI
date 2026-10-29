@@ -8,7 +8,8 @@ use std::time::Duration;
 use reui_protocol::Priority;
 use tokio::time::Instant;
 
-use super::airpods::{self, Family, Scan, Sighting};
+use super::airpods::{self, Expect, Scan, Sighting};
+use super::catalog::{self, DeviceIds, Known};
 use super::bluetooth::BtEvent;
 use super::controllers::{self, PadEvent, Reading};
 use super::kinds::Kind;
@@ -40,13 +41,15 @@ fn device_key(key: u64) -> String {
 impl State {
     pub(super) fn on_bluetooth(&mut self, ctx: &ModuleContext, event: BtEvent) {
         let now = Instant::now();
-        match self.registry.apply(event) {
+        let change = self.registry.apply(event);
+        self.read_ids();
+        match change {
             Some(Change::Connected(key)) => {
                 self.battery_reads.extend(READS_AFTER_CONNECT.iter().map(|d| now + *d));
                 let Some(device) = self.registry.get(key) else { return };
-                let (kind, apple, family) = (device.kind, device.apple_audio(), airpods::family_of_name(&device.name));
+                let (kind, apple, expect) = (device.kind, device.apple_audio(), device.expect());
                 if apple && self.settings.airpods {
-                    self.start_scan(key, family);
+                    self.start_scan(key, expect);
                 }
                 if kind.announces() {
                     let verdict = self.gate.connected(key, now);
@@ -65,6 +68,47 @@ impl State {
             }
             None => {}
         }
+    }
+
+    /// Reads the Device ID records of containers not asked about yet, off the hub thread. At
+    /// startup the watchers report every paired device within a moment; they share one read.
+    fn read_ids(&mut self) {
+        if self.reading_ids {
+            return;
+        }
+        let containers = self.registry.ids_to_read();
+        if containers.is_empty() {
+            return;
+        }
+        self.reading_ids = true;
+        let tx = self.internal.clone();
+        tokio::spawn(async move {
+            let read = containers.clone();
+            let found = tokio::task::spawn_blocking(move || pnp::device_ids(&read)).await.unwrap_or_default();
+            _ = tx.send(Internal::Ids(containers, found));
+        });
+    }
+
+    /// Device ID records arrived: a device may now have an exact model (the connect card's
+    /// detail) or turn out to be Apple audio (its batteries come from adverts).
+    pub(super) fn on_ids(&mut self, ctx: &ModuleContext, read: &[u128], found: &HashMap<u128, DeviceIds>) {
+        self.reading_ids = false;
+        let changed = self.registry.set_ids(read, found);
+        for key in &changed {
+            let Some(device) = self.registry.get(*key).filter(|d| d.connected) else { continue };
+            let (apple, expect) = (device.apple_audio(), device.expect());
+            if apple && self.settings.airpods && self.burst.as_ref().is_none_or(|b| b.device == *key) {
+                self.start_scan(*key, expect);
+            }
+            if self.connect.as_ref().is_some_and(|c| c.members.contains(key) && self.moments.is_live(&c.key)) {
+                self.publish_connect(ctx, Duration::ZERO);
+            }
+        }
+        if !changed.is_empty() {
+            self.refresh_overview(ctx);
+        }
+        // Containers that appeared while this read ran.
+        self.read_ids();
     }
 
     fn announce(&mut self, ctx: &ModuleContext, key: u64, verdict: Verdict<u64>) {
@@ -95,7 +139,7 @@ impl State {
         let devices: Vec<_> = card.members.iter().filter_map(|k| self.registry.get(*k)).collect();
         let view = match devices.as_slice() {
             [] => return,
-            [d] => view::connect_view(&view::DeviceInfo { name: d.name.clone(), kind: d.kind, level: d.level(), pods: d.pods }),
+            [d] => view::connect_view(&view::DeviceInfo::of(d)),
             many => view::merged_view(&many.iter().map(|d| d.kind).collect::<Vec<_>>()),
         };
         if devices.iter().any(|d| d.kind.is_audio()) {
@@ -165,17 +209,17 @@ impl State {
 
     // ---- AirPods -----------------------------------------------------------------------
 
-    pub(super) fn start_scan(&mut self, device: u64, family: Family) {
+    pub(super) fn start_scan(&mut self, device: u64, expect: Expect) {
         if !self.settings.airpods {
             return;
         }
         let until = Instant::now() + BURST;
         if let Some(b) = &mut self.burst {
-            (b.device, b.family, b.until) = (device, family, until);
+            (b.device, b.expect, b.until) = (device, expect, until);
             return;
         }
         match Scan::start(self.sightings.clone()) {
-            Ok(scan) => self.burst = Some(Burst { _scan: scan, device, family, until }),
+            Ok(scan) => self.burst = Some(Burst { _scan: scan, device, expect, until }),
             Err(e) => eprintln!("devices: can't scan for AirPods batteries ({e})"),
         }
     }
@@ -189,7 +233,7 @@ impl State {
 
     pub(super) fn on_sighting(&mut self, ctx: &ModuleContext, s: Sighting) {
         let Some(burst) = &self.burst else { return };
-        if !airpods::accept(burst.family, &s.pods, s.rssi) {
+        if !airpods::accept(burst.expect, &s.pods, s.rssi) {
             return;
         }
         let key = burst.device;
@@ -198,6 +242,8 @@ impl State {
             return;
         }
         device.pods = Some(s.pods);
+        // The advert names the model (and its colour) when the ids didn't.
+        device.identify();
         self.battery_changed(ctx, key);
         self.refresh_overview(ctx);
     }
@@ -222,8 +268,10 @@ impl State {
 
     pub(super) fn on_pad_reading(&mut self, ctx: &ModuleContext, reading: Reading) {
         let key = reading.key;
-        let pad = self.pads.entry(key).or_insert_with(|| Pad { reading: reading.clone(), low: Default::default() });
+        let identity = catalog::resolve(&Known { ids: reading.ids, name: &reading.name, kind: Kind::Gamepad, ..Default::default() });
+        let pad = self.pads.entry(key).or_insert_with(|| Pad { reading: reading.clone(), low: Default::default(), identity });
         pad.reading = reading;
+        pad.identity = identity;
         let Some(level) = pad.reading.level else { return };
         if let Some(threshold) = pad.low.update(level, pad.reading.charging) {
             self.show_low(ctx, &format!("low:pad:{key:016x}"), Kind::Gamepad.glyph(), level, threshold);

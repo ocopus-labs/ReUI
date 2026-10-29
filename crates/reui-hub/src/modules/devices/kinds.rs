@@ -3,7 +3,8 @@
 //!
 //! Glyphs:
 //! - E7F6 Headphone (headphones), F4C0 Earbud (earbuds), E95B Headset, E7F5 Speakers;
-//! - E962 Mouse, E92E KeyboardStandard, E7FC Game (controllers), EFA5 Touchpad;
+//! - E962 Mouse, E92E KeyboardStandard, E7FC Game (controllers), EFA5 Touchpad, E76D
+//!   InkingTool (pens);
 //! - E8EA CellPhone (phones, iPhone included);
 //! - E916 Stopwatch for watches (the font has no watch glyph);
 //! - E702 Bluetooth for anything else;
@@ -19,6 +20,7 @@ pub enum Kind {
     Mouse,
     Keyboard,
     Touchpad,
+    Pen,
     Gamepad,
     Phone,
     Watch,
@@ -42,10 +44,30 @@ impl Kind {
             Kind::Mouse => '\u{E962}',
             Kind::Keyboard => '\u{E92E}',
             Kind::Touchpad => '\u{EFA5}',
+            Kind::Pen => '\u{E76D}',
             Kind::Gamepad => '\u{E7FC}',
             Kind::Phone => GLYPH_PHONE,
             Kind::Watch => '\u{E916}',
             Kind::Other => '\u{E702}',
+        }
+    }
+
+    /// The kind's art id: one drawing per id, shared with the island's device art. Headsets
+    /// draw as headphones and touchpads as mice (the art has no separate shapes for them);
+    /// anything else is plain Bluetooth. Read once the island's device art is wired in.
+    #[cfg_attr(not(test), allow(dead_code))]
+    pub fn id(self) -> &'static str {
+        match self {
+            Kind::Earbuds => "earbuds",
+            Kind::Headphones | Kind::Headset => "headphones",
+            Kind::Speaker => "speaker",
+            Kind::Gamepad => "gamepad",
+            Kind::Mouse | Kind::Touchpad => "mouse",
+            Kind::Keyboard => "keyboard",
+            Kind::Pen => "pen",
+            Kind::Watch => "watch",
+            Kind::Phone => "phone",
+            Kind::Other => "bluetooth",
         }
     }
 
@@ -97,6 +119,7 @@ pub fn from_appearance(appearance: u32) -> Kind {
             1 => Kind::Keyboard,
             2 => Kind::Mouse,
             3 | 4 => Kind::Gamepad,
+            7 => Kind::Pen,
             9 => Kind::Touchpad,
             _ => Kind::Other,
         },
@@ -136,6 +159,8 @@ pub fn from_name(name: &str) -> Kind {
         Kind::Watch
     } else if has(&["iphone", "pixel", "galaxy s", "phone"]) {
         Kind::Phone
+    } else if has(&["stylus"]) || n.split(|c: char| !c.is_alphanumeric()).any(|w| w == "pen") {
+        Kind::Pen
     } else {
         Kind::Other
     }
@@ -192,6 +217,7 @@ mod tests {
         assert_eq!(from_appearance(0x03C2), Kind::Mouse);
         assert_eq!(from_appearance(0x03C1), Kind::Keyboard);
         assert_eq!(from_appearance(0x03C4), Kind::Gamepad);
+        assert_eq!(from_appearance(0x03C7), Kind::Pen);
         assert_eq!(from_appearance(0x0941), Kind::Earbuds);
         assert_eq!(from_appearance(0x0943), Kind::Headphones);
         assert_eq!(from_appearance(0x0841), Kind::Speaker);
@@ -210,6 +236,9 @@ mod tests {
         assert_eq!(classify(Some((1, 3)), None, "Desk PC"), Kind::Other);
         assert_eq!(classify(None, None, "Xbox Wireless Controller"), Kind::Gamepad);
         assert_eq!(classify(None, None, "AirPods Max"), Kind::Headphones);
+        assert_eq!(classify(None, Some(0x03C7), "Slim Pen 2"), Kind::Pen);
+        assert_eq!(classify(None, None, "Surface Pen"), Kind::Pen);
+        assert_eq!(classify(None, None, "OpenRun Pro"), Kind::Other);
     }
 
     #[test]
@@ -218,6 +247,7 @@ mod tests {
         assert_eq!(Kind::Earbuds.glyph(), '\u{F4C0}');
         assert_eq!(Kind::Mouse.glyph(), '\u{E962}');
         assert_eq!(Kind::Other.glyph(), '\u{E702}');
+        assert_eq!((Kind::Headset.id(), Kind::Touchpad.id(), Kind::Pen.id(), Kind::Other.id()), ("headphones", "mouse", "pen", "bluetooth"));
         assert!(Kind::Mouse.announces() && Kind::Watch.announces() && !Kind::Other.announces());
         assert!(Kind::Speaker.is_audio() && !Kind::Mouse.is_audio());
         assert!(is_apple_audio("AirPods Pro", Kind::Earbuds) && !is_apple_audio("AirPods Pro", Kind::Other) && !is_apple_audio("Galaxy Buds", Kind::Earbuds));
