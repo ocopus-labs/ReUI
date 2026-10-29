@@ -97,7 +97,17 @@ features = [
     "Win32_NetworkManagement_IpHelper",
     "Win32_NetworkManagement_Ndis",
     "Win32_System_Performance",
+    # Notifications (off by default): the listener, a toast's app (AppInfo) and its logo
+    "UI_Notifications",
+    "UI_Notifications_Management",
+    "ApplicationModel",
 ]
+
+# The notification probe (examples/notifications_probe.rs) sends its own test toasts and
+# counts CPU cycles.
+[dev-dependencies.windows]
+workspace = true
+features = ["Data_Xml_Dom", "Win32_System_WindowsProgramming"]
 
 [build-dependencies]
 reui-design.workspace = true

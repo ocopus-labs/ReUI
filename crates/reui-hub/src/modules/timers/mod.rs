@@ -39,7 +39,7 @@ use reui_protocol::{unix_ms, Priority, ACTION_COLLAPSED, ACTION_EXPANDED, ACTION
 use tokio::sync::mpsc;
 use tokio::time::{sleep_until, Instant};
 
-mod dnd;
+pub(crate) mod dnd;
 mod focus;
 mod model;
 pub mod parse;

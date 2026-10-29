@@ -5,7 +5,8 @@
 //! (Claude Code, Codex, OpenCode) / Now Playing / system OSD / Devices / Timers / privacy
 //! indicator / System stats modules, `--no-link-previews` keeps clipboard links offline,
 //! `--no-island` doesn't launch the island (run `reui-island` yourself, e.g. under a
-//! debugger). `--no-updates` never looks for updates or mentions them. Clipboard, Now
+//! debugger). `--no-updates` never looks for updates or mentions them. `--notifications` turns
+//! on the (opt-in, off by default) notifications module for this run. Clipboard, Now
 //! Playing, Devices, Timers, the privacy indicators and System stats also stay off when their
 //! file says `"enabled": false` (Settings, the welcome). `--no-onboarding` skips the first
 //! run and one-time tips; `--first-run` replays the demo and welcome. `--restore-flyout` only
@@ -88,6 +89,10 @@ async fn main() -> Result<()> {
     }
     if !has("--no-stats") && feature_on("stats.json") {
         enabled.push(Box::new(modules::stats::SystemStats));
+    }
+    // Off unless asked for: reading other apps' notifications is opt-in.
+    if has("--notifications") || modules::notifications::enabled() {
+        enabled.push(Box::new(modules::notifications::Notifications));
     }
     if !has("--no-updates") {
         enabled.push(Box::new(modules::updates::Updates));
