@@ -1,6 +1,6 @@
 # PRD: System stats (CPU, GPU, memory, disk, network in the island)
 
-Status: M0–M1 built, M2–M3 proposed · Owner: Rohit · "System stats" in [PLAN.md](../PLAN.md)'s catalogue · Oct 30, 2026
+Status: M0–M1 built, the v2 card (§5.2, from M3: sparklines and Task Manager) built, M2 and the rest of M3 proposed · Owner: Rohit · "System stats" in [PLAN.md](../PLAN.md)'s catalogue · Oct 30, 2026
 
 **References:**
 - **Windows Task Manager** (Performance tab): the numbers people trust and compare against. CPU, memory, disk active time, network throughput and each GPU's busiest engine, refreshed once a second ("Normal" update speed). It is a window you open and close; it costs a few percent of a core while it shows.
@@ -8,10 +8,10 @@ Status: M0–M1 built, M2–M3 proposed · Owner: Rohit · "System stats" in [PL
   - **iStat Menus** ([Bjango](https://bjango.com/mac/istatmenus/)): a compact figure or sparkline per stat in the menu bar, with a detailed dropdown (per-core, processes, history graphs).
   - **Stats** ([exelban/stats](https://github.com/exelban/stats), open source): the same idea, one module per stat, each with its own update interval; users file issues about its own CPU use when many modules sample at 1 s.
   - Both keep sampling while their menu bar items are visible, which is always. That is the cost we don't want.
-- **Apple's Dynamic Island** has no system stats. Notch apps on the Mac (NotchNook, Alcove, boring.notch) don't either; a few third-party widgets add a CPU line. There's no convention to follow, so the card follows ReUI's own: eyebrow → hero → detail, then meters.
+- **Apple's Dynamic Island** has no system stats. Notch apps on the Mac (NotchNook, Alcove, boring.notch) don't either; a few third-party widgets add a CPU line. There's no convention to follow, so the card follows ReUI's own: eyebrow → hero → detail, then quieter facts.
 
 **Inputs:**
-- `Row::Progress { fraction, leading, trailing }`: a meter with a caption on each side, already drawn by the island (Devices' overview, the update card). No protocol change is needed.
+- v1 used `Row::Progress { fraction, leading, trailing }` (a meter with a caption on each side) and needed no protocol change. The v2 card (§5.2) adds `Row::Gauges`, `Row::Facts` and `Element::Button` (protocol 19).
 - `expanded` / `collapsed`: the island already tells a module when its card opens and closes, for any reason.
 - Summoned cards (the timers' launcher, Devices' overview): a hotkey or the tray publishes a Passive activity and asks the island to open it.
 - `crates/reui-settings/src/stats.rs` already measures ReUI's own CPU and memory (About), sampled only while About shows; the same rule applies here.
@@ -22,7 +22,7 @@ Status: M0–M1 built, M2–M3 proposed · Owner: Rohit · "System stats" in [PL
 
 ## 2. Goals
 
-1. **One keypress to see how busy the PC is:** CPU as the hero, then GPU, memory, disk and network, each as a meter with one fact.
+1. **One keypress to see how busy the PC is:** CPU and memory as the hero, each with its last minute, then GPU, disk and network as one line of facts.
 2. **Numbers that match Task Manager**, so nobody has to wonder which is right.
 3. **Zero cost while the card is closed:** no thread, no timer, no counters open, no hub wake-ups. Measured, not assumed.
 4. **A small, stated cost while it's open:** 1 Hz sampling on its own thread, never on the hub thread.
@@ -30,7 +30,7 @@ Status: M0–M1 built, M2–M3 proposed · Owner: Rohit · "System stats" in [PL
 ## 3. Non-goals
 
 - A process list ("what's using it") and killing processes: Task Manager's job, one click away.
-- History graphs. At most, later, a short sparkline of the last minute that exists only while the card is open (M3); nothing is recorded while it's closed.
+- History graphs beyond the last minute. The v2 card's sparklines hold only what was read since the card opened; nothing is recorded while it's closed, and a new opening starts empty.
 - Per-core CPU, temperatures, fan speeds, clock speeds (temperatures need a kernel driver or WMI vendor classes, both slow and unreliable).
 - Alerts ("CPU over 90 % for a minute"): that would need sampling while closed.
 - Remote machines, logging to a file.
@@ -39,10 +39,11 @@ Status: M0–M1 built, M2–M3 proposed · Owner: Rohit · "System stats" in [PL
 
 | # | Scenario | v1 |
 |---|---|---|
-| S1 | Fan spins up | Win+Alt+S. The card opens with CPU 87 % as the hero, GPU 12 %, memory "21.4 of 31.7 GB". Switching apps or Win+Alt+S again closes it, and sampling stops |
-| S2 | Download crawling | Tray → System stats. Network reads "↓ 1.2 MB/s ↑ 80 KB/s", the bar a sliver of the link |
+| S1 | Fan spins up | Win+Alt+S. The card opens with CPU 87 % and memory 67 % ("21.4 of 31.7 GB") as gauges, GPU 12 % under them. Three seconds later CPU's numerals turn orange (still ≥ 90 %), and its line shows the climb. Switching apps or Win+Alt+S again closes it, and sampling stops |
+| S2 | Download crawling | Tray → System stats. Network reads "↓ 1.2 MB/s  ↑ 80 KB/s" |
 | S3 | Game stutters | Win+Alt+S over a windowed game: GPU 99 % · 7.8 GB. In exclusive fullscreen the island is hidden, so the card doesn't open and nothing is sampled |
-| S4 | Laptop on battery | The detail line reads "CPU · On battery, 14 W"; plugged in, "CPU · Charging, 45 W" |
+| S4 | Laptop on battery | The line under CPU's numerals reads "On battery, 14 W"; plugged in, "Charging, 45 W" |
+| S8 | What is it? | The glyph at the card's top right opens Task Manager (processes, per core, longer history) |
 | S5 | Left open | The island closes an untouched summoned card after a minute; sampling stops with it |
 | S6 | A script wants it | `reui-bridge stats` opens the card (also how it's tested) |
 | S7 | Pinned CPU (M2, opt-in) | The compact pill shows a CPU ring and "23%" while no other activity is in front. Costs one `GetSystemTimes` every 2 s only while that pill is on screen (§9) |
@@ -58,20 +59,33 @@ Status: M0–M1 built, M2–M3 proposed · Owner: Rohit · "System stats" in [PL
 
 ### 5.2 The card (Passive, key `system`, summoned; accent `color.system.teal` #40C8E0)
 
-- **Leading:** a ring filled to the CPU share (the accent).
-- **Eyebrow:** "System". **Hero:** the CPU share, "23%" (`Headline::Value`, tabular numerals). **Detail:** "CPU", or with a battery that's charging or discharging, "CPU · On battery, 14 W" / "CPU · Charging, 45 W".
-- **Rows**, each a `Row::Progress` with the name on the left and one fact on the right, left out when unknown (never shown as 0):
+The v2 card (roomy; `stats/view.rs`, drawn by the island's `render/rows/gauges.rs` from `reui_design::layout::gauges`, DESIGN.md "System stats"):
 
-| Row | Bar | Fact |
+![The System stats card](images/system-stats.png)
+
+- **Header:** the eyebrow "System" alone, and a bare glyph at its end that opens Task Manager (`Element::Button`, action `taskmgr`; the island's click allows the foreground, `ShellExecute` handles Task Manager's elevation). No headline: the gauges are the hero.
+- **Hero, `Row::Gauges`:** CPU and Memory side by side. Each is a ring filled to its share (the accent) with a quiet glyph inside (a chip, a memory module, in the secondary label colour), the label above big tabular numerals with a smaller, quieter "%" on their baseline, and one fact under them:
+
+| Gauge | Ring and numerals | Under them |
 |---|---|---|
-| GPU | the busiest engine | "41%", or "41% · 2.1 GB" with its dedicated memory in use |
+| CPU | busy share | the battery's flow when there is one, "On battery, 14 W" / "Charging, 45 W"; on a desktop nothing |
 | Memory | in use / total | "11.2 of 31.7 GB" |
-| Disk | active time | "3%" |
-| Network | the busier direction / the fastest link's speed | "↓ 1.2 MB/s  ↑ 80 KB/s" |
 
+  Under each, across its column, **the last minute** as a sparkline: a 1.5 px accent line, a soft accent area fading down to the zero line, the newest point marked with a dot. One point a second, kept in `history.rs` only while the card is open, newest at the right, so it fills in from the right; it never shows time that wasn't measured. 0–100 % fills its height (an honest scale: an idle CPU's line lies low).
+- **`Row::Facts`:** one quiet line for the rest, each a tertiary label over its tabular value, spread from inset to inset; left out when turned off or unknown (never shown as 0). No row at all when none is left.
+
+| Fact | Value |
+|---|---|
+| GPU | "41%", or "41% · 2.1 GB" with its dedicated memory in use |
+| Disk | "3%" (active time) |
+| Network | "↓ 1.2 MB/s  ↑ 80 KB/s" |
+
+- **Colour carries meaning only:** the accent tints every ring, line and area; no colour per metric. A number at 90 % or more for three readings running (CPU, memory, GPU, disk) turns `Warning`; one quiet second ends it.
 - **Compact** (only seen for a moment while it opens or closes): the ring and "23%". **Minimal:** the ring.
-- Updates once a second; the island redraws the open card when the numbers change.
-- **No filler:** no "Updated 1 s ago", no units legend, no "Open Task Manager" button (M3 may add the leading tile as the "open" action, like the music card's artwork).
+- Updates once a second; the island redraws the open card once per reading. Nothing animates between readings.
+- **No filler:** no "Updated 1 s ago", no units legend, no axis labels, no icons per fact.
+
+**Why this shape (v2).** v1 was a CPU ring and "1 %" hero over four grey meters: correct, but the meters were the same weight as each other and as nothing in particular, and the network bar (busier direction over link speed) was always a sliver. The questions people bring to the card are "is it the CPU or memory?" and "is it still happening?". So those two get the hero, side by side, and the last minute answers "still?" without anyone remembering the number from a second ago. A reference (a Mac notch app's stats panel) used a colour per metric, icons per row and nested panels; here one accent does all the drawing, so the only colour that changes is the one that means something (orange when a number stays high). GPU, disk and network are rarely the answer, so they're facts, read when wanted and quiet otherwise. Task Manager is the honest next step for "what is it", so it's one click from the header instead of a process list here.
 
 ### 5.3 What it never does
 
@@ -127,12 +141,12 @@ The island closes an untouched summoned card after a minute (`motion.delay.panel
 | E-S1 | Hybrid GPUs (integrated + discrete) | One GPU row: the busiest engine of *any* adapter (Task Manager's Processes column does the same), with that adapter's dedicated memory. A sleeping discrete GPU has no busy engines, so the integrated one wins |
 | E-S2 | No GPU counters (VM, Basic Display Adapter, WDDM < 2.0) | No GPU row |
 | E-S3 | VPN connected | Its virtual adapter isn't counted; the physical adapter carries the (encrypted) bytes, so totals stay right. A VPN whose adapter claims `HardwareInterface` would be counted twice (§13 V3) |
-| E-S4 | Wi-Fi and Ethernet both up | Both counted; the bar uses the faster link |
-| E-S5 | Link speed unknown (all ones) | Bar empty, rates still shown |
+| E-S4 | Wi-Fi and Ethernet both up | Both counted |
+| E-S5 | Link speed unknown (all ones) | Nothing changes: since v2 the card shows rates only, no bar against the link |
 | E-S6 | Adapter appears or disappears between samples | It counts from its second sample; a counter that went backwards counts as 0 |
 | E-S7 | Localized counter names | English paths via `PdhAddEnglishCounterW` |
 | E-S8 | PDH unavailable or the disk counters disabled | Those rows left out |
-| E-S9 | Desktop (no battery) | No power in the detail line |
+| E-S9 | Desktop (no battery) | No line under CPU's numerals (memory keeps its line; the gauges stay level) |
 | E-S10 | The hotkey is taken | Logged; Settings says so when you record it; the tray works |
 | E-S11 | Card asked for while the island is hidden (fullscreen) | Not opened; the sampler stops after 3 s |
 | E-S12 | ReUI paused | The card still opens on request (it's summoned, like the clipboard) |
@@ -151,10 +165,10 @@ The island closes an untouched summoned card after a minute (`motion.delay.panel
 |---|---|---|
 | System stats module | `enabled` | on |
 | Shortcut | `shortcut` | Win+Alt+S |
-| GPU row | `gpu` | on (off skips the GPU counters, the most expensive read) |
-| Disk row | `disk` | on |
-| Network row | `network` | on |
-| Power in the detail line | `power` | on |
+| GPU fact | `gpu` | on (off skips the GPU counters, the most expensive read) |
+| Disk fact | `disk` | on |
+| Network fact | `network` | on |
+| Power under CPU | `power` | on |
 
 The page also has **Show** (opens the card) and says, once, that it's read only while the card is open.
 
@@ -164,12 +178,13 @@ The page also has **Show** (opens the card) and says, once, that it's read only 
 |---|---|---|
 | **M0: Sampler** ✅ | `os.rs`, `pdh.rs`, `maths.rs` (CPU delta, rates, interface filter, busiest engine, tested), `sampler.rs` thread, per-read cost test | Readings match Task Manager on this PC; cost per read measured |
 | **M1: Card** ✅ | `card.rs` open/closed state machine (fake-clock tests), view, module, Win+Alt+S, tray entry, `reui-bridge stats`, `stats.json`, `--no-stats`, Settings page | S1–S6; hub idle unchanged with the card closed; cost open measured |
-| **M2: Pinned CPU** | Opt-in compact CPU while nothing else is in front; protocol `shown`/`hidden` for the compact presentation (v19); 2 s sampling only while shown | S7; idle cost unchanged when not pinned; pinned cost measured |
-| **M3: Detail** | A 60 s sparkline per row kept only while open (needs a sparkline element in the protocol), GPU "of 8 GB" (DXGI), disk throughput, leading tile opens Task Manager | Reviewed against DESIGN.md's restraint rule before building |
+| **M2: Pinned CPU** | Opt-in compact CPU while nothing else is in front; protocol `shown`/`hidden` for the compact presentation; 2 s sampling only while shown | S7; idle cost unchanged when not pinned; pinned cost measured |
+| **v2 card** ✅ | §5.2: CPU and Memory gauges with the last minute (`history.rs`, pure, tested), facts, Task Manager in the header, Warning when a number stays high; protocol 19 (`Row::Gauges`, `Row::Facts`, `Element::Button`); layout in `reui_design::layout::gauges`; Settings' Stats page preview | S1–S8; idle unchanged (no new timers; one redraw per reading) |
+| **M3: Detail** | GPU "of 8 GB" (DXGI), disk throughput | Reviewed against DESIGN.md's restraint rule before building |
 
 ## 12. Acceptance and measurement
 
-- **Unit tests:** CPU busy maths (including no time and backwards), rates across counter resets, the interface filter (filter rows, VPN, loopback, down, newly arrived), the GPU rule (summed per engine, busiest wins, blank `engtype`, clamped), number formats, the card's open/closed machine (toggle, stale runs, each deadline), the view (unknown rows left out), settings fallbacks, the Settings page writing the keys.
+- **Unit tests:** CPU busy maths (including no time and backwards), rates across counter resets, the interface filter (filter rows, VPN, loopback, down, newly arrived), the GPU rule (summed per engine, busiest wins, blank `engtype`, clamped), number formats, the card's open/closed machine (toggle, stale runs, each deadline), the view (unknown facts left out, the last minute, Warning only when sustained), the history (a minute at most, skipped readings), the gauges' layout (columns, level rows, sparkline points from the right, facts inset to inset), settings fallbacks, the Settings page writing the keys.
 - **Live (this PC):** a `REUI_CONFIG_DIR` sandbox hub (release build) with only this module on (`--no-agents --no-clipboard --no-media --no-osd --no-devices --no-timers --no-updates --no-onboarding`), the card opened with `reui-bridge stats`. CPU from `QueryProcessCycleTime` (exact; process times only move in 15.6 ms ticks) at the nominal 3.5 GHz, the way About's `stats.rs` reads ReUI's own processes:
 
 | State | Hub | Island |

@@ -69,7 +69,9 @@ The moment an app starts using your microphone or camera, or recording your scre
 
 ### System stats
 
-Press **Win+Alt+S** to see how busy your PC is: CPU, GPU, memory, disk and network, live. It reads them only while the card is open, so it costs nothing the rest of the time.
+<img src="docs/images/system-stats.png" width="672" alt="System stats open: CPU at 8 % and memory at 42 % as rings with their last minute drawn under them, then GPU, disk and network">
+
+Press **Win+Alt+S** to see how busy your PC is: CPU and memory with their last minute, then GPU, disk and network, live. A number that stays over 90 % turns orange, and the button at the top right opens Task Manager. It reads them only while the card is open, so it costs nothing the rest of the time.
 
 ### Timers and focus
 

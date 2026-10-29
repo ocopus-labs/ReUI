@@ -25,7 +25,7 @@ const DPI: u32 = 144;
 const STAGE_DPI: u32 = 192;
 /// Backdrop either side of the island on a stage alone, DIPs.
 const STAGE_SIDE: f32 = 96.0;
-const STAGE_MOMENTS: [Moment; 7] = [Moment::Compact, Moment::Music, Moment::Clipboard, Moment::Meter, Moment::Devices, Moment::Timer, Moment::Permission];
+const STAGE_MOMENTS: [Moment; 8] = [Moment::Compact, Moment::Music, Moment::Clipboard, Moment::Meter, Moment::Devices, Moment::Timer, Moment::Stats, Moment::Permission];
 
 /// What the flags beside `--shots` ask for.
 #[derive(Clone, Copy, Debug, Default, PartialEq)]

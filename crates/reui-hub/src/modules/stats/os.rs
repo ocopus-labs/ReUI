@@ -55,3 +55,21 @@ pub fn interfaces() -> Option<Vec<Interface>> {
         Some(list)
     }
 }
+
+/// Task Manager, from the card's header: everything the card leaves out (which process,
+/// per core, history) is one click away. Through the shell, not `CreateProcess`, because
+/// Task Manager asks to run elevated and only the shell handles that. Blocking; best effort.
+pub fn open_task_manager() {
+    use windows::core::{HSTRING, PCWSTR};
+    use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
+    use windows::Win32::UI::Shell::ShellExecuteW;
+    use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
+
+    unsafe {
+        _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+        let result = ShellExecuteW(None, &HSTRING::from("open"), &HSTRING::from("taskmgr.exe"), PCWSTR::null(), PCWSTR::null(), SW_SHOWNORMAL);
+        if result.0 as isize <= 32 {
+            eprintln!("stats: can't open Task Manager ({})", result.0 as isize);
+        }
+    }
+}

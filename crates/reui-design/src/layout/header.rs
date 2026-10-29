@@ -3,7 +3,7 @@
 //! the source switcher on the first line. Positions are from the card's left and top.
 
 use crate::look::Look;
-use crate::tokens::{component, island, space, typography};
+use crate::tokens::{component, icon, island, space, typography};
 
 /// What the headline is, which sets the hero line's height.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -13,6 +13,9 @@ pub enum Hero {
     Text,
     /// A command in a chip.
     Code,
+    /// No hero line: a row under the header is the hero (System stats' gauges), so the
+    /// header is only its eyebrow.
+    None,
 }
 
 impl Hero {
@@ -21,6 +24,7 @@ impl Hero {
             Hero::Value => typography::VALUE.line_height,
             Hero::Text => typography::HEADLINE.line_height,
             Hero::Code => typography::CODE.line_height + 2.0 * component::chip::PADDING_Y,
+            Hero::None => 0.0,
         }
     }
 }
@@ -40,8 +44,10 @@ impl Text {
     /// `detail_lines`: 0 without a detail, else 1, or 2 when it wraps ([`detail_lines`]).
     pub fn new(eyebrow: bool, hero: Hero, detail_lines: f32) -> Self {
         let gap = island::expanded::LINE_GAP;
+        // The gap under the eyebrow only when a line follows it.
+        let under = if hero != Hero::None || detail_lines > 0.0 { gap } else { 0.0 };
         Text {
-            eyebrow: if eyebrow { typography::EYEBROW.line_height + gap } else { 0.0 },
+            eyebrow: if eyebrow { typography::EYEBROW.line_height + under } else { 0.0 },
             hero: hero.height(),
             detail: if detail_lines > 0.0 { gap + detail_lines * typography::DETAIL.line_height } else { 0.0 },
         }
@@ -100,6 +106,16 @@ pub fn inline_x(look: &Look, width: f32, n: usize, i: usize) -> f32 {
         x += component::button::INLINE + component::button::INLINE_GAP;
     }
     x
+}
+
+/// A bare glyph button at the header's end (`Element::Button`, System stats' Task
+/// Manager): the glyph is `icon.header`, so it never makes an eyebrow-only header taller,
+/// and its click target is a square `header-button.hit` wide around it, centred on the
+/// glyph at the card's right inset and on `mid`. Returns the target's (left, top, size).
+pub fn end_button(look: &Look, width: f32, mid: f32) -> (f32, f32, f32) {
+    let hit = component::header_button::HIT;
+    let cx = width - look.inset() - icon::HEADER / 2.0;
+    (cx - hit / 2.0, mid - hit / 2.0, hit)
 }
 
 /// Where the header's pieces sit vertically.

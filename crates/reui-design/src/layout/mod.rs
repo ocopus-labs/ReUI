@@ -16,10 +16,13 @@
 //! - [`rows`]: the full-width rows (buttons, bars and their times, the slider, search,
 //!   tabs, choices, text blocks, lyrics).
 //! - [`cards`]: the clipboard's scrolling row of cards and its tabs' scroll.
+//! - [`gauges`]: gauges side by side with their sparklines, and a line of facts (System
+//!   stats).
 //! - Here: a card's width, corners and height, and the gaps between its rows.
 
 pub mod cards;
 pub mod compact;
+pub mod gauges;
 pub mod header;
 pub mod rows;
 

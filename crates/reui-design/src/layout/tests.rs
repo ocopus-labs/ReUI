@@ -148,3 +148,19 @@ fn long_lists_and_blocks_scroll_inside_the_card() {
     assert_eq!(shown % typography::BLOCK_CODE.line_height, 0.0, "whole lines");
     assert_eq!(rows::code_block(0).2, 0.0);
 }
+
+/// System stats: an eyebrow alone (Task Manager at its end), two gauges, a line of facts.
+#[test]
+fn the_stats_card() {
+    use super::gauges;
+    let l = Look::default();
+    let head = header::header(l.inset(), 0.0, icon::HEADER, gauges::eyebrow_only().height(), false);
+    assert_eq!(head.height, typography::EYEBROW.line_height.max(icon::HEADER), "the button doesn't make the header taller");
+    let (_, w) = gauges::columns(&l, Card::Roomy.width(), 2);
+    let g = gauges::gauge(&l, w, true);
+    let y = l.inset() + head.height + row_gap(&l, 0, false) + g.height + row_gap(&l, 1, false) + gauges::facts_height();
+    assert_eq!(Card::Roomy.height(&l, y + Card::Roomy.bottom(&l, false)), 20.0 + 16.0 + 16.0 + (78.0 + 10.0 + 28.0) + 12.0 + 38.0 + 20.0);
+
+    let (left, top, size) = header::end_button(&l, 480.0, head.mid);
+    assert_eq!((top + size / 2.0, left + size / 2.0), (head.mid, 480.0 - l.inset() - icon::HEADER / 2.0), "on the eyebrow's line at the inset");
+}

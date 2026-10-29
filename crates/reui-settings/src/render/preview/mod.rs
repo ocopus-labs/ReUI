@@ -14,6 +14,7 @@ mod devices;
 mod levels;
 mod music;
 mod parts;
+mod stats;
 mod timers;
 
 use reui_design::tokens::{motion, prefs as s};
@@ -51,6 +52,7 @@ pub fn draw(p: &Painter, preview: Preview, r: Rect, backdrop: Option<&Backdrop>,
             Moment::Meter => levels::draw(p, look),
             Moment::Devices => devices::draw(p, look, e),
             Moment::Timer => timers::draw(p, look, e),
+            Moment::Stats => stats::draw(p, look, e),
             Moment::Permission => agents::draw(p, look),
         })
     });

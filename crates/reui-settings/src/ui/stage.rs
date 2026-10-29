@@ -7,7 +7,7 @@
 
 use reui_design::layout::compact;
 use reui_design::layout::header::{self, Header, Hero, Text};
-use reui_design::layout::{row_gap, rows, Card};
+use reui_design::layout::{gauges, row_gap, rows, Card};
 use reui_design::look::Look;
 use reui_design::tokens::{component, icon, island, prefs::header as stage_header};
 
@@ -62,6 +62,13 @@ pub fn card(moment: Moment, look: &Look) -> Option<Open> {
         Moment::Permission => {
             let top = inset + context_height() + island::expanded::CONTEXT_GAP;
             open(look, Card::Roomy, top, (icon::TILE, 0.0), Text::new(true, Hero::Code, 1.0), (component::button::HEIGHT, true))
+        }
+        // The eyebrow alone with Task Manager at its end, then CPU and Memory as gauges
+        // (each with a detail line) and the line of facts.
+        Moment::Stats => {
+            let (_, col_w) = gauges::columns(look, Card::Roomy.width(), 2);
+            let rows_h = gauges::gauge(look, col_w, true).height + row_gap(look, 1, false) + gauges::facts_height();
+            open(look, Card::Roomy, inset, (0.0, icon::HEADER), gauges::eyebrow_only(), (rows_h, false))
         }
         Moment::Compact | Moment::Meter | Moment::Toast | Moment::Clipboard => return None,
     })
@@ -143,6 +150,7 @@ mod tests {
         assert_eq!(size(Moment::Timer, &l).0, 420.0);
         assert_eq!(size(Moment::Permission, &l).0, 480.0);
         assert!(size(Moment::Permission, &l).1 > size(Moment::Timer, &l).1);
+        assert_eq!(size(Moment::Stats, &l), (480.0, 238.0), "pinned in reui_design::layout's tests too");
         let music = card(Moment::Music, &l).unwrap();
         assert_eq!(music.rows, l.inset() + music.header.height + l.section_gap());
     }

@@ -80,6 +80,22 @@ impl TextCache {
         Ok(layout)
     }
 
+    /// Tabular numerals in `font` with a smaller unit on their baseline ("32" "%"), in a
+    /// `w` × `h` box: one layout with the unit's range resized, so DirectWrite lines the
+    /// baselines up. Not kept (a preview draws a handful, and only when it changes).
+    pub fn with_unit(&self, value: &str, unit: &str, font: Font, unit_style: reui_design::TextStyle, w: f32, h: f32) -> Result<(IDWriteTextLayout, DWRITE_TEXT_RANGE)> {
+        let layout = self.make(&format!("{value}{unit}"), Face::Text(font), w, h, Kind::Line { align: 0, tabular: true })?;
+        let range = DWRITE_TEXT_RANGE { startPosition: value.encode_utf16().count() as u32, length: unit.encode_utf16().count() as u32 };
+        if range.length > 0 {
+            unsafe {
+                layout.SetFontFamilyName(&windows::core::HSTRING::from(unit_style.family), range)?;
+                layout.SetFontWeight(DWRITE_FONT_WEIGHT(i32::from(unit_style.weight)), range)?;
+                layout.SetFontSize(unit_style.size, range)?;
+            }
+        }
+        Ok((layout, range))
+    }
+
     /// A frame is done. Layouts drawn lately stay (rows scrolled out and back in, pages
     /// visited again); past [`LAYOUTS`], only the last frame's are kept.
     pub fn end_frame(&mut self) {

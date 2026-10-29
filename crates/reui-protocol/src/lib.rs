@@ -15,7 +15,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-pub const PROTOCOL_VERSION: u32 = 18;
+pub const PROTOCOL_VERSION: u32 = 19;
 const MAX_FRAME: usize = 16 * 1024 * 1024;
 
 /// Per-user pipe name; the hub also restricts the pipe's ACL to the current user. A test
@@ -124,6 +124,10 @@ pub enum Element {
     /// A ring in the accent colour showing how much of `total_ms` the clock has left
     /// (counting down) or has run (counting up), advancing by itself.
     ClockRing { clock: Clock, total_ms: u64 },
+    /// A button at an end of the expanded header (System stats' Task Manager): pressing it
+    /// sends its `action`. Only the open card's header makes it pressable; anywhere else it
+    /// shows as its glyph. A `Plain` glyph button sits bare on the eyebrow's line.
+    Button(Button),
 }
 
 /// A time value that changes by itself: `value_ms` was true at `at_unix_ms`, and while
@@ -320,6 +324,45 @@ pub enum Row {
     /// A body of text under the header (a full command, an edit's changed lines, a plan)
     /// that scrolls inside the card with the wheel instead of growing it.
     Block { text: String, kind: BlockKind },
+    /// Measures side by side (System stats' CPU and Memory), each a ring with its share,
+    /// its value, a fact under it and the last minute as a line. Together they are the
+    /// card's hero, so a view with gauges leaves its headline empty.
+    Gauges(Vec<Gauge>),
+    /// A few short facts on one line, each a quiet label over its value ("GPU" over
+    /// "41% · 2.1 GB"): what's worth a glance but not a gauge.
+    Facts(Vec<Fact>),
+}
+
+/// The most samples a [`Gauge`]'s `history` holds: one a second, the last minute.
+pub const GAUGE_HISTORY: usize = 60;
+
+/// One measure in a [`Row::Gauges`].
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct Gauge {
+    /// What it measures ("CPU").
+    pub label: String,
+    /// The number ("32") and its unit ("%"), which reads quieter beside it.
+    pub value: String,
+    pub unit: String,
+    /// One fact under the number ("13.7 of 31.9 GB"), when there is one worth reading.
+    pub detail: Option<String>,
+    /// How full its ring is, 0..=1.
+    pub fraction: f32,
+    /// A Segoe Fluent Icons glyph inside the ring (a chip).
+    pub glyph: char,
+    /// The number's tone: `Warning` when it has stayed high, else `Primary`.
+    pub tone: Tone,
+    /// Earlier fractions, oldest first, one a second, at most [`GAUGE_HISTORY`]; the last
+    /// is now. Only what was really measured: it starts empty and fills in, never padded.
+    pub history: Vec<f32>,
+}
+
+/// One fact in a [`Row::Facts`].
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct Fact {
+    pub label: String,
+    pub value: String,
+    pub tone: Tone,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -638,6 +681,8 @@ mod tests {
                         Row::Buttons(vec![Button { action: "pause".into(), content: ButtonContent::Glyph('\u{E769}'), role: ButtonRole::Accent }]),
                         Row::Choices { options: vec![Choice { label: "React".into(), detail: Some("A UI library".into()), selected: true, action: "pick:0".into() }], multi: true },
                         Row::Block { text: "+ added\n- removed".into(), kind: BlockKind::Diff },
+                        Row::Gauges(vec![Gauge { label: "CPU".into(), value: "32".into(), unit: "%".into(), detail: None, fraction: 0.32, glyph: '\u{E950}', tone: Tone::Warning, history: vec![0.1, 0.32] }]),
+                        Row::Facts(vec![Fact { label: "Disk".into(), value: "3%".into(), tone: Tone::Primary }]),
                     ],
                 }),
             }],

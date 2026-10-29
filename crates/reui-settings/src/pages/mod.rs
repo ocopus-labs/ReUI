@@ -134,6 +134,7 @@ impl Page {
             Page::Osd => Some(Moment::Meter),
             Page::Devices => Some(Moment::Devices),
             Page::Timers => Some(Moment::Timer),
+            Page::Stats => Some(Moment::Stats),
             Page::Agents => Some(Moment::Permission),
             _ => None,
         }

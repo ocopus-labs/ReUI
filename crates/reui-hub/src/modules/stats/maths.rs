@@ -159,7 +159,13 @@ pub fn memory(used: u64, total: u64) -> String {
 
 /// "23%", rounded, as the Devices cards write it.
 pub fn percent(fraction: f32) -> String {
-    format!("{}%", (fraction.clamp(0.0, 1.0) * 100.0).round() as u32)
+    format!("{}%", whole_percent(fraction))
+}
+
+/// The share as a whole percentage, 0..=100: a gauge's numerals, which carry their "%"
+/// apart so it can read quieter.
+pub fn whole_percent(fraction: f32) -> u32 {
+    (fraction.clamp(0.0, 1.0) * 100.0).round() as u32
 }
 
 #[cfg(test)]

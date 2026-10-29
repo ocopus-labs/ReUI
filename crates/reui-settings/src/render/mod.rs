@@ -302,7 +302,23 @@ impl Painter<'_> {
         self.line(text, font, r, align, color, false)
     }
 
-    /// The same with tabular figures (numbers that change in place).
+    /// Numerals with a smaller, quieter unit on their baseline ("32" "%"), from the left of
+    /// `r`, vertically centred in it.
+    #[allow(clippy::too_many_arguments)]
+    pub fn figures_with_unit(&self, value: &str, unit: &str, font: Font, unit_style: reui_design::TextStyle, r: Rect, color: Color, unit_color: Color) -> Result<()> {
+        let (layout, range) = self.r.texts.borrow().with_unit(value, unit, font, unit_style, r.w(), r.h())?;
+        if range.length > 0 {
+            let c = unit_color.with_alpha(unit_color.a * self.alpha.get());
+            unsafe {
+                let brush = self.dc.CreateSolidColorBrush(&d2d(c), None)?;
+                layout.SetDrawingEffect(&brush, range)?;
+            }
+        }
+        self.draw_layout(&layout, r.l, self.snap(r.t), color);
+        Ok(())
+    }
+
+    /// One line with tabular figures (numbers that change in place).
     pub fn figures(&self, text: &str, font: Font, r: Rect, align: Align, color: Color) -> Result<()> {
         self.line(text, font, r, align, color, true)
     }

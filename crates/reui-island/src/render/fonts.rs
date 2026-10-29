@@ -55,6 +55,13 @@ pub(super) struct Fonts {
     /// Code and diff block lines (cut, not wrapped); prose blocks wrap.
     pub(super) block_code: Font,
     pub(super) block_prose: Font,
+    /// System stats: a bare glyph button at the header's end, the glyph in a gauge's ring,
+    /// what a gauge measures, and a fact's label and value.
+    pub(super) icon_header: Font,
+    pub(super) icon_gauge: Font,
+    pub(super) gauge_label: Font,
+    pub(super) fact_label: Font,
+    pub(super) fact: Font,
 }
 
 impl Renderer {
