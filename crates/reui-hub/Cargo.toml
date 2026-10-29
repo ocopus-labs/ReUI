@@ -8,6 +8,8 @@ license.workspace = true
 
 [dependencies]
 reui-protocol.workspace = true
+# The device drawings' bytes (`reui_design::devices`), shared with Settings' preview.
+reui-design.workspace = true
 anyhow.workspace = true
 # Stable content hash for clipboard dedupe; "pure" avoids the C/asm build.
 blake3 = { version = "1.8", features = ["pure"] }

@@ -1,6 +1,7 @@
 //! Painter primitives beyond fills and text: the cached bitmaps that let scrolling move
 //! the page without recording it again, the island stage's backdrop (the wallpaper's top
-//! centre), polygons, lines and arcs for the previews, and the Claude mark (SVG).
+//! centre), polygons, lines and arcs for the previews, and SVG marks (the Claude logo, the
+//! device drawings).
 
 use reui_design::Color;
 use windows::core::{Interface, Result};
@@ -224,13 +225,32 @@ impl Painter<'_> {
 
     /// The Claude logo filling `r` (square), in its own colours.
     pub fn claude(&self, r: Rect) -> Result<()> {
+        self.svg(CLAUDE_SVG, r, None)
+    }
+
+    /// Single-colour line art (`currentColor`, e.g. a device drawing) filling `r`
+    /// (square) in `ink`, as the island inks an `Art::Logo`. Its top-left lands on a
+    /// pixel, so art drawn on a whole-unit grid keeps its straight edges crisp.
+    pub fn line_art(&self, svg: &'static str, r: Rect, ink: Color) -> Result<()> {
+        self.svg(svg, r, Some(ink))
+    }
+
+    /// `svg` filling `r` (square): in its own colours, or tinted `ink` (with the painter's
+    /// alpha) the way the island's `render/images.rs` `tinted` does. Documents are cached
+    /// by markup, size and ink.
+    fn svg(&self, svg: &'static str, r: Rect, ink: Option<Color>) -> Result<()> {
         let size = r.w();
-        let key = size.to_bits();
+        let ink = ink.map(|c| c.with_alpha(c.a * self.alpha.get()));
+        let key = (svg.as_ptr() as usize, size.to_bits(), ink.map(Color::to_rgba8));
         let cached = self.r.device.svgs.borrow().get(&key).cloned();
         let document = match cached {
             Some(d) => d,
             None => unsafe {
-                let Some(stream) = SHCreateMemStream(Some(fit_svg(CLAUDE_SVG).as_bytes())) else { return Ok(()) };
+                let text = match ink {
+                    Some(c) => tinted(&fit_svg(svg), c),
+                    None => fit_svg(svg),
+                };
+                let Some(stream) = SHCreateMemStream(Some(text.as_bytes())) else { return Ok(()) };
                 let d = self.dc.CreateSvgDocument(&stream, D2D_SIZE_F { width: size, height: size })?;
                 self.r.device.svgs.borrow_mut().insert(key, d.clone());
                 d
@@ -239,12 +259,24 @@ impl Painter<'_> {
         unsafe {
             let mut previous = Matrix3x2::default();
             self.dc.GetTransform(&mut previous);
-            self.dc.SetTransform(&(Matrix3x2::translation(r.l, r.t) * previous));
+            // The top-left on the pixel grid, wherever the previews' transform put it.
+            let (x, y) = (self.snap(previous.M11 * r.l + previous.M31), self.snap(previous.M22 * r.t + previous.M32));
+            self.dc.SetTransform(&Matrix3x2 { M31: x, M32: y, ..previous });
             self.dc.DrawSvgDocument(&document);
             self.dc.SetTransform(&previous);
         }
         Ok(())
     }
+}
+
+/// The SVG with `color` as its ink: the root `fill` for marks drawn as shapes and the
+/// root `color` for line art's `currentColor`, opacities from its alpha. As the island's
+/// `tinted`, so a preview's mark matches the island's.
+fn tinted(text: &str, color: Color) -> String {
+    let [r, g, b, _] = color.to_rgba8();
+    let hex = format!("#{r:02X}{g:02X}{b:02X}");
+    let a = color.a;
+    text.replacen("<svg", &format!("<svg fill=\"{hex}\" color=\"{hex}\" fill-opacity=\"{a}\" stroke-opacity=\"{a}\""), 1)
 }
 
 /// A `w` × `h` rectangle at the origin with its top corners rounded.
