@@ -1,9 +1,9 @@
 //! ReUI hub: owns all module state, decides what's in front, and serves it to surfaces.
 //!
 //! Flags: `--demo` enables the demo module, `--no-agents` / `--no-media` / `--no-osd` /
-//! `--no-devices` / `--no-timers` disable the coding agent (Claude Code, Codex, OpenCode) / Now Playing /
-//! system OSD / Devices modules, `--no-link-previews` keeps
-//! clipboard links offline, `--no-island` doesn't launch the island
+//! `--no-devices` / `--no-timers` / `--no-stats` disable the coding agent (Claude Code, Codex,
+//! OpenCode) / Now Playing / system OSD / Devices / Timers / System stats modules,
+//! `--no-link-previews` keeps clipboard links offline, `--no-island` doesn't launch the island
 //! (run `reui-island` yourself, e.g. under a debugger). `--no-updates` never looks for
 //! updates or mentions them. Clipboard, Now Playing and Devices also stay off when their
 //! file says `"enabled": false` (Settings, the welcome). `--no-onboarding` skips the first
@@ -81,6 +81,9 @@ async fn main() -> Result<()> {
     }
     if !has("--no-timers") && feature_on("timers.json") {
         enabled.push(Box::new(modules::timers::TimersModule));
+    }
+    if !has("--no-stats") && feature_on("stats.json") {
+        enabled.push(Box::new(modules::stats::SystemStats));
     }
     if !has("--no-updates") {
         enabled.push(Box::new(modules::updates::Updates));

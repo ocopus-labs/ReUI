@@ -70,6 +70,19 @@ impl Drop for PowerWatch {
     }
 }
 
+/// The aggregate battery, for a reader of its own (the stats card's power draw).
+pub fn aggregate() -> Option<Battery> {
+    Battery::AggregateBattery().ok()
+}
+
+/// The charge rate in mW now, negative while discharging.
+pub fn charge_rate_mw(battery: &Battery) -> Option<i32> {
+    match read(battery)? {
+        PowerEvent::Report { rate_mw, .. } => rate_mw,
+        PowerEvent::SlowCharger(_) => None,
+    }
+}
+
 fn read(battery: &Battery) -> Option<PowerEvent> {
     let report = battery.GetReport().ok()?;
     let value = |r: windows::core::Result<windows::Foundation::IReference<i32>>| r.ok().and_then(|v| v.Value().ok());
