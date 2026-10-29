@@ -16,6 +16,8 @@ const DPI: u32 = 144;
 
 pub fn run(app: &mut App, dir: &Path) -> Result<()> {
     _ = std::fs::create_dir_all(dir);
+    // The stages show the wallpaper; read it before the first page is drawn.
+    crate::wallpaper::read_now();
     let scale = DPI as f32 / 96.0;
     app.set_dpi(DPI);
     let (w, h) = ((1000.0 * scale) as u32, (700.0 * scale) as u32);

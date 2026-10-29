@@ -113,6 +113,7 @@ pub fn create(state: State, page: Page, visible: bool) -> Result<HWND> {
         _ = GetClientRect(hwnd, &mut rc);
         with_app(|app| app.resize(rc.right as u32, rc.bottom as u32));
         if visible {
+            crate::wallpaper::load(hwnd);
             _ = ShowWindow(hwnd, SW_SHOWNORMAL);
             _ = SetForegroundWindow(hwnd);
         }
@@ -350,6 +351,16 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         }
         keys::WM_RECORD_END => {
             keys::stop();
+            LRESULT(0)
+        }
+        WM_SETTINGCHANGE => {
+            if crate::wallpaper::changed(wparam) {
+                crate::wallpaper::load(hwnd);
+            }
+            DefWindowProcW(hwnd, msg, wparam, lparam)
+        }
+        crate::wallpaper::WM_WALLPAPER => {
+            with_app(|app| app.on_wallpaper());
             LRESULT(0)
         }
         crate::updates::WM_UPDATES => {

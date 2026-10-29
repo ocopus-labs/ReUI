@@ -11,7 +11,7 @@ use crate::state::State;
 use crate::ui::{icons, Act, Block, Icon, Part, Role, Row, Target, Tone};
 
 pub fn build(state: &State) -> Vec<Block> {
-    let mut blocks = vec![intro(Page::Agents, "Claude Code, Codex and OpenCode in the island when they need you: permission requests you can answer there, questions, and turns that failed.")];
+    let mut blocks = vec![intro(state, Page::Agents, "Claude Code, Codex and OpenCode in the island when they need you: permission requests you can answer there, questions, and turns that failed.")];
     blocks.extend(file_error(state, File::Coding));
     let bridge = state.paths.installed_bridge().exists() || state.paths.exe_dir.join("reui-bridge.exe").exists();
     let now = reui_protocol::unix_ms();

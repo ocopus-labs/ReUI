@@ -28,7 +28,7 @@ fn words(page: Page, state: &State) -> (&'static str, &'static str) {
 
 pub fn build(page: Page, state: &State) -> Vec<Block> {
     let (title, body) = words(page, state);
-    let mut blocks = vec![Block::Intro { eyebrow: Some(format!("Step {} of 3", page.index() + 1)), title: title.into(), body: Some(body.into()), icon: Some(page.icon()), preview: page.preview(), row: None }];
+    let mut blocks = vec![Block::Intro { eyebrow: Some(format!("Step {} of 3", page.index() + 1)), title: title.into(), body: Some(body.into()), icon: Some(page.icon()), preview: page.preview(state), row: None }];
     let next = || group("", vec![Row::new("next", "").part(button("Next", Role::Primary)).bare()]);
     match page {
         Page::WelcomeFeatures => {

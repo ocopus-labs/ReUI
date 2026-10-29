@@ -147,11 +147,14 @@ app/               state machine: page, scroll, hover, focus, menus, drags
   shot.rs          offscreen rendering for --shots
 ui/                pages as data: blocks, rows, parts (controls)
   layout.rs        where everything goes (pure, tested): rows, controls, scrolling, nav
+  stage.rs         each page's island size in the user's Look and its stage's height (pure, tested)
   chrome.rs        sidebar and caption geometry      icons.rs   page icons and tile colours
 render/            drawing only: Renderer/Painter primitives, fonts, text (layout cache),
                    shapes, icons, sidebar, frame (caption, scrollbar), page, controls, menu
-  preview/         the hero cards' island previews (music, clipboard, levels, devices,
-                   timers, agents, appearance: the island in the chosen Look)
+  preview/         the hero card's island on the top of the screen: mod (stage, placement),
+                   parts (shape and notch ears, tiles, rings, buttons, rows, as the island
+                   draws them), one file per moment: compact, music, clipboard (+ toast),
+                   levels, devices, timers, agents
 pages/             one file per page: build its rows from State, handle its controls;
                    welcome.rs is the three-step welcome (first run, Replay the tour)
 model/             settings files (read, change a key, atomic write, keep unknown keys,
@@ -160,6 +163,9 @@ updates/           GitHub releases: release.rs (JSON, checksums, notes; pure), n
                    (WinHTTP GET/download, CNG SHA-256), mod.rs (check, download + verify,
                    run the setup, update.json, What's new), install.rs (--install-update:
                    the island's Install, one step per stdout line; REUI_UPDATE_SIMULATE)
+wallpaper/         the previews' stage: mod.rs reads the wallpaper (IDesktopWallpaper, else the
+                   registry) on a thread, composes the top-centre strip with WIC; fit.rs: where
+                   each fit mode puts the image and what lands in the strip (pure, tested)
 state.rs           what the pages show and change      hub.rs     pipe client (reload, clear)
 keys.rs            hotkey recorder (low-level hook)     system.rs  startup entry, folders, apps
 stats.rs           idle cost: CPU and private memory of ReUI's processes

@@ -92,6 +92,11 @@ fn read_string(root: HKEY, key: &str, value: &str) -> Option<String> {
     error.is_ok().then(|| String::from_utf16_lossy(&buffer[..(len as usize / 2).saturating_sub(1)]))
 }
 
+/// A string under HKEY_CURRENT_USER.
+pub fn user_string(key: &str, value: &str) -> Option<String> {
+    read_string(HKEY_CURRENT_USER, key, value)
+}
+
 fn read_binary(root: HKEY, key: &str, value: &str) -> Option<Vec<u8>> {
     let mut buffer = [0u8; 64];
     let mut len = buffer.len() as u32;

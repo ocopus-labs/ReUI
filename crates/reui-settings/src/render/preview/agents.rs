@@ -1,75 +1,52 @@
-//! Coding agents: the pill asking (the Claude mark on a tinted circle, "Allow?") and the
-//! permission card (mark tile, eyebrow, the command in a chip, Deny / Allow once).
+//! Coding agents: Claude Code asking to run a command, as the island draws it now
+//! (`reui-hub/src/modules/agent/card.rs`, `describe.rs`; `rows/context.rs`): the session
+//! strip (the mark, the project, the prompt and how long the turn has run), the terminal
+//! glyph, "Permission" → the command in a chip → what it's for, then Deny / Always / Allow
+//! sitting like an alert's, Allow tinted with the agent's accent.
 
-use reui_design::tokens::{color, component, island, opacity, radius};
+use reui_design::look::Look;
+use reui_design::tokens::{component, icon, island, opacity, space, typography};
 use reui_design::Color;
 use windows::core::Result;
 
-use super::{compact_width, pill, text, Moment, BLACK};
+use super::parts::{glyph, line, Card, Hero, Role};
+use super::rgb;
 use crate::render::{Align, Painter};
 use crate::ui::layout::{Font, IslandFont, Rect};
+use crate::ui::stage::{self, code_height, context_height, text_height};
+use crate::ui::Moment;
 
 /// Claude's own orange: the activity's accent.
-const ACCENT: Color = Color { r: 0.851, g: 0.467, b: 0.341, a: 1.0 };
-const WIDTH: f32 = 420.0;
-const ASK: &str = "Allow?";
+const ACCENT: Color = rgb(217, 119, 87);
+const TERMINAL: char = '\u{E756}';
 
-fn compact() -> f32 {
-    compact_width(component::art::COMPACT + island::compact::SIDE_MARGIN, 52.0 + island::compact::TEXT_MARGIN)
-}
-
-fn height() -> f32 {
-    use island::expanded as ex;
-    2.0 * ex::INSET + component::art::EXPANDED + ex::SECTION_GAP + component::button::HEIGHT
-}
-
-pub fn moments() -> Vec<Moment> {
-    vec![Moment { w: compact(), draw: draw_compact }, Moment { w: WIDTH, draw: draw_card }]
-}
-
-/// The mark alone, as the island draws agent logos (no tile).
-fn mark(p: &Painter, r: Rect, _radius: f32) -> Result<()> {
-    let m = r.w() * opacity::LOGO_BARE;
-    p.claude(Rect::at(r.l + (r.w() - m) / 2.0, r.t + (r.h() - m) / 2.0, m, m))
-}
-
-fn draw_compact(p: &Painter, _e: f32) -> Result<()> {
-    let (w, h) = (compact(), island::HEIGHT);
-    pill(p, Rect::at(0.0, 0.0, w, h))?;
+pub fn draw(p: &Painter, look: &Look) -> Result<()> {
+    let (width, h) = stage::size(Moment::Permission, look);
+    let c = Card { p, look, accent: ACCENT, width, radius: look.radius(), roomy: true };
+    c.shape(h)?;
+    let pal = &look.palette;
+    let inset = look.inset();
+    // The session strip: the mark bare (its own colours), the project, then the facts.
+    let strip = context_height();
+    let mid = inset + strip / 2.0;
     let a = component::art::COMPACT;
-    mark(p, Rect::at(island::compact::SIDE_MARGIN, (h - a) / 2.0, a, a), a / 2.0)?;
-    let tm = island::compact::TEXT_MARGIN;
-    text(p, ASK, IslandFont::Compact, w - tm - 60.0, h / 2.0, 60.0, Align::End, ACCENT)
-}
-
-fn draw_card(p: &Painter, _e: f32) -> Result<()> {
-    use island::expanded as ex;
-    p.fill(Rect::at(0.0, 0.0, WIDTH, height()), ex::RADIUS, BLACK)?;
-    let a = component::art::EXPANDED;
-    mark(p, Rect::at(ex::INSET, ex::INSET, a, a), radius::CONCENTRIC)?;
-    // Eyebrow, then the command in a chip, then where it runs.
-    let x = ex::INSET + a + ex::COLUMN_GAP;
-    let ty = reui_design::tokens::typography::EYEBROW.line_height;
-    let code = reui_design::tokens::typography::CODE.line_height;
-    let chip_h = code + 2.0 * component::chip::PADDING_Y;
-    let detail = reui_design::tokens::typography::DETAIL.line_height;
-    let total = ty + chip_h + detail + 2.0 * ex::LINE_GAP;
-    let top = ex::INSET + (a - total) / 2.0;
-    text(p, "Claude Code", IslandFont::Eyebrow, x, top + ty / 2.0, 200.0, Align::Start, ACCENT)?;
-    let command = "npm test";
-    let cw = p.measure(command, Font::Island(IslandFont::Code)) + 2.0 * component::chip::PADDING_X;
-    let chip = Rect::at(x, top + ty + ex::LINE_GAP, cw, chip_h);
-    p.fill(chip, radius::CHIP, color::fill::TERTIARY)?;
-    text(p, command, IslandFont::Code, chip.l + component::chip::PADDING_X, chip.mid_y(), cw, Align::Start, color::label::PRIMARY)?;
-    text(p, "Bash · reui", IslandFont::Detail, x, chip.b + ex::LINE_GAP + detail / 2.0, 200.0, Align::Start, color::label::SECONDARY)?;
-    // Deny / Allow once: equal capsules.
-    let bh = component::button::HEIGHT;
-    let by = ex::INSET + a + ex::SECTION_GAP;
-    let bw = (WIDTH - 2.0 * ex::INSET - component::button::GAP) / 2.0;
-    let deny = Rect::at(ex::INSET, by, bw, bh);
-    let allow = Rect::at(deny.r + component::button::GAP, by, bw, bh);
-    p.fill(deny, bh / 2.0, color::fill::SECONDARY)?;
-    text(p, "Deny", IslandFont::Button, deny.l, deny.mid_y(), deny.w(), Align::Center, color::label::PRIMARY)?;
-    p.fill(allow, bh / 2.0, ACCENT.with_alpha(opacity::TINT_FILL))?;
-    text(p, "Allow once", IslandFont::Button, allow.l, allow.mid_y(), allow.w(), Align::Center, ACCENT)
+    let mark = a * opacity::LOGO_BARE;
+    p.claude(Rect::at(inset + (a - mark) / 2.0, mid - mark / 2.0, mark, mark))?;
+    let cl = typography::CONTEXT.line_height;
+    let x = inset + a + space::SM;
+    let title = "reui";
+    let tw = p.measure(title, Font::Island(IslandFont::Context));
+    line(p, title, IslandFont::Context, x, mid - cl / 2.0, tw + 1.0, Align::Start, pal.label_secondary)?;
+    line(p, " · Run the tests and fix what fails · 4m", IslandFont::Context, x + tw, mid - cl / 2.0, width - inset - x - tw, Align::Start, pal.label_tertiary)?;
+    // The header: the glyph on the first line's centre, the text from the top.
+    let top = inset + strip + island::expanded::CONTEXT_GAP;
+    let g = icon::TILE;
+    let (left, text_w) = c.columns(g, 0.0);
+    let text_h = text_height(true, code_height(), true);
+    let gmid = top + g / 2.0;
+    let text_top = if text_h <= g { gmid - text_h / 2.0 } else { top };
+    glyph(p, TERMINAL, g, inset, gmid - g / 2.0, ACCENT)?;
+    c.text(left, text_top, text_w, "Permission", Hero::Code("npm test"), "Run the test suite")?;
+    let y = top + g.max(text_h) + look.section_gap();
+    c.text_buttons(&[("Deny", Role::Secondary), ("Always", Role::Secondary), ("Allow", Role::Accent)], y)
 }

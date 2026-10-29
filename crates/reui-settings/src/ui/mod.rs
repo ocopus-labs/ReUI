@@ -5,6 +5,7 @@
 pub mod chrome;
 pub mod icons;
 pub mod layout;
+pub mod stage;
 
 use reui_design::Color;
 
@@ -19,21 +20,36 @@ pub enum Icon {
     Claude,
 }
 
-/// Which feature's island a header card shows. The Look is carried whole (a few hundred
-/// bytes, one per page build) so the preview draws exactly what the island draws.
+/// What a header card's stage shows: one moment of the island, drawn in the user's
+/// look. The Look is carried whole (a few hundred bytes, one per page build) so the
+/// preview draws exactly what the island draws, and the stage is as tall as it needs.
 #[derive(Clone, Copy, Debug, PartialEq)]
-#[allow(clippy::large_enum_variant)]
-pub enum Preview {
-    /// The resting pill.
-    Idle,
+pub struct Preview {
+    pub moment: Moment,
+    pub look: reui_design::look::Look,
+}
+
+/// The one state of the island a page is about (sizes and drawing: [`stage`] and
+/// `render::preview`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Moment {
+    /// The compact pill with a second activity beside it (General).
+    Compact,
+    /// The open Now Playing card.
     Music,
+    /// The clipboard panel.
     Clipboard,
-    Levels,
+    /// What was just copied (the clipboard's toast): the panel's stand-in on a stage too
+    /// narrow for it at the look's size.
+    Toast,
+    /// The volume meter: the whole pill.
+    Meter,
+    /// Earbuds just connected.
     Devices,
-    Timers,
-    Agents,
-    /// The island in a look (Appearance): a compact pill and an open card.
-    Appearance(reui_design::look::Look),
+    /// A running timer's card (Timers, and Appearance).
+    Timer,
+    /// A coding agent asking permission.
+    Permission,
 }
 
 /// A control's identity: its row and its place among the row's controls.

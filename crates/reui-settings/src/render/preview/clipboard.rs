@@ -1,109 +1,176 @@
-//! Clipboard: the notch panel, wide, with its filter tabs and a row of preview cards (an
-//! image, wrapped text, a link with its page image, a colour), the half card at the edge
-//! saying the row goes on.
+//! Clipboard: the notch panel as it opens (`reui-hub/src/modules/clipboard/panel.rs`, drawn
+//! by `reui-island/src/render/rows/{search,tabs,cards}.rs`): the search field, the tabs,
+//! then the row of cards, four and a half across, the half card fading out at the edge.
+//! The cards are what a clipboard holds without pictures: notes, a link, a colour, code.
+//! On a stage too narrow for the panel at the look's size, the toast a copy shows instead
+//! (`toast.rs`): the copy glyph and the text's first words, side by side.
 
-use reui_design::tokens::{color, component, island, prefs::section};
+use reui_design::look::Look;
+use reui_design::tokens::{color, component, icon, island, space, typography};
 use reui_design::Color;
 use windows::core::Result;
 
-use super::{art, text, Moment, BLACK};
+use super::parts::{glyph, line};
+use super::rgb;
 use crate::render::{Align, Painter};
-use crate::ui::icons;
 use crate::ui::layout::{Font, IslandFont, Rect};
+use crate::ui::{stage, Moment};
 
-const ACCENT: Color = section::CLIPBOARD;
-const INSET: f32 = 14.0;
-const WIDTH: f32 = 560.0;
-const TABS: [(&str, &str); 4] = [("All", "24"), ("Text", "12"), ("Links", "5"), ("Images", "7")];
+/// The module's accent.
+const ACCENT: Color = rgb(10, 132, 255);
+const SEARCH: char = '\u{E721}';
+const LINK: char = '\u{E774}';
+const CODE: char = '\u{E943}';
+const COPY: char = '\u{E8C8}';
+/// What the toast shows of the copied text (`toast.rs` cuts it at 24 characters).
+const GLIMPSE: &str = "Move the review to 3 PM…";
+const TABS: [(&str, &str, bool); 2] = [("History", "24", true), ("Pinned", "3", false)];
 
-fn height() -> f32 {
-    INSET + component::tabs::HEIGHT + island::expanded::ROW_GAP + component::card::HEIGHT + INSET
+enum Face {
+    /// Several lines: the first as a title, the rest quieter.
+    Note(&'static str, &'static str),
+    Text(&'static str),
+    Link(&'static str),
+    Color(Color, &'static str),
+    Code(&'static str),
 }
 
-pub fn panel() -> Moment {
-    Moment { w: WIDTH, draw }
-}
+/// Each card: its face, its age, its one fact.
+const CARDS: [(Face, &str, &str); 5] = [
+    (Face::Note("Thursday", "Move the review to 3 PM and send the agenda before lunch"), "now", "2 lines"),
+    (Face::Link("Keyboard shortcuts in Windows"), "4m", "microsoft.com"),
+    (Face::Color(rgb(94, 92, 230), "#5E5CE6"), "18m", "HEX"),
+    (Face::Code("npm run build"), "1h", ""),
+    (Face::Text("See you at the station at 6"), "2h", ""),
+];
 
-fn draw(p: &Painter, _e: f32) -> Result<()> {
-    p.fill(Rect::at(0.0, 0.0, WIDTH, height()), island::expanded::PANEL_RADIUS, BLACK)?;
-    // Tabs: capsules, the selected one filled, counts quieter.
+pub fn draw(p: &Painter, look: &Look) -> Result<()> {
+    let (w, h) = stage::size(Moment::Clipboard, look);
+    let radius = look.panel_radius();
+    super::parts::shape(p, look, Rect::at(0.0, 0.0, w, h), radius, (true, true))?;
+    let pal = &look.palette;
+    let inset = look.inset();
+    let capsule = |h: f32| look.capsule(h, radius, inset);
+    // Search: the field across the panel, its glyph and placeholder.
+    let (sh, pad) = (component::search::HEIGHT, component::search::PADDING);
+    let mut y = inset;
+    p.fill(Rect::new(inset, y, w - inset, y + sh), capsule(sh), pal.fill_quaternary)?;
+    let g = icon::SEARCH;
+    glyph(p, SEARCH, g, inset + pad, y + (sh - g) / 2.0, pal.label_secondary)?;
+    let lh = typography::DETAIL.line_height;
+    line(p, "Search", IslandFont::Detail, inset + pad + g + space::SM, y + (sh - lh) / 2.0, 200.0, Align::Start, pal.label_tertiary)?;
+    y += sh + look.row_gap();
+    // Tabs: the selected one filled, each with its count.
     let th = component::tabs::HEIGHT;
-    let mut x = INSET;
-    for (i, (label, count)) in TABS.iter().enumerate() {
+    let tpad = component::tabs::PADDING;
+    let mut x = inset;
+    let tab_lh = typography::TAB.line_height;
+    for (label, count, selected) in TABS {
         let lw = p.measure(label, Font::Island(IslandFont::Tab));
         let cw = p.measure(count, Font::Island(IslandFont::Tab));
-        let w = lw + component::tabs::COUNT_GAP + cw + 2.0 * component::tabs::PADDING;
-        let r = Rect::at(x, INSET, w, th);
-        if i == 0 {
-            p.fill(r, th / 2.0, color::fill::SECONDARY)?;
+        let tw = tpad + lw + component::tabs::COUNT_GAP + cw + tpad;
+        let (ink, quiet) = if selected { (pal.label_primary, pal.label_secondary) } else { (pal.label_secondary, pal.label_tertiary) };
+        if selected {
+            p.fill(Rect::at(x, y, tw, th), capsule(th), pal.fill_secondary)?;
         }
-        let tx = x + component::tabs::PADDING;
-        text(p, label, IslandFont::Tab, tx, r.mid_y(), lw + 1.0, Align::Start, color::label::PRIMARY)?;
-        super::figures(p, count, IslandFont::Tab, tx + lw + component::tabs::COUNT_GAP, r.mid_y(), cw + 1.0, Align::Start, color::label::SECONDARY)?;
-        x += w + component::tabs::GAP;
+        let top = y + (th - tab_lh) / 2.0;
+        line(p, label, IslandFont::Tab, x + tpad, top, lw + 1.0, Align::Start, ink)?;
+        p.figures(count, Font::Island(IslandFont::Tab), Rect::at(x + tw - tpad - cw, top, cw + 1.0, tab_lh), Align::Start, quiet)?;
+        x += tw + component::tabs::GAP;
     }
-    // Cards: 4½ across.
+    y += th + look.row_gap();
+    // Cards: four and a half across, clipped at the inset, fading out at the right.
     let gap = component::card::GAP;
-    let card_w = (WIDTH - INSET - 4.0 * gap) / component::card::VISIBLE_MORE;
-    let top = INSET + th + island::expanded::ROW_GAP;
-    let h = component::card::HEIGHT;
-    let radius = component::card::RADIUS;
-    p.clip(Rect::new(INSET, top - 2.0, WIDTH - INSET, top + h + 2.0), || {
-        for i in 0..5 {
-            let r = Rect::at(INSET + i as f32 * (card_w + gap), top, card_w, h);
-            card(p, i, r, radius)?;
+    let n = component::card::VISIBLE_MORE;
+    let cw = (w - inset - gap * n.floor()) / n;
+    let ch = component::card::HEIGHT;
+    let corner = reui_design::look::concentric(radius, inset);
+    p.clip(Rect::new(inset, y - 2.0, w - inset, y + ch + 2.0), || {
+        for (i, (face, age, fact)) in CARDS.iter().enumerate() {
+            card(p, look, face, age, fact, Rect::at(inset + i as f32 * (cw + gap), y, cw, ch), corner)?;
         }
-        Ok(())
-    })?;
-    // The selected card's ring.
-    let first = Rect::at(INSET, top, card_w, h);
-    p.stroke(first.inflate(-component::card::RING_WIDTH / 2.0), radius - component::card::RING_WIDTH / 2.0, component::card::RING_WIDTH, ACCENT)
+        let fade = component::card::FADE;
+        p.fade_in_right(Rect::new(w - inset - fade, y - 2.0, w - inset, y + ch + 2.0), pal.background)
+    })
 }
 
-fn card(p: &Painter, i: usize, r: Rect, radius: f32) -> Result<()> {
+fn card(p: &Painter, look: &Look, face: &Face, age: &str, fact: &str, r: Rect, corner: f32) -> Result<()> {
+    let pal = &look.palette;
     let pad = component::card::PADDING;
     let footer = component::card::FOOTER;
-    let well = color::fill::TERTIARY;
-    match i {
-        // An image, cover-fitted, its footer on a scrim.
-        0 => {
-            art(p, r, radius, Color { r: 0.36, g: 0.55, b: 0.98, a: 1.0 }, Color { r: 0.12, g: 0.2, b: 0.45, a: 1.0 })?;
-            p.circle(r.l + r.w() * 0.68, r.t + r.h() * 0.32, r.w() * 0.12, Color { r: 1.0, g: 0.86, b: 0.55, a: 1.0 })?;
-            let hill = Rect::new(r.l, r.t + r.h() * 0.58, r.r, r.b);
-            p.clip(r, || p.fill(hill.offset(-r.w() * 0.2, 0.0).inflate(r.w() * 0.15), r.w() * 0.45, Color { r: 0.1, g: 0.32, b: 0.3, a: 1.0 }))?;
-            p.fill(Rect::new(r.l, r.b - footer, r.r, r.b), 0.0, Color { r: 0.0, g: 0.0, b: 0.0, a: 0.35 })?;
-            text(p, "2m", IslandFont::Caption, r.l + pad, r.b - footer / 2.0, r.w(), Align::Start, color::label::PRIMARY)?;
+    let body = Rect::new(r.l + pad, r.t + pad, r.r - pad, r.b - footer - pad);
+    let wrap = |text: &str, font: IslandFont, top: f32, bottom: f32, ink: Color| {
+        let line = super::super::fonts::style(Font::Island(font)).line_height;
+        let lines = ((bottom - top) / line).floor();
+        if lines < 1.0 {
+            return Ok(());
         }
-        // Text, wrapped.
-        1 => {
-            p.fill(r, radius, well)?;
-            let body = Rect::new(r.l + pad, r.t + pad, r.r - pad, r.b - footer);
-            p.paragraph("Ship the island before Friday, then the settings window", Font::Island(IslandFont::CardText), body, color::label::PRIMARY)?;
-            text(p, "5m", IslandFont::Caption, r.l + pad, r.b - footer / 2.0, r.w(), Align::Start, color::label::TERTIARY)?;
+        p.clip(Rect::new(body.l, top, body.r, top + lines * line), || p.paragraph(text, Font::Island(font), Rect::new(body.l, top, body.r, top + lines * line), ink))
+    };
+    let mut on_media = false;
+    match face {
+        Face::Note(first, rest) => {
+            p.fill(r, corner, pal.fill_tertiary)?;
+            line(p, first, IslandFont::CardLabel, body.l, body.t, body.w(), Align::Start, pal.label_primary)?;
+            let top = body.t + typography::CARD_LABEL.line_height + space::XS;
+            wrap(rest, IslandFont::CardText, top, body.b, pal.label_secondary)?;
         }
-        // A link: the page image across the top half, its title under it.
-        2 => {
-            p.fill(r, radius, well)?;
-            let media = Rect::new(r.l, r.t, r.r, r.t + r.h() * component::card::MEDIA);
-            // The image's top corners follow the card; its bottom edge is straight.
-            p.gradient(Rect::new(r.l, r.t, r.r, media.b + radius), radius, Color { r: 0.75, g: 0.35, b: 0.95, a: 1.0 }, Color { r: 0.4, g: 0.36, b: 0.9, a: 1.0 })?;
-            let under = Rect::new(r.l, media.b, r.r, media.b + radius);
-            p.fill(under, 0.0, BLACK)?;
-            p.fill(under, 0.0, well)?;
-            p.glyph(icons::LINK, 18.0, media, Color { r: 1.0, g: 1.0, b: 1.0, a: 0.9 })?;
-            text(p, "Dynamic Island", IslandFont::CardLabel, r.l + pad, media.b + 12.0, r.w() - 2.0 * pad, Align::Start, color::label::PRIMARY)?;
-            text(p, "github.com", IslandFont::Caption, r.l + pad, r.b - footer / 2.0, r.w(), Align::Start, color::label::TERTIARY)?;
+        Face::Text(text) => {
+            p.fill(r, corner, pal.fill_tertiary)?;
+            wrap(text, IslandFont::CardText, body.t, body.b, pal.label_primary)?;
         }
-        // A colour: the swatch, its value.
-        3 => {
-            p.fill(r, radius, color::system::INDIGO)?;
-            text(p, "#5E5CE6", IslandFont::CardLabel, r.l + pad, r.b - footer / 2.0, r.w(), Align::Start, color::label::PRIMARY)?;
+        Face::Code(text) => {
+            p.fill(r, corner, pal.fill_tertiary)?;
+            let k = component::card::KIND_ICON;
+            glyph(p, CODE, k, r.r - pad - k, body.t, pal.label_tertiary)?;
+            let code = Rect::new(body.l, body.t, body.r - k - space::XS, body.b);
+            let lh = typography::CARD_CODE.line_height;
+            let lines = (code.h() / lh).floor();
+            p.clip(Rect::new(code.l, code.t, code.r, code.t + lines * lh), || p.paragraph(text, Font::Island(IslandFont::CardCode), code, pal.label_primary))?;
         }
-        _ => {
-            p.fill(r, radius, well)?;
-            let body = Rect::new(r.l + pad, r.t + pad, r.r - pad, r.b - footer);
-            p.paragraph("cargo build --release", Font::Island(IslandFont::CardText), body, color::label::SECONDARY)?;
+        Face::Link(title) => {
+            p.fill(r, corner, pal.fill_tertiary)?;
+            // No page image: the link glyph in the accent, then the title.
+            glyph(p, LINK, icon::COMPACT, body.l, body.t, ACCENT)?;
+            let top = body.t + icon::COMPACT + pad * 0.5;
+            wrap(title, IslandFont::CardTitle, top, r.b - footer - pad * 0.5, pal.label_primary)?;
+        }
+        Face::Color(swatch, hex) => {
+            p.fill(r, corner, *swatch)?;
+            let light = 0.2126 * swatch.r + 0.7152 * swatch.g + 0.0722 * swatch.b > 0.55;
+            let ink = if light { color::label::ON_ACCENT } else { color::label::PRIMARY };
+            line(p, hex, IslandFont::CardLabel, body.l, body.t, body.w(), Align::Start, ink)?;
+            on_media = !light;
         }
     }
+    // The footer: the age, and the one fact at the right.
+    let top = r.b - footer - pad * 0.25;
+    let mid = top + footer / 2.0;
+    let (ink, quiet) = if on_media { (color::label::PRIMARY, color::label::PRIMARY.with_alpha(0.75)) } else { (pal.label_secondary, pal.label_tertiary) };
+    let cap = typography::CAPTION.line_height;
+    let age_w = p.measure(age, Font::Island(IslandFont::Caption));
+    line(p, age, IslandFont::Caption, r.l + pad, mid - cap / 2.0, age_w + 1.0, Align::Start, ink)?;
+    let from = r.l + pad + age_w + pad * 0.75;
+    if !fact.is_empty() && r.r - pad > from {
+        line(p, fact, IslandFont::Caption, from, mid - cap / 2.0, r.r - pad - from, Align::End, quiet)?;
+    }
     Ok(())
+}
+
+/// The toast's width: the glyph tile, the glimpse beside it (`compact.rs`, a text label
+/// with its mark), never narrower than the resting pill.
+pub fn toast_width(p: &Painter) -> f32 {
+    let tw = p.measure(GLIMPSE, Font::Island(IslandFont::Compact)).min(island::compact::JOINED_TEXT);
+    let lead = island::compact::SIDE_MARGIN + component::art::COMPACT + island::compact::JOINED_GAP;
+    (lead + tw + island::compact::TEXT_MARGIN).max(island::idle::WIDTH)
+}
+
+pub fn toast(p: &Painter, look: &Look) -> Result<()> {
+    let (w, h) = (toast_width(p), island::HEIGHT);
+    super::parts::shape(p, look, Rect::at(0.0, 0.0, w, h), look.rounded(h), (true, true))?;
+    let (m, a) = (island::compact::SIDE_MARGIN, component::art::COMPACT);
+    super::parts::glyph_tile(p, look, look.radius(), true, COPY, m, (h - a) / 2.0, ACCENT)?;
+    let x = m + a + island::compact::JOINED_GAP;
+    let lh = typography::COMPACT.line_height;
+    line(p, GLIMPSE, IslandFont::Compact, x, (h - lh) / 2.0, w - x - island::compact::TEXT_MARGIN + 1.0, Align::Start, look.palette.label_secondary)
 }

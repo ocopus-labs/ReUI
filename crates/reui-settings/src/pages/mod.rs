@@ -25,7 +25,8 @@ use serde_json::Value;
 use crate::model::files::File;
 use crate::state::State;
 use crate::system;
-use crate::ui::{button, footed, group, icons, Act, Block, Icon, Part, Preview, Role, Row, Target, Tone};
+use crate::ui::{button, footed, group, icons, Act, Block, Icon, Moment, Part, Preview, Role, Row, Target, Tone};
+use reui_design::look::Look;
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Page {
@@ -116,17 +117,23 @@ impl Page {
     }
 
     /// The island this page's header card shows.
-    pub fn preview(self) -> Option<Preview> {
+    pub fn moment(self) -> Option<Moment> {
         match self {
-            Page::General => Some(Preview::Idle),
-            Page::NowPlaying | Page::WelcomeFeatures => Some(Preview::Music),
-            Page::Clipboard | Page::WelcomeShortcut => Some(Preview::Clipboard),
-            Page::Osd => Some(Preview::Levels),
-            Page::Devices => Some(Preview::Devices),
-            Page::Timers => Some(Preview::Timers),
-            Page::Agents => Some(Preview::Agents),
+            Page::General => Some(Moment::Compact),
+            Page::Appearance => Some(Moment::Timer),
+            Page::NowPlaying | Page::WelcomeFeatures => Some(Moment::Music),
+            Page::Clipboard | Page::WelcomeShortcut => Some(Moment::Clipboard),
+            Page::Osd => Some(Moment::Meter),
+            Page::Devices => Some(Moment::Devices),
+            Page::Timers => Some(Moment::Timer),
+            Page::Agents => Some(Moment::Permission),
             _ => None,
         }
+    }
+
+    /// The page's island in the user's look.
+    pub fn preview(self, state: &State) -> Option<Preview> {
+        self.moment().map(|moment| Preview { moment, look: look(state) })
     }
 
     /// `--page clipboard`, for opening on a page.
@@ -246,9 +253,14 @@ fn file_error(state: &State, file: File) -> Option<Block> {
     Some(group("", vec![row]))
 }
 
+/// The look the island has now (Settings > Appearance, Windows' app mode and accent).
+pub fn look(state: &State) -> Look {
+    Look::new(&state.files.appearance(), system::apps_light(), system::accent_color())
+}
+
 /// The page's header card: its tile, title, paragraph and island.
-fn intro(page: Page, body: &str) -> Block {
-    Block::Intro { eyebrow: None, title: page.title().into(), body: (!body.is_empty()).then(|| body.into()), icon: Some(page.icon()), preview: page.preview(), row: None }
+fn intro(state: &State, page: Page, body: &str) -> Block {
+    Block::Intro { eyebrow: None, title: page.title().into(), body: (!body.is_empty()).then(|| body.into()), icon: Some(page.icon()), preview: page.preview(state), row: None }
 }
 
 /// A feature's on/off switch (`enabled` in its file), in its header card.
@@ -262,7 +274,7 @@ fn enable(blocks: &mut [Block], state: &State, file: File, title: &str) {
 
 /// The header card, then the file's error card if it has one.
 fn head(state: &State, file: File, page: Page, body: &str) -> Vec<Block> {
-    let mut blocks = vec![intro(page, body)];
+    let mut blocks = vec![intro(state, page, body)];
     blocks.extend(file_error(state, file));
     blocks
 }
