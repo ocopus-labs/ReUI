@@ -8,6 +8,8 @@ use super::Icon;
 pub const GEAR: char = '\u{E713}';
 pub const MUSIC: char = '\u{EC4F}';
 pub const PASTE: char = '\u{E77F}';
+/// Package: the file shelf.
+pub const PACKAGE: char = '\u{E7B8}';
 pub const VOLUME: char = '\u{E767}';
 pub const DEVICES: char = '\u{E772}';
 pub const BLUETOOTH: char = '\u{E702}';
@@ -86,6 +88,9 @@ pub fn timers() -> Icon {
 }
 pub fn indicators() -> Icon {
     tile(MIC, section::INDICATORS)
+}
+pub fn shelf() -> Icon {
+    tile(PACKAGE, section::SHELF)
 }
 pub fn stats() -> Icon {
     tile(DIAGNOSTIC, section::STATS)

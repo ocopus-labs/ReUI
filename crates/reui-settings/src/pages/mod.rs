@@ -13,6 +13,7 @@ mod indicators;
 mod now_playing;
 mod osd;
 mod privacy;
+mod shelf;
 mod shortcut;
 mod stats;
 mod timers;
@@ -36,6 +37,7 @@ pub enum Page {
     Appearance,
     NowPlaying,
     Clipboard,
+    Shelf,
     Osd,
     Devices,
     Timers,
@@ -52,7 +54,7 @@ pub enum Page {
 
 impl Page {
     /// The Settings window's pages, in the nav.
-    pub const ALL: [Page; 12] = [Page::General, Page::Appearance, Page::NowPlaying, Page::Clipboard, Page::Osd, Page::Devices, Page::Timers, Page::Indicators, Page::Stats, Page::Agents, Page::Privacy, Page::About];
+    pub const ALL: [Page; 13] = [Page::General, Page::Appearance, Page::NowPlaying, Page::Clipboard, Page::Shelf, Page::Osd, Page::Devices, Page::Timers, Page::Indicators, Page::Stats, Page::Agents, Page::Privacy, Page::About];
     /// The welcome's steps, in its nav.
     pub const WELCOME: [Page; 3] = [Page::WelcomeFeatures, Page::WelcomeShortcut, Page::WelcomeStartup];
 
@@ -62,6 +64,7 @@ impl Page {
             Page::Appearance => "Appearance",
             Page::NowPlaying => "Now Playing",
             Page::Clipboard => "Clipboard",
+            Page::Shelf => "Shelf",
             Page::Osd => "Volume & brightness",
             Page::Devices => "Devices",
             Page::Timers => "Timers",
@@ -97,7 +100,7 @@ impl Page {
     /// The sidebar's sections: General; the island's features; privacy and About.
     pub fn section(self) -> usize {
         match self {
-            Page::NowPlaying | Page::Clipboard | Page::Osd | Page::Devices | Page::Timers | Page::Indicators | Page::Stats | Page::Agents => 1,
+            Page::NowPlaying | Page::Clipboard | Page::Shelf | Page::Osd | Page::Devices | Page::Timers | Page::Indicators | Page::Stats | Page::Agents => 1,
             Page::Privacy | Page::About => 2,
             _ => 0,
         }
@@ -110,6 +113,7 @@ impl Page {
             Page::Appearance => icons::appearance(),
             Page::NowPlaying => icons::now_playing(),
             Page::Clipboard => icons::clipboard(),
+            Page::Shelf => icons::shelf(),
             Page::Osd => icons::osd(),
             Page::Devices => icons::devices(),
             Page::Timers => icons::timers(),
@@ -174,6 +178,7 @@ pub fn build(page: Page, state: &State) -> Vec<Block> {
         Page::Appearance => appearance::build(state),
         Page::NowPlaying => now_playing::build(state),
         Page::Clipboard => clipboard::build(state),
+        Page::Shelf => shelf::build(state),
         Page::Osd => osd::build(state),
         Page::Devices => devices::build(state),
         Page::Timers => timers::build(state),
@@ -215,6 +220,7 @@ pub fn act(page: Page, state: &mut State, target: &Target, act: Act) -> Effect {
         Page::Appearance => appearance::act(state, target, act),
         Page::NowPlaying => now_playing::act(state, target, act),
         Page::Clipboard => clipboard::act(state, target, act),
+        Page::Shelf => shelf::act(state, target, act),
         Page::Osd => osd::act(state, target, act),
         Page::Devices => devices::act(state, target, act),
         Page::Timers => timers::act(state, target, act),
@@ -232,6 +238,7 @@ pub fn menu(page: Page, state: &mut State, target: &Target) -> Option<(Vec<Strin
     match page {
         Page::NowPlaying => now_playing::menu(state, target),
         Page::Clipboard => clipboard::menu(state, target),
+        Page::Shelf => shelf::menu(state, target),
         Page::General => general::menu(state, target),
         Page::Timers => timers::menu(state, target),
         _ => None,
@@ -346,7 +353,7 @@ pub mod tests {
         assert_eq!(Page::from_arg("about"), Some(Page::About));
         assert_eq!(Page::from_arg("zzz"), None);
         assert_eq!(Page::from_arg("what"), None, "welcome steps aren't Settings pages");
-        assert_eq!((Page::WelcomeShortcut.index(), Page::About.index()), (1, 11));
+        assert_eq!((Page::WelcomeShortcut.index(), Page::About.index()), (1, 12));
         assert_eq!(Page::from_arg("appearance"), Some(Page::Appearance));
         assert_eq!(Page::from_arg("timers"), Some(Page::Timers));
         assert_eq!(Page::from_arg("mic"), Some(Page::Indicators));
