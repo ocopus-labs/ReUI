@@ -14,7 +14,7 @@ pub mod frame;
 pub mod icons;
 pub mod menu;
 mod page;
-mod preview;
+pub mod preview;
 mod shapes;
 mod sidebar;
 mod text;

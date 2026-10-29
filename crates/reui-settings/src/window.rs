@@ -159,9 +159,9 @@ pub fn run() {
 }
 
 /// `--shots`: every page drawn offscreen into `dir`, without showing the window.
-pub fn shots(state: State, dir: &std::path::Path) -> Result<()> {
+pub fn shots(state: State, dir: &std::path::Path, options: crate::shots::Options) -> Result<()> {
     create(state, Page::General, false)?;
-    let done = APP.with(|cell| cell.borrow_mut().as_mut().map(|app| crate::shots::run(app, dir)));
+    let done = APP.with(|cell| cell.borrow_mut().as_mut().map(|app| crate::shots::run(app, dir, options)));
     keys::stop();
     APP.with(|cell| cell.borrow_mut().take());
     done.unwrap_or(Ok(()))

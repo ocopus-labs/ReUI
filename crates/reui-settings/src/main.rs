@@ -12,7 +12,9 @@
 //! printing one line per step (the island's Install).
 //! `REUI_CONFIG_DIR=<dir>` keeps every file it touches in that folder and talks to no
 //! running ReUI (for testing). `--perf` logs frame times to `settings-perf.log` in the local
-//! folder; `--shots <dir>` saves every page as a PNG without showing the window.
+//! folder; `--shots <dir>` saves every page as a PNG without showing the window
+//! (`--backdrop-color #RRGGBB` instead of the wallpaper, `--stages` only the island
+//! stages: `shots.rs`).
 //!
 //! Files: `window.rs` (frame, caption, DPI, the message loop), `gpu.rs` (D3D11, Direct2D,
 //! the flip-model swap chain), `app/` (state machine, input, motion, search), `render/`
@@ -76,7 +78,7 @@ fn main() {
 
     let state = State::new(paths);
     if let Some(dir) = args.iter().position(|a| a == "--shots").and_then(|i| args.get(i + 1)) {
-        if let Err(e) = window::shots(state, std::path::Path::new(dir)) {
+        if let Err(e) = window::shots(state, std::path::Path::new(dir), shots::Options::from_args(&args)) {
             eprintln!("settings: screenshots failed: {e}");
         }
         return;
