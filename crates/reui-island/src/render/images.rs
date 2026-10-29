@@ -83,11 +83,12 @@ impl Renderer {
                     self.text(rt, &glyph.to_string(), font, left, top + (size - g) / 2.0, size, Align::Center, accent)?;
                 }
                 Art::Logo { image, animated } => {
-                    rt.FillRoundedRectangle(&shape, &self.brush(rt, accent.with_alpha(opacity::TINT_FILL))?);
-                    // An animated compact logo is drawn by the pill so it can spin.
+                    // The mark alone, no tile: its own colours (Claude's orange), else the
+                    // primary label colour (OpenAI, OpenCode). An animated compact logo is
+                    // drawn by the pill so it can spin.
                     if !(*animated && slot == Slot::Compact) {
-                        let mark = size * opacity::LOGO;
-                        self.svg(rt, *image, left + (size - mark) / 2.0, top + (size - mark) / 2.0, mark, accent)?;
+                        let mark = size * opacity::LOGO_BARE;
+                        self.svg(rt, *image, left + (size - mark) / 2.0, top + (size - mark) / 2.0, mark, color::label::PRIMARY)?;
                     }
                 }
                 Art::Image(id) => match self.images.get(id) {

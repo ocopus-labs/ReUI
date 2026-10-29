@@ -104,7 +104,7 @@ pub const CODEX: Profile = Profile {
     display: "Codex",
     short: "Codex",
     accent: Rgb(16, 163, 127),
-    logo: None,
+    logo: Some(include_bytes!("../../../../../design/assets/agents/openai.svg")),
     glyph: GLYPH_TERMINAL,
     // Codex reserves `updatedPermissions` and fails closed on it today.
     can_always: false,

@@ -136,7 +136,7 @@ Elements a module can put in a region (`reui_protocol::Element`). Sizes depend o
 | `Glyph { tone }` | `icon.compact` | `icon.tile` | `icon.trailing` |
 | `Art::Gradient` / `Art::Image` | 24 circle | 56, `radius.concentric` | 32 circle |
 | `Art::Glyph` | Accent-tinted circle, `icon.tile-compact` glyph | Accent-tinted 56 tile, `icon.tile` glyph | 32 circle |
-| `Art::Logo` | Brand SVG (`design/assets/`) on an accent-tinted circle, at `opacity.logo` of the tile; keeps its own colours, or takes the accent if it has none | Same on the 56 tile | Same on the 32 circle |
+| `Art::Logo` | An agent's brand SVG (`design/assets/agents/`: Claude, OpenAI for Codex, OpenCode) drawn bare, no tile or background, at `opacity.logo-bare` of its spot; keeps its own colours (Claude's orange), or takes the primary label colour if it has none | Same in the 56 spot | Same in the 32 spot |
 | `Ring(progress)` | 24, stroke 3 | 56, stroke 6 | 56, stroke 6 |
 | `Bars { live }` | Live visuals moving at `motion.bars.fps` while live and shown (in the pill, the open card and the minimal bubble, each in its own activity's accent); resting levels otherwise, flat when not live | Same | Same |
 | `Dot` | 8, accent | same | same |

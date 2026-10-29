@@ -294,7 +294,7 @@ impl Pill {
 
         self.compact_width = compact.width;
         self.place_bars(compact.bars, card.bars, minimal_bars, front_accent, second_accent)?;
-        self.place_logo(compact.logo, front_accent)?;
+        self.place_logo(compact.logo)?;
         self.expanded_height = card.height;
         self.expanded_width = card.width;
         self.hits = card.hits;

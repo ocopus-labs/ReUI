@@ -2,7 +2,7 @@
 //! spinning logo mark.
 
 
-use reui_design::tokens::{component, motion};
+use reui_design::tokens::{color, component, motion};
 use reui_design::Color;
 use reui_protocol::ImageId;
 use windows::core::{h, Result};
@@ -18,11 +18,11 @@ use super::timers::*;
 
 impl Pill {
     /// Draws and positions the animated compact logo (or hides it).
-    pub(super) fn place_logo(&mut self, spot: Option<(ImageId, f32, f32)>, accent: Color) -> Result<()> {
+    pub(super) fn place_logo(&mut self, spot: Option<(ImageId, f32, f32)>) -> Result<()> {
         let s = self.scale;
         match spot {
             Some((image, left, top)) => {
-                self.renderer.draw_logo(&self.logo_surface, image, component::art::COMPACT, accent)?;
+                self.renderer.draw_logo(&self.logo_surface, image, component::art::COMPACT, color::label::PRIMARY)?;
                 self.logo.SetOffset(Vector3::new((left * s).round(), (top * s).round(), 0.0))?;
                 self.logo.SetIsVisible(true)?;
                 let spinning = self.logo_state.is_some_and(|(_, spinning)| spinning);
