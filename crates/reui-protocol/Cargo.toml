@@ -4,6 +4,7 @@ description = "Wire protocol between the ReUI hub and its surfaces"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
 postcard.workspace = true

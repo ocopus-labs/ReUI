@@ -4,6 +4,7 @@ description = "Forwards coding-agent hook events to the ReUI hub, and installs t
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
 reui-protocol.workspace = true

@@ -4,6 +4,7 @@ description = "ReUI's Settings window: every setting in one place, drawn in the 
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
 reui-design.workspace = true

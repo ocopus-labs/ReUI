@@ -4,6 +4,7 @@ description = "ReUI hub: owns all module state and serves it to surfaces"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
 reui-protocol.workspace = true

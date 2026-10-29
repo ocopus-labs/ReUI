@@ -4,6 +4,7 @@ description = "ReUI's per-user installer and uninstaller (no admin)"
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 build = "build.rs"
 
 [dependencies]

@@ -12,13 +12,13 @@
     https://img.shields.io/github/v/release/ocopus-labs/ReUI                  (latest release)
     https://img.shields.io/github/downloads/ocopus-labs/ReUI/total            (downloads)
     https://img.shields.io/github/actions/workflow/status/ocopus-labs/ReUI/release.yml  (build)
-  and a license badge once there is a LICENSE.
 -->
 <p align="center">
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-3A3A3D?labelColor=1C1C1E" alt="Windows 10 | 11">
   <img src="https://img.shields.io/badge/version-0.1.0-3A3A3D?labelColor=1C1C1E" alt="Version 0.1.0">
   <img src="https://img.shields.io/badge/built%20with-Rust-3A3A3D?labelColor=1C1C1E" alt="Built with Rust">
   <img src="https://img.shields.io/badge/install-no%20admin%20needed-3A3A3D?labelColor=1C1C1E" alt="No admin needed">
+  <img src="https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-3A3A3D?labelColor=1C1C1E" alt="MIT or Apache-2.0">
 </p>
 
 <p align="center">
@@ -122,3 +122,7 @@ Settings → Privacy & data lists all of it and opens the folders.
 - [Guide](docs/guide.md): every feature, shortcut and gesture
 - [Building from source](docs/development.md): build, flags, files on disk, the coding-agent hooks
 - [Changelog](CHANGELOG.md)
+
+## License
+
+Free and open source, under either the [MIT License](LICENSE-MIT) or the [Apache License 2.0](LICENSE-APACHE), at your option.

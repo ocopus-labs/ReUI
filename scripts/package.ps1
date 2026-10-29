@@ -8,7 +8,7 @@ Produces, in -OutDir:
                              build time (REUI_PAYLOAD_DIR -> include_bytes!, see
                              crates/reui-setup/src/payload_gen.rs)
   ReUI-<version>-x64.zip     the programs + a small reui-setup.exe that installs the files
-                             next to it, README, CHANGELOG (and LICENSE if present)
+                             next to it, README, CHANGELOG and the two licences
 Then verifies the setup by extracting its payload (reui-setup --extract) and comparing
 hashes. Nothing is installed.
 
@@ -56,7 +56,7 @@ try {
     Remove-Item -Recurse -Force $stage -ErrorAction SilentlyContinue
     New-Item -ItemType Directory $stage | Out-Null
     foreach ($p in $programs + "reui-setup.exe") { Copy-Item (Join-Path $bin $p) $stage }
-    foreach ($doc in @("README.md", "CHANGELOG.md", "LICENSE", "LICENSE.md", "LICENSE.txt")) {
+    foreach ($doc in @("README.md", "CHANGELOG.md", "LICENSE-MIT", "LICENSE-APACHE")) {
         if (Test-Path $doc) { Copy-Item $doc $stage }
     }
     $zip = Join-Path $out "$zipName.zip"

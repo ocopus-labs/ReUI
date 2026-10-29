@@ -4,6 +4,7 @@ description = "ReUI island surface: the dynamic-island pill, rendered with Windo
 version.workspace = true
 edition.workspace = true
 publish.workspace = true
+license.workspace = true
 
 [dependencies]
 reui-protocol.workspace = true
