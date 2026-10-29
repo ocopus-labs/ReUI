@@ -50,6 +50,7 @@ pub const CHECK: char = '\u{E73E}';
 pub const CANCEL: char = '\u{E711}';
 pub const STOPWATCH: char = '\u{E916}';
 pub const SPARKLE: char = '\u{E734}';
+pub const PALETTE: char = '\u{E790}';
 
 pub fn tile(glyph: char, color: reui_design::Color) -> Icon {
     Icon::Glyph(glyph, color)
@@ -57,6 +58,9 @@ pub fn tile(glyph: char, color: reui_design::Color) -> Icon {
 
 pub fn general() -> Icon {
     tile(GEAR, section::GENERAL)
+}
+pub fn appearance() -> Icon {
+    tile(PALETTE, section::APPEARANCE)
 }
 pub fn now_playing() -> Icon {
     tile(MUSIC, section::NOW_PLAYING)

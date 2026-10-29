@@ -97,10 +97,13 @@ impl Pill {
             t = t
         );
         let corner_scalars = [("K", range::roundness::MIN_RADIUS * s), ("R", look.roundness)];
-        let shape = compositor.CreateRoundedRectangleGeometry()?;
-        shape.StartAnimation(h!("Size"), &expr("Vector2(p.w, p.h)", &[])?)?;
-        shape.StartAnimation(h!("CornerRadius"), &expr(&format!("Vector2({corner}, {corner})"), &corner_scalars)?)?;
-        pill.SetClip(&compositor.CreateGeometricClipWithGeometry(&shape)?)?;
+        let outline = || -> Result<CompositionRoundedRectangleGeometry> {
+            let shape = compositor.CreateRoundedRectangleGeometry()?;
+            shape.StartAnimation(h!("Size"), &expr("Vector2(p.w, p.h)", &[])?)?;
+            shape.StartAnimation(h!("CornerRadius"), &expr(&format!("Vector2({corner}, {corner})"), &corner_scalars)?)?;
+            Ok(shape)
+        };
+        pill.SetClip(&compositor.CreateGeometricClipWithGeometry(&outline()?)?)?;
         root.Children()?.InsertAtTop(&pill)?;
 
         let renderer = Renderer::new(&compositor, s, look)?;
@@ -154,6 +157,7 @@ impl Pill {
         circle.SetSize(Vector2::new(size, size))?;
         circle.SetCornerRadius(Vector2::new(round, round))?;
         bubble.SetClip(&compositor.CreateGeometricClipWithGeometry(&circle)?)?;
+        let bubble_edge = edge(&compositor, &circle, look.palette.hairline)?;
         bubble.SetCenterPoint(Vector3::new(size / 2.0, size / 2.0, 0.0))?;
         bubble.StartAnimation(
             h!("Offset"),
@@ -165,6 +169,16 @@ impl Pill {
         let minimal_brush = compositor.CreateColorBrush()?;
         let minimal_bars = bar_visuals(&compositor, &bubble.Children()?, &minimal_brush, s)?;
         root.Children()?.InsertAtTop(&bubble)?;
+
+        // The theme's hairline just inside the edge (light: it holds the white island's
+        // shape on white windows; dark has none). Over the content, following the morphs.
+        if look.palette.hairline.a > 0.0 {
+            let pill_edge = edge(&compositor, &outline()?, look.palette.hairline)?;
+            pill_edge.StartAnimation(h!("Size"), &expr("Vector2(p.w, p.h)", &[])?)?;
+            pill.Children()?.InsertAtTop(&pill_edge)?;
+            bubble_edge.SetSize(Vector2::new(size, size))?;
+            bubble.Children()?.InsertAtTop(&bubble_edge)?;
+        }
 
         Ok(Self {
             hwnd,
@@ -251,6 +265,17 @@ impl Pill {
             events,
         })
     }
+}
+
+/// A stroke along `shape` in `color`, two pixels wide and centred on the edge, so the
+/// clip it sits under leaves one crisp physical pixel inside.
+fn edge(c: &Compositor, shape: &CompositionRoundedRectangleGeometry, color: Color) -> Result<ShapeVisual> {
+    let visual = c.CreateShapeVisual()?;
+    let stroke = c.CreateSpriteShapeWithGeometry(shape)?;
+    stroke.SetStrokeBrush(&color_brush(c, color)?)?;
+    stroke.SetStrokeThickness(2.0)?;
+    visual.Shapes()?.Append(&stroke)?;
+    Ok(visual)
 }
 
 fn surface_sprite(c: &Compositor, surface: &CompositionDrawingSurface, dips: (f32, f32), s: f32) -> Result<SpriteVisual> {

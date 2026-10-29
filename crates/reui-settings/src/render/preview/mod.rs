@@ -6,6 +6,7 @@
 //! Shapes here are in the island's own units (inside [`Painter::scaled`]).
 
 mod agents;
+mod appearance;
 mod clipboard;
 mod devices;
 mod levels;
@@ -30,6 +31,9 @@ pub struct Moment {
 }
 
 pub fn draw(p: &Painter, preview: Preview, stage: Rect, tint: Color, enter: f32) -> Result<()> {
+    if let Preview::Appearance(look) = preview {
+        return appearance::draw(p, &look, stage, tint, enter);
+    }
     p.stage(stage, s::group::RADIUS, s::color::STAGE, tint.with_alpha(s::opacity::STAGE_TINT))?;
     let (cx, top) = ((stage.l + stage.r) / 2.0, stage.t);
     p.hairline(stage.l, stage.r, stage.b - p.pixel(), Color { r: 1.0, g: 1.0, b: 1.0, a: 0.04 })?;
@@ -41,6 +45,7 @@ pub fn draw(p: &Painter, preview: Preview, stage: Rect, tint: Color, enter: f32)
         Preview::Devices => (devices::moments(), 0.8),
         Preview::Timers => (timers::moments(), 0.8),
         Preview::Agents => (agents::moments(), 0.7),
+        Preview::Appearance(_) => unreachable!("drawn above"),
     };
     let e = ease_out(enter);
     let gap = 44.0;

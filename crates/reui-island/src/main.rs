@@ -16,6 +16,7 @@ mod pill;
 mod place;
 mod render;
 mod settings;
+mod theme;
 mod tray;
 
 use std::cell::{Cell, RefCell};
@@ -90,9 +91,19 @@ fn schedule_place(hwnd: HWND, late: bool) {
     }
 }
 
-/// The look for `settings` as Windows is now.
+/// The look for `settings` as Windows is now (its app mode for Auto, its accent).
 fn look_for(settings: &Settings) -> Look {
-    Look::new(&settings.appearance, false, None)
+    Look::new(&settings.appearance, theme::apps_light(), theme::accent())
+}
+
+/// Windows' colours changed: rebuild only if the look comes out different (Auto in another
+/// app mode, the Windows accent changed and is in use).
+fn colors_changed(hwnd: HWND) {
+    let mut current = None;
+    with_pill(|pill| current = Some(*pill.look().0));
+    if current.is_some_and(|look| look != look_for(&Settings::load())) {
+        place(hwnd, true);
+    }
 }
 
 /// Puts the island where the `monitor` setting says, at that display's DPI, and back on
@@ -283,6 +294,15 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         // moved (work area).
         WM_DISPLAYCHANGE | WM_DPICHANGED => {
             schedule_place(hwnd, false);
+            LRESULT(0)
+        }
+        // Light or dark app mode, or the accent: Auto and the Windows accent follow.
+        WM_SETTINGCHANGE if theme::is_color_change(lparam) => {
+            colors_changed(hwnd);
+            LRESULT(0)
+        }
+        WM_DWMCOLORIZATIONCOLORCHANGED => {
+            colors_changed(hwnd);
             LRESULT(0)
         }
         WM_SETTINGCHANGE if wparam.0 as u32 == SPI_SETWORKAREA.0 => {

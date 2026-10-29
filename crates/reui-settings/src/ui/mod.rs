@@ -20,7 +20,7 @@ pub enum Icon {
 }
 
 /// Which feature's island a header card shows.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub enum Preview {
     /// The resting pill.
     Idle,
@@ -30,6 +30,8 @@ pub enum Preview {
     Devices,
     Timers,
     Agents,
+    /// The island in a look (Appearance): a compact pill and an open card.
+    Appearance(reui_design::look::Look),
 }
 
 /// A control's identity: its row and its place among the row's controls.

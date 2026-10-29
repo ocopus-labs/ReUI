@@ -350,6 +350,7 @@ pub fn part_size(part: &Part, m: &impl Measure) -> (f32, f32, f32, Vec<(f32, f32
 pub fn stage_height(preview: Preview) -> f32 {
     match preview {
         Preview::Idle | Preview::Levels => s::header::STAGE_COMPACT,
+        Preview::Appearance(_) => s::header::STAGE_LOOK,
         _ => s::header::STAGE,
     }
 }
