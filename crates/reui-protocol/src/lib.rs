@@ -6,6 +6,9 @@
 //! Nothing here is a pixel, font or layout value, so a visual redesign never touches it.
 //! Frames are a little-endian `u32` length followed by a postcard-encoded message.
 
+pub mod install;
+pub mod version;
+
 use std::io;
 
 use serde::de::DeserializeOwned;

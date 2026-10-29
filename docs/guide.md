@@ -91,7 +91,7 @@ Connect an agent in Settings → Coding agents (it shows the file that changes; 
 
 ## Updates
 
-ReUI checks GitHub for a new version once a day (Settings → About → Check automatically; nothing personal is sent). When one is out, the island mentions it once; **Install** in Settings → About downloads it, checks it, installs it and restarts ReUI. After an update, About shows what changed (Settings → About → What's new after updates).
+ReUI checks GitHub for a new version once a day (Settings → About → Check automatically; nothing personal is sent). When one is out, the island shows it with the first line of what's new: **Install** downloads it (you see how far it is), checks it, installs it and restarts ReUI; **Later** hides it for a day. The same Install is in the tray menu (Install update) and in Settings → About. If something goes wrong, the island says why and offers Try again. After an update, About shows what changed (Settings → About → What's new after updates).
 
 ## Help
 

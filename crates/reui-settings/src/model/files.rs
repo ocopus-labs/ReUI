@@ -35,10 +35,11 @@ impl File {
         }
     }
 
-    /// The hub modules told to `reload` after a write; the island notices on its own.
+    /// The hub modules told to `reload` after a write; the island notices on its own
+    /// (updates reads `check_updates` from the island's file).
     pub fn modules(self) -> &'static [&'static str] {
         match self {
-            File::Island => &[],
+            File::Island => &["updates"],
             File::Media => &["media"],
             File::Clipboard => &["clipboard"],
             File::Osd => &["osd"],

@@ -5,13 +5,15 @@
 //! - written here: `checked_ms`, `available` (a newer version, or null), `notes`,
 //!   `setup_url`, `setup_size`, `sums_url`, `whats_new_seen`;
 //! - written by the hub's updates module: `version` (the last version that ran),
-//!   `updated_from` (set when that changed), `announced` (the version the island has
-//!   mentioned).
+//!   `updated_from` (set when that changed), `snoozed` / `snoozed_until` (the version the
+//!   island's card was put off for, and until when).
 //!
 //! The hub runs `reui-settings --check-updates` (no window) once a day when automatic
-//! checks are on; the About page checks on request. Network only then, only to
+//! checks are on, and `--install-update` ([`install`]) when Install is pressed in the
+//! island; the About page checks and installs on request. Network only then, only to
 //! api.github.com and the release's download links.
 
+pub mod install;
 pub mod net;
 pub mod release;
 
@@ -145,9 +147,19 @@ fn download_dir(version: &str) -> PathBuf {
     std::env::temp_dir().join(format!("ReUI-update-{version}"))
 }
 
+/// How far [`fetch`] has got.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum FetchStep {
+    /// Bytes so far, reported about a hundred times over the whole download.
+    Downloaded(u64),
+    /// All there; checking it against the release.
+    Verifying,
+}
+
 /// Downloads the release's installer and checks it against the release's size and, when
-/// the release lists one, its SHA-256.
-fn fetch(release: &Release, mut progress: impl FnMut(u64)) -> Result<PathBuf, String> {
+/// the release lists one, its SHA-256. The About page and `--install-update` both come
+/// through here, so the island's Install verifies exactly what Settings' does.
+pub fn fetch(release: &Release, mut report: impl FnMut(FetchStep)) -> Result<PathBuf, String> {
     let setup = release.setup.as_ref().ok_or("This release has no installer")?;
     let expected = match &release.sums {
         Some(sums) => Some(release::sha256_for(&net::get_text(&sums.url, None)?, &setup.name).ok_or("The release's checksums don't list its installer")?),
@@ -157,7 +169,15 @@ fn fetch(release: &Release, mut progress: impl FnMut(u64)) -> Result<PathBuf, St
     _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).map_err(|e| format!("Can't make {}: {e}", dir.display()))?;
     let path = dir.join(&setup.name);
-    let (size, hash) = net::download(&setup.url, &path, &mut progress)?;
+    let total = setup.size.max(1);
+    let mut shown = 0u64;
+    let (size, hash) = net::download(&setup.url, &path, |done| {
+        if done.saturating_sub(shown) * 100 >= total {
+            shown = done;
+            report(FetchStep::Downloaded(done));
+        }
+    })?;
+    report(FetchStep::Verifying);
     if let Err(e) = verify(size, &hash, setup.size, expected.as_deref()) {
         _ = std::fs::remove_dir_all(&dir);
         return Err(e);
@@ -226,12 +246,8 @@ impl Updates {
         let (me, hwnd) = (self.clone(), hwnd.0 as isize);
         me.set(Phase::Downloading { release: release.clone(), done: 0 }, hwnd);
         _ = std::thread::Builder::new().name("update-download".into()).spawn(move || {
-            let total = release.setup.as_ref().map_or(0, |s| s.size).max(1);
-            let mut shown = 0u64;
-            let result = fetch(&release, |done| {
-                // About a hundred redraws over the whole download.
-                if done.saturating_sub(shown) * 100 >= total {
-                    shown = done;
+            let result = fetch(&release, |step| {
+                if let FetchStep::Downloaded(done) = step {
                     me.set(Phase::Downloading { release: release.clone(), done }, hwnd);
                 }
             });
@@ -255,9 +271,11 @@ impl Updates {
 }
 
 /// Starts the installer quietly; it stops ReUI (this window too), installs and starts it
-/// again.
+/// again. It gets none of our handles: `--install-update`'s stdout is the hub's pipe, which
+/// would otherwise stay open until the setup ends.
 pub fn run_installer(path: &Path) -> Result<(), String> {
-    std::process::Command::new(path).arg("--quiet").spawn().map(|_| ()).map_err(|e| format!("Can't start the installer: {e}"))
+    use std::process::Stdio;
+    std::process::Command::new(path).arg("--quiet").stdin(Stdio::null()).stdout(Stdio::null()).stderr(Stdio::null()).spawn().map(|_| ()).map_err(|e| format!("Can't start the installer: {e}"))
 }
 
 /// The CHANGELOG entry for this version, when this run follows an update and it hasn't
@@ -303,10 +321,10 @@ mod tests {
     fn a_found_release_is_stored_and_read_back_while_newer() {
         let dir = crate::model::doc::tests::temp_dir("updates-state");
         let paths = paths(&dir);
-        write_state(&paths, vec![("version", json!(VERSION)), ("announced", json!("9.9.9"))]).unwrap();
+        write_state(&paths, vec![("version", json!(VERSION)), ("snoozed", json!("9.9.9"))]).unwrap();
         write_state(&paths, state_pairs(Some(&release("99.0.0")))).unwrap();
         let state = read_state(&paths);
-        assert_eq!(state["announced"], "9.9.9", "the hub's keys are kept");
+        assert_eq!(state["snoozed"], "9.9.9", "the hub's keys are kept");
         assert!(checked_ms(&state).is_some());
         let stored = stored_release(&state).unwrap();
         assert_eq!(stored, release("99.0.0"));

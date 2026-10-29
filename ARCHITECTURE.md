@@ -21,7 +21,7 @@ reui-settings.exe  the Settings window, opened from the tray; single instance
 
 | Crate | Job |
 |---|---|
-| `reui-protocol` | Wire types: `Activity`, presentations (compact, minimal, expanded), rows, priorities, actions; postcard framing |
+| `reui-protocol` | Wire types: `Activity`, presentations (compact, minimal, expanded), rows, priorities, actions; postcard framing. Also `version` (semver comparison for update.json) and `install` (the lines `reui-settings --install-update` prints) |
 | `reui-design` | `design/tokens.json` compiled into constants at build time; `icon.rs` turns `design/logo/reui.ico` into the icon resource every program's `build.rs` links in |
 | `reui-hub` | Feature modules and the hub that orders their activities |
 | `reui-island` | The island window: Windows.UI.Composition + Direct2D/DirectWrite |
@@ -74,8 +74,10 @@ modules/
   timers/          countdowns, focus sessions, stopwatch: launcher field parser, state
                    machines (fake-clock tests), timer-state.json, finish sound, Do Not
                    Disturb (WNF read, IQuietHoursSettings, checked), views, settings
-  updates.rs       daily update check (runs reui-settings --check-updates), "Update
-                   available" and "Updated" briefs
+  updates/         daily update check, the update card (an Alert: Later / Install, then
+                   download progress, installing or why it failed), "Updated" brief:
+                   update.json + offer/snooze rules, card phases (pure, tested), views,
+                   reui-settings runs (--check-updates, --install-update read line by line)
 ```
 
 **Pattern:**
@@ -88,7 +90,8 @@ modules/
 ```
 main.rs            window class, message loop, mouse/foreground hooks
 ipc.rs             pipe client
-settings.rs        visibility modes, pause, watching settings.json   tray.rs   tray icon, short menu
+settings.rs        visibility modes, pause, watching settings.json
+tray.rs            tray icon, short menu (Install update while one is known)
 order.rs           which activity is in the pill and which in the bubble
 place.rs           which display (monitor setting) and the window rect at its DPI
 fullscreen.rs      when to hide: D3D, presentation, busy, a window covering the display
@@ -128,8 +131,8 @@ features/          per-feature island logic
 ## `reui-settings/src`
 
 ```
-main.rs            single instance, --page, --welcome, --check-updates (no window),
-                   REUI_CONFIG_DIR (test sandbox)
+main.rs            single instance, --page, --welcome, --check-updates and
+                   --install-update (no window), REUI_CONFIG_DIR (test sandbox)
 window.rs          the window: own caption (no system title bar), hit-testing, DWM corners,
                    per-monitor DPI v2
 gpu.rs             D3D11 device, D2D device context, flip swap chain + frame-latency waitable
@@ -150,9 +153,10 @@ pages/             one file per page: build its rows from State, handle its cont
                    welcome.rs is the three-step welcome (first run, Replay the tour)
 model/             settings files (read, change a key, atomic write, keep unknown keys,
                    never write an invalid file), hotkeys, coding agents (status, test)
-updates/           GitHub releases: release.rs (JSON, semver, checksums, notes; pure),
-                   net.rs (WinHTTP GET/download, CNG SHA-256), mod.rs (check, download +
-                   verify, run the setup, update.json, What's new)
+updates/           GitHub releases: release.rs (JSON, checksums, notes; pure), net.rs
+                   (WinHTTP GET/download, CNG SHA-256), mod.rs (check, download + verify,
+                   run the setup, update.json, What's new), install.rs (--install-update:
+                   the island's Install, one step per stdout line; REUI_UPDATE_SIMULATE)
 state.rs           what the pages show and change      hub.rs     pipe client (reload, clear)
 keys.rs            hotkey recorder (low-level hook)     system.rs  startup entry, folders, apps
 stats.rs           idle cost: CPU and private memory of ReUI's processes
@@ -172,7 +176,7 @@ stats.rs           idle cost: CPU and private memory of ReUI's processes
 | `%LOCALAPPDATA%\ReUI\hub.log` | panics |
 | `%LOCALAPPDATA%\ReUI\bin\reui-bridge.exe` | the installed hook bridge |
 | `%LOCALAPPDATA%\ReUI\agents.json` | each coding agent's last hook event (hub's agent module, ≤ 1 write / 10 s per agent; Settings' status line) |
-| `%LOCALAPPDATA%\ReUI\update.json` | the last update check and what it found (Settings), the last version run, `updated_from` and the version announced (hub's updates module) |
+| `%LOCALAPPDATA%\ReUI\update.json` | the last update check and what it found (Settings), the last version run, `updated_from`, and the version "Later" put off with `snoozed_until` (hub's updates module); the island's tray reads it when its menu opens |
 | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` value `ReUI` | start with Windows (the Settings window's toggle) |
 
 ## Conventions
