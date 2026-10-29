@@ -81,6 +81,7 @@ impl File {
                 "visibility": "always",
                 "hide_in_fullscreen": true,
                 "show_on_desktop": true,
+                "view_switcher": true,
                 "monitor": "primary",
                 "check_updates": true,
                 "whats_new": true,

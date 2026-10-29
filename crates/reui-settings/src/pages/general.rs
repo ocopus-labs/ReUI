@@ -42,7 +42,10 @@ pub fn build(state: &State) -> Vec<Block> {
         .enabled(doc_ok && selected != 0)
         .icon(icons::tile(icons::WALLPAPER, palette::GREEN));
     let fullscreen = flag(state, File::Island, "hide_in_fullscreen", "Hide in full screen", "Games, videos and presentations keep the whole screen").icon(icons::tile(icons::FULLSCREEN, palette::PURPLE));
-    blocks.push(group("Island", vec![visibility, desktop, monitor, fullscreen]));
+    // Tabs under an open place's card (docs/PRD-view-switcher.md).
+    let switcher = flag(state, File::Island, "view_switcher", "View switcher", "Tabs under an open card: Clipboard, Timers, Devices, System stats")
+        .icon(icons::tile(icons::TABS, palette::ORANGE));
+    blocks.push(group("Island", vec![visibility, desktop, monitor, fullscreen, switcher]));
 
     let left = state.files.paused_until().and_then(|until| until.checked_sub(reui_protocol::unix_ms())).filter(|&ms| ms > 0);
     let pause = match left {
