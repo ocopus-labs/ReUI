@@ -7,3 +7,6 @@
 *.reui-backup
 *.reui-tmp
 
+
+# Agent worktrees (Claude Code)
+/.claude/worktrees/
