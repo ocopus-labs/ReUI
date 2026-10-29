@@ -1,13 +1,18 @@
 //! Coding agents: per agent, its status (connected, when ReUI last heard from it, or that
-//! it isn't on this PC), Connect / Disconnect with the file that changes, and a test event.
+//! it isn't on this PC), Connect / Disconnect with the file that changes, and a test event;
+//! then what the island shows of sessions (`coding.json`).
 
-use super::{button, group, intro, Effect, Page};
+use serde_json::Value;
+
+use super::{button, file_error, flag, group, intro, Effect, Page};
 use crate::model::agents::{self, Agent, Status};
+use crate::model::files::{File, SHOW_SESSIONS};
 use crate::state::State;
-use crate::ui::{icons, Act, Block, Icon, Role, Row, Target, Tone};
+use crate::ui::{icons, Act, Block, Icon, Part, Role, Row, Target, Tone};
 
 pub fn build(state: &State) -> Vec<Block> {
-    let mut blocks = vec![intro(Page::Agents, "Claude Code, Codex and OpenCode sessions in the island: what they're working on, when they finish, and permission requests you can answer there.")];
+    let mut blocks = vec![intro(Page::Agents, "Claude Code, Codex and OpenCode in the island when they need you: permission requests you can answer there, questions, and turns that failed.")];
+    blocks.extend(file_error(state, File::Coding));
     let bridge = state.paths.installed_bridge().exists() || state.paths.exe_dir.join("reui-bridge.exe").exists();
     let now = reui_protocol::unix_ms();
     let rows = Agent::ALL
@@ -36,10 +41,23 @@ pub fn build(state: &State) -> Vec<Block> {
         })
         .collect();
     blocks.push(group("", rows));
+
+    let ok = state.files.doc(File::Coding).error().is_none();
+    let selected = state.files.show_sessions();
+    let detail = ["Only for permissions, questions and failed turns", "Also while they think and run tools"][selected];
+    let sessions = Row::new("sessions", "Show sessions").detail(detail).part(Part::Segmented { options: vec!["When needed".into(), "While working".into()], selected }).enabled(ok);
+    let finished = flag(state, File::Coding, "show_finished", "Finished turns", "A moment when a turn ends, with how long it took");
+    blocks.push(group("In the island", vec![sessions, finished]));
     blocks
 }
 
 pub fn act(state: &mut State, target: &Target, act: Act) -> Effect {
+    if let ("sessions", &Act::Choose(i)) = (target.row.as_str(), &act) {
+        if let Some(value) = SHOW_SESSIONS.get(i) {
+            state.set(File::Coding, "show_sessions", Value::String((*value).into()));
+        }
+        return Effect::None;
+    }
     let Some(arg) = target.row.strip_prefix("agent:") else { return Effect::None };
     let Some(i) = Agent::ALL.iter().position(|a| a.arg() == arg) else { return Effect::None };
     if act != Act::Press {
@@ -99,6 +117,18 @@ mod tests {
         state.refresh();
         let blocks = build(&state);
         assert!(row(&blocks, "agent:claude").detail.as_deref().unwrap().starts_with("Connected · last event 2 min ago"));
+        _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn session_rows_write_coding_json() {
+        let (mut state, dir) = state("agents-coding");
+        let blocks = build(&state);
+        assert!(matches!(row(&blocks, "sessions").parts[0], Part::Segmented { selected: 0, .. }), "only when needed by default");
+        act(&mut state, &Target::new("sessions", 0), Act::Choose(1));
+        crate::pages::act(Page::Agents, &mut state, &Target::new("coding:show_finished", 0), Act::Press);
+        let saved: Value = serde_json::from_str(&std::fs::read_to_string(dir.join("roaming").join("coding.json")).unwrap()).unwrap();
+        assert_eq!((saved["show_sessions"].as_str(), saved["show_finished"].as_bool()), (Some("working"), Some(true)));
         _ = std::fs::remove_dir_all(&dir);
     }
 }
