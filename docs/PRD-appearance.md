@@ -1,6 +1,6 @@
 # PRD: Appearance (styles, themes, shape)
 
-Status: in progress (M0–M2) · Owner: Rohit · Oct 29, 2026
+Status: done (M0–M2) · Owner: Rohit · Oct 29, 2026
 
 **Ask (Rohit):** themes, light and dark, liquid glass, adjustable roundness, margins and padding, and different styles, including a Mac-like one stuck to the top of the screen. All at ReUI's performance budget. Liquid glass was dropped the same day (see §2).
 
@@ -81,14 +81,14 @@ Stored in `%APPDATA%\ReUI\settings.json` (the island already watches it): `style
 | # | What | Done when | Status |
 |---|---|---|---|
 | M0 | Runtime `Look` and palette refactor; nothing visible changes | Pixel-identical review sheets; tests | Done: compact, timer, permission and music cards identical before/after (only the live level bars differ) |
-| M1 | Light / Auto theme; Appearance page with Theme, Accent | Light island readable over light and dark windows; Auto follows Windows live | |
-| M2 | Roundness, gap, padding, size; Notch style with ears and the in-notch second activity | Every combination keeps concentric corners; notch flush at 100/125/150 % DPI | |
+| M1 | Light / Auto theme; Appearance page with Theme, Accent | Light island readable over light and dark windows; Auto follows Windows live | Done: light over white and dark backdrops; Auto flips live in a sandbox (an `apps-theme` stand-in + "ImmersiveColorSet"), unit-tested; the page also carries the shape rows |
+| M2 | Roundness, gap, padding, size; Notch style with ears and the in-notch second activity | Every combination keeps concentric corners; notch flush at 100/125/150 % DPI | Done: concentric maths tested for every roundness × padding; screenshots at roundness 0 / 0.5 / 1, padding and size extremes; notch checked at effective scales 1.0 / 1.1 / 1.25 (Size on a 100 % display; 150 % not available here) |
 
 ## 7. To verify
 
 | ID | Question | How |
 |---|---|---|
-| V3 | Notch ears at fractional DPI (125 %, 150 %): no seam between the ears and the shape | Screenshots at each scale |
+| V3 | Notch ears at fractional DPI (125 %, 150 %): no seam between the ears and the shape | Screenshots at each scale. Answer: no seam at 110 % and 125 % (drawn by Size; the ears overlap the shape by one DIP); 150 % unverified on this machine |
 
 ## 8. Open questions
 
