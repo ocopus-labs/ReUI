@@ -158,13 +158,12 @@ pub(super) fn card(moment: &Moment, context: Context, position: (usize, usize), 
                             detail = Some(f.title.clone());
                         }
                         Input::Text | Input::Number { .. } => {
-                            detail = f.description.clone();
                             rows.push(field(f.title.clone()));
-                            if let Input::Number { integer } = f.input {
-                                if schema::parse(&f.input, &moment.text).is_err() {
-                                    rows.push(Row::Note(if integer { "Not a whole number" } else { "Not a number" }.into()));
-                                }
-                            }
+                            // A number that doesn't parse says so quietly, in the detail.
+                            detail = match f.input {
+                                Input::Number { integer } if schema::parse(&f.input, &moment.text).is_err() => Some(if integer { "Not a whole number" } else { "Not a number" }.into()),
+                                _ => f.description.clone(),
+                            };
                         }
                     }
                     if form.count() > 1 {
@@ -308,12 +307,12 @@ mod tests {
         m.act("pick:1");
         m.set_text("lots");
         let (_, view) = card(&m, context(), (0, 1), "Claude");
-        assert_eq!(view.detail.as_deref(), Some("Story points"));
+        assert_eq!(view.detail.as_deref(), Some("Not a whole number"), "said quietly, in the detail");
         assert!(matches!(&view.rows[0], Row::Search { placeholder: Some(p), .. } if p == "Points"));
-        assert_eq!(view.rows[1], Row::Note("Not a whole number".into()));
         assert_eq!(buttons(&view).len(), 1, "a number that doesn't parse holds Submit back");
         m.set_text("3");
         let (_, view) = card(&m, context(), (0, 1), "Claude");
+        assert_eq!(view.detail.as_deref(), Some("Story points"));
         assert_eq!(buttons(&view).last().unwrap(), &("6:next".to_string(), "Submit".to_string()));
 
         let link = json!({ "mcp_server_name": "GitHub", "message": "Sign in", "mode": "url", "url": "https://github.com/login/device" });
