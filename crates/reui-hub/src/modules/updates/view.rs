@@ -1,5 +1,5 @@
 //! What the updates module puts in the island: the update card in each of its phases
-//! (shaped after the iOS system alerts, PRD agent moments §5.8: a bare accent glyph, the
+//! (shaped after the iOS system alerts, PRD agent moments §5.8, without the glyph: the
 //! version as the hero, the notes' first line wrapping under it, two equal capsules with
 //! the main action tinted) and the "Updated" brief after an upgrade.
 
@@ -33,24 +33,26 @@ pub fn card(card: &Card) -> View {
     let version = format!("Version {}", card.offer.version);
     let download = Element::Glyph { glyph: GLYPH_DOWNLOAD, tone: Tone::Accent };
     let answers = |main: &str| vec![Row::Buttons(vec![text_button(LATER, "Later", ButtonRole::Secondary), text_button(INSTALL, main, ButtonRole::Accent)])];
-    let (leading, trailing, headline, detail, rows) = match &card.phase {
-        Phase::Offered => (download.clone(), text("Update", Tone::Accent), version, card.offer.line.clone(), answers("Install")),
+    let (mark, trailing, headline, detail, rows) = match &card.phase {
+        Phase::Offered => (download, text("Update", Tone::Accent), version, card.offer.line.clone(), answers("Install")),
         Phase::Downloading(fraction) => {
             let percent = format!("{} %", (fraction * 100.0).round() as u32);
             let bar = Row::Progress { fraction: *fraction, leading: None, trailing: Some(percent) };
-            (download.clone(), Element::Ring(*fraction), "Downloading".into(), Some(version), vec![bar])
+            (download, Element::Ring(*fraction), "Downloading".into(), Some(version), vec![bar])
         }
-        Phase::Installing => (download.clone(), text("Installing", Tone::Accent), "Installing".into(), Some(version), Vec::new()),
+        Phase::Installing => (download, text("Installing", Tone::Accent), "Installing".into(), Some(version), Vec::new()),
         Phase::Failed(why) => (Element::Glyph { glyph: GLYPH_ERROR, tone: Tone::Negative }, text("Failed", Tone::Negative), "Couldn't update".into(), Some(why.clone()), answers("Try again")),
     };
     View {
         accent: Some(ACCENT),
         audio: None,
-        compact: CompactView { leading: leading.clone(), trailing },
-        minimal: leading.clone(),
+        compact: CompactView { leading: mark.clone(), trailing },
+        minimal: mark,
         expanded: Some(ExpandedView {
             context: None,
-            leading,
+            // No mark in the card: the eyebrow and the hero say what it is, and the text
+            // column stays put from offer to progress to failure.
+            leading: Element::Empty,
             eyebrow: Some("ReUI".into()),
             headline: Headline::Text(headline),
             detail,
