@@ -9,13 +9,13 @@ ReUI puts a dynamic island at the top of your screen: a small black pill that sh
 | Rest the pointer on the pill | After a short pause it becomes clickable and peeks. Until then clicks go through to what's underneath (browser tabs stay usable) |
 | Click the pill | Opens the card |
 | Rest the pointer on the pill while nothing is happening | Shows the date and time |
-| Click the pill while nothing is happening | Opens a row of glyphs: Clipboard, Timers, Devices, System stats (and Now Playing while something plays). Click one to go there; Esc or moving away closes the row |
+| Click the pill while nothing is happening | Opens a row of glyphs: Clipboard, Timers, Calendar, Devices, System stats (and Now Playing while something plays). Click one to go there; Esc or moving away closes the row |
 | Move the pointer away | The card folds back |
 | Scroll the wheel over the island | Steps through everything that's going on; over a row of cards it scrolls the row |
 | Click the small bubble beside the pill | Brings that activity into the pill |
-| Right-click the pill or the tray icon | Settings, Pause ReUI for 1 hour, Hide the island (Show the island while hidden), Clipboard history, Devices, System stats, Quit |
+| Right-click the pill or the tray icon | Settings, Pause ReUI for 1 hour, Hide the island (Show the island while hidden), Clipboard history, Devices, System stats, Calendar, Quit |
 | Push the pointer against the top edge | Shows a hidden island (Settings → General → Show the island: When active / When needed) |
-| Click a glyph under an open card | Goes to that view: Clipboard, Timers, Devices, System stats, and Now Playing while something plays. The wheel over the glyphs steps through them; Ctrl+Tab / Ctrl+Shift+Tab does too while the card has the keyboard (clipboard history, the timer field). Off in Settings → General → View switcher |
+| Click a glyph under an open card | Goes to that view: Clipboard, Timers, Calendar, Devices, System stats, and Now Playing while something plays. The wheel over the glyphs steps through them; Ctrl+Tab / Ctrl+Shift+Tab does too while the card has the keyboard (clipboard history, the timer field). Off in Settings → General → View switcher |
 | Click the dot beside the glyphs | A permission request or question arrived while you were in a view: the dot (in its colour) says it's waiting, and a click brings it forward |
 
 The island hides while a game, video or presentation fills the screen (Settings → General → Hide in full screen), and can sit on your main display, the display the pointer is on, or one display you choose (Settings → General → Display). In "When active" and "When needed" it still shows in full whenever the desktop is in front (you clicked the wallpaper or pressed Win+D), and keeps out of the way inside apps (Settings → General → Always show on the desktop). If you hide the taskbar, Settings → General → Clock in the resting island puts the time in the island while nothing else is showing.
@@ -85,6 +85,16 @@ Press **Win+Ctrl+T** (or Tray → Timer → New timer…) and type how long: `10
 Type `focus` for a focus session (25 minutes of work, 5-minute breaks, a 15-minute break after every fourth); the island asks before each break and before going back to work. Settings → Timers can make it go on by itself and turn on Do Not Disturb while you work. Type `sw` for a stopwatch, with laps.
 
 `reui-bridge timer 10m tea` starts one from a script or a coding agent.
+
+## Calendar
+
+Add a calendar in Settings → Calendar → Add a calendar: paste its secret address in iCal format (Google Calendar: Settings → your calendar → *Secret address in iCal format*; Outlook: Settings → Calendar → Shared calendars → *Publish a calendar*, "Can view all details", the ICS link). Add as many as you like; each shows by its host with how its last refresh went. ReUI asks for them every 15 minutes, as soon as the PC wakes up, and when the internet comes back; a copy is kept (encrypted) so the island is right offline.
+
+- Ten minutes before a meeting (Settings → Calendar → Count down from) the pill shows a ring running down and the meeting's title. Click it for the card: the time, the room or the meeting service, **Join**, and the next two meetings of the day.
+- When it starts the island shows it in front (it doesn't open by itself). **Join** opens the meeting link (Teams, Zoom, Google Meet, Webex, GoTo, Whereby, Jitsi, Chime) in your browser, which passes it to the app. Joining, or opening and closing the card, dismisses it; otherwise it goes five minutes in.
+- All-day events never take the pill; declined (Google) and cancelled events don't show at all.
+- The Calendar glyph in the row of places (or Tray → Calendar) opens the day's card: what's next and the two after it, or tomorrow's when today is done.
+- **Windows calendar** reads the calendars Windows itself keeps (from its old Mail and Calendar app); on most Windows 11 PCs it's empty.
 
 ## Mic & camera
 

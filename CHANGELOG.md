@@ -11,5 +11,6 @@ First public build.
 - Settings → Coding agents: connect Claude Code, Codex or OpenCode in two clicks, see when ReUI last heard from each, and send a test event.
 - Updates from GitHub releases: a daily check (can be turned off), Install from Settings → About (verified against the release's checksums), and What's new after an update.
 - Timers: type how long (`10m tea`, `1h30`) after Win+Ctrl+T, several at once, a finish you can't miss, focus sessions with optional Do Not Disturb, and a stopwatch. They survive sleep and restarts.
+- Calendar: your next meeting counted down in the island, Join for Teams, Zoom, Meet and Webex links, and the day's card in the row of places. Add Google or Outlook calendars by their secret iCal address (kept encrypted).
 - Turn Now Playing, Clipboard history or Devices off entirely (takes effect when ReUI restarts).
 - A guide to every feature and shortcut (`docs/guide.md`).

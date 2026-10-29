@@ -32,7 +32,7 @@ reui-settings.exe  the Settings window, opened from the tray; single instance
 
 ```
 main.rs            flags (--no-agents, --no-media, --no-clipboard, --no-osd, --no-devices, --no-timers,
-                   --no-privacy, --no-stats, …), module list
+                   --no-privacy, --no-stats, --no-calendar, …), module list
 hub.rs             activities, ordering, ModuleContext (publish, retract, focus, image store)
 ipc.rs             the pipe: snapshots + images to surfaces, actions/commands/hooks back
 island.rs          launches and supervises reui-island
@@ -101,6 +101,14 @@ modules/
                    counted interfaces, the busiest GPU engine, number text; tested), history
                    (the open card's last minute per gauge, sustained-high tone; tested), view,
                    settings (stats.json)
+  calendar/        the next meeting: secret ICS links (fetch: conditional GET, backoff, the
+                   DPAPI-encrypted last copy; network: connectivity hints) and Windows' own
+                   store (windows_store, opt-in), read by ics/ (lines, time + VTIMEZONE,
+                   rrule, zones via Windows' ICU; feeds into occurrences; tested), links
+                   (meeting-link detection, Safe Links unwrapped; pure, tested), schedule
+                   (countdown, start alert, the day's card, the next wake-up; fake clock),
+                   views, settings (calendar.json, links DPAPI-sealed: dpapi.rs), status
+                   (each source's last refresh, for Settings)
   updates/         daily update check, the update card (an Alert: Later / Install, then
                    download progress, installing or why it failed), "Updated" brief:
                    update.json + offer/snooze rules, card phases (pure, tested), views,
@@ -150,7 +158,8 @@ render/            drawing only (no behaviour state); where things go is reui_de
   switcher.rs      the view switcher's tabs and the waiting decision's dot
   rows/            timeline, controls, slider, lyrics, cards, search, tabs, note,
                    context (session strip), choices, block (scrolling text), gauges
-                   (gauges with sparklines, facts: System stats)
+                   (gauges with sparklines, facts: System stats), agenda (the calendar's
+                   rest of the day)
 features/          per-feature island logic
   clipboard.rs  clipboard_keys.rs   panel selection/scroll, keyboard hook
   keys.rs                           the key map of a card that has the keyboard
@@ -197,7 +206,7 @@ render/            drawing only: Renderer/Painter primitives, fonts, text (layou
                    parts (shape and notch ears, tiles, rings, buttons, rows, placed by
                    reui_design::layout as the island places them), one file per moment: compact, music, clipboard (+ toast),
                    levels, devices, timers, stats, agents; switcher (under the timer card)
-pages/             one file per page: build its rows from State, handle its controls;
+pages/             one file per page (calendar.rs: links sealed with model/calendar.rs): build its rows from State, handle its controls;
                    welcome.rs is the three-step welcome (first run, Replay the tour)
 model/             settings files (read, change a key, atomic write, keep unknown keys,
                    never write an invalid file), hotkeys, coding agents (status, test)
@@ -222,6 +231,8 @@ stats.rs           idle cost: CPU and private memory of ReUI's processes
 | `%APPDATA%\ReUI\onboarding.json` | first run done (`welcomed`), tips shown, offers answered |
 | `%APPDATA%\ReUI\clipboard.db`, `clipboard.json` | clipboard history and settings |
 | `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json`, `timers.json`, `privacy.json`, `stats.json`, `coding.json` | music, OSD, Devices, Timers, privacy indicator, System stats and coding agent settings (`coding.json` is read by all three agent modules) |
+| `%APPDATA%\ReUI\calendar.json` | Calendar: `lead_min`, `windows`, `sources` (each link DPAPI-sealed, shown by `host`) |
+| `%LOCALAPPDATA%\ReUI\calendar\` | each calendar's last good copy (`<id>.cache`, DPAPI-encrypted) and `status.json` (each source's last refresh, read by Settings) |
 | `%APPDATA%\ReUI\timer-state.json` | running and paused timers, a focus session, the stopwatch, and whether ReUI turned Do Not Disturb on |
 | `%LOCALAPPDATA%\ReUI\lyrics\` | lyrics cache |
 | `%LOCALAPPDATA%\ReUI\hub.log` | panics |

@@ -123,7 +123,7 @@ What a non-packaged Win32 app (ReUI: no package identity, a per-user exe) can re
 
 - `AppointmentManager.RequestStoreAsync(AllCalendarsReadOnly)` is documented as needing the `appointments` capability in a package manifest ([docs](https://learn.microsoft.com/en-us/uwp/api/windows.applicationmodel.appointments.appointmentmanager.requeststoreasync), [capabilities](https://learn.microsoft.com/en-us/windows/uwp/packaging/app-capability-declarations)). **Tried on this PC (Windows 11 26200) from an unpackaged process (Windows PowerShell 5.1, read-only):** it works. The store opened, `FindAppointmentCalendarsAsync` returned one calendar (source "Microsoft account"), `FindAppointmentsAsync` over ±30 days returned **0 appointments**. Desktop apps are covered by Settings → Privacy → Calendar → "Let desktop apps access your calendar" (on here).
 - **What's in it on Windows 11 now:** whatever Mail & Calendar synced. That app stopped syncing on Dec 31, 2024 and isn't installed on 24H2 and later ([Microsoft](https://support.microsoft.com/en-us/office/outlook-for-windows-the-future-of-mail-calendar-and-people-on-windows-11-715fc27c-e0f4-4652-9174-47faa751b199), [Windows Central](https://www.windowscentral.com/software-apps/microsoft-renders-mail-and-calendar-apps-inoperable-as-it-forces-users-over-to-the-new-outlook-on-windows)). New Outlook is a web app with its own cache and doesn't write to the store. So on a current PC it's usually empty; on older ones it may still hold a stale copy.
-- **Verdict:** cheap, local and private, but rarely has data. Built as an opt-in source (`windows`, off by default), read on its own thread at start, on a refresh, and when the store says it changed.
+- **Verdict:** cheap, local and private, but rarely has data. Built as an opt-in source (`windows`, off by default), read on a blocking thread at start, every 15 minutes and on resume (a local read; `StoreChanged` needs a change tracker that's worth wiring only once the store has data worth watching).
 
 ### 6.2 Outlook
 
@@ -227,7 +227,7 @@ All sources sit behind one trait (`source.rs`: a name, a fetch that returns even
 | M | Scope | Exit | Status |
 |---|---|---|---|
 | **M0** | Research (§6); the ICS parser, RRULE, zones; links; schedule (all pure, tested); protocol v22 `Row::Agenda` and its island drawing | Tests; a local feed parsed | Done |
-| **M1** | Module: ICS sources (fetch, ETag, cache, backoff, resume/network), Windows store (opt-in), countdown, start alert, Join, the day's card; view-switcher place; tray; `calendar.json` with DPAPI; Settings page | S1–S11 against a local test feed in a sandbox | Done (see §14) |
+| **M1** | Module: ICS sources (fetch, ETag, cache, backoff, resume/network), Windows store (opt-in), countdown, start alert, Join, the day's card; view-switcher place; tray; `calendar.json` with DPAPI; Settings page | S1–S11 against a local test feed in a sandbox | Done: a sandbox hub against a local test feed (countdown, start, dismissal, the day's card from the row of places, Settings page); see §14 |
 | M2 | Microsoft account (Graph, browser sign-in); `msteams:`/`zoommtg:` deep links | A personal and a work account | Planned |
 | M3 | Google account (after verification) | | Planned |
 | M4 | Classic Outlook (COM, never starting it), CalDAV; a Settings preview | | Planned |

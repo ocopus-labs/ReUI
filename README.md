@@ -79,6 +79,10 @@ Press **Win+Alt+S** to see how busy your PC is: CPU and memory with their last m
 
 Press **Win+Ctrl+T** and type how long: `10`, `90s`, `1h30`, `10m tea`. Run several at once; they keep going through sleep and restarts, and when one ends the island opens with a sound: **Stop**, or **+1 min**. Type `focus` for focus sessions (25 minutes of work, 5-minute breaks) that can turn on Do Not Disturb while you work, or `sw` for a stopwatch with laps.
 
+### Calendar
+
+Your next meeting comes to the island in its last ten minutes, a ring counting down beside its title. When it starts, the island says so, and **Join** opens the Teams, Zoom, Meet or Webex link found in the invitation, wherever it hides. All-day, declined and cancelled events stay out of the way, and the Calendar view lists what's left of your day. Add your Google or Outlook calendar by its secret iCal address in Settings → Calendar: ReUI keeps it encrypted and asks only your calendar's own server.
+
 ### Coding agents
 
 <img src="docs/images/agents.png" width="672" alt="Claude Code asking permission to run npm test, with Deny, Always and Allow">
@@ -115,6 +119,7 @@ Your clipboard history, settings and logs stay on your PC. There's no account an
 - **Link previews:** the title and image of links you copy, from public sites only. Turn them off in Settings → Clipboard.
 - **Update check:** once a day, to GitHub. Nothing about you is sent. Turn it off in Settings → About.
 - **Synced lyrics:** off until you turn them on; then the song's title, artist and album go to lrclib.net.
+- **Calendar:** only once you add a calendar's link; then ReUI asks that calendar's own server for it every 15 minutes. The link and the copy kept for offline use are encrypted for your Windows account.
 
 Settings → Privacy & data lists all of it and opens the folders.
 

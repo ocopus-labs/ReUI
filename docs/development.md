@@ -54,6 +54,8 @@ Setup options: `--no-autostart` (don't start with Windows), `--no-launch`, `--qu
 | `%APPDATA%\ReUI\clipboard.db` | Clipboard history |
 | `%APPDATA%\ReUI\coding.json` | Coding agents: `show_sessions` (`needed` \| `working`), `show_finished` |
 | `%APPDATA%\ReUI\clipboard.json` | `hotkey`, `retention_days`, `ignored_apps`, `link_previews` |
+| `%APPDATA%\ReUI\calendar.json` | `lead_min`, `windows`, `sources` (`id`, `host`, `url` DPAPI-sealed, `on`) |
+| `%LOCALAPPDATA%\ReUI\calendar\` | Each calendar's last good copy (`<id>.cache`, DPAPI-encrypted) and `status.json` (each source's last refresh) |
 | `%LOCALAPPDATA%\ReUI` | Caches and logs |
 | `%LOCALAPPDATA%\ReUI\update.json` | What the last update check found |
 | `%LOCALAPPDATA%\ReUI\agents.json` | Each coding agent's last event (at most one write per 10 s) |
@@ -112,6 +114,10 @@ The hub's `privacy` module shows which app is using the microphone, the camera o
 The hub's `island` module (`modules/hide.rs`) registers the island's hide shortcut (`hide_shortcut` in `settings.json`, Win+Alt+I by default; Win+Alt+H is Windows' voice typing) and relays a press as `HubMsg::ToggleHidden`; the island keeps the state (`hidden` in `settings.json`). `reui-bridge hide` sends the same request through the pipe, which is how scripts test it without pressing keys.
 
 The hub's `stats` module shows CPU, GPU, memory, disk and network in a card: **Win+Alt+S**, Tray → System stats, or `reui-bridge stats`. Stats have no OS events, so they're polled, but only while the card is open: opening it starts a sampler thread that reads once a second (like Task Manager), and the island's "collapsed" ends it. With the card closed the module costs nothing (measured). CPU matches Windows 11's Task Manager (`GetSystemTimes`, i.e. `% Processor Time`); GPU is the busiest engine with its processes summed, from PDH's English counter names. Settings: `%APPDATA%\ReUI\stats.json` (`shortcut`, `gpu`, `disk`, `network`, `power`). `--no-stats` turns it off. The full spec and the costs are in [docs/PRD-system-stats.md](docs/PRD-system-stats.md).
+
+## Calendar internals
+
+The hub's `calendar` module reads secret ICS links (Google's, Outlook's, any provider's) and, opt-in, Windows' own appointment store. Feeds are fetched with `If-None-Match` / `If-Modified-Since` every 15 minutes, at once on resume and when connectivity hints say the internet is back, parsed off the hub thread by its own RFC 5545 reader (`ics/`: VTIMEZONE, RRULE in the event's wall time, exceptions; zones without a VTIMEZONE from Windows' ICU), and expanded for yesterday to the day after tomorrow. The module then sleeps until the next countdown, start, lapse, end or midnight; the island runs the ring. Links are DPAPI-encrypted in `%APPDATA%\ReUI\calendar.json` (`sources[].url` is `dpapi:` + hex; a link typed in by hand is sealed on first read) and the last good copy of each feed in `%LOCALAPPDATA%\ReUI\calendar\<id>.cache`; `calendar\status.json` is each source's last refresh for Settings. Logs never name a link or an event. To try it without a real calendar, serve an `.ics` on `http://127.0.0.1` (plain http is accepted only for loopback) and add that link. `--no-calendar` turns it off. Spec and research: [docs/PRD-calendar.md](PRD-calendar.md).
 
 ## Adding a module
 
