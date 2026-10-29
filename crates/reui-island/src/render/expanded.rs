@@ -237,7 +237,7 @@ impl Renderer {
                             seek: seekable.then_some(*length_ms),
                         })
                     }
-                    Row::Buttons(_) | Row::Items(_) | Row::Search { .. } | Row::Tabs(_) | Row::Note(_) | Row::Slider { .. } | Row::Lyrics(_) | Row::Choices { .. } | Row::Block { .. } | Row::Gauges(_) | Row::Facts(_) | Row::Agenda(_) => None,
+                    Row::Buttons(_) | Row::Items(_) | Row::Search { .. } | Row::Tabs(_) | Row::Note(_) | Row::Slider { .. } | Row::Lyrics(_) | Row::Choices { .. } | Row::Block { .. } | Row::Gauges(_) | Row::Facts(_) | Row::Agenda(_) | Row::Mixer(_) => None,
                 };
                 let controls = match rows.get(i + 1) {
                     Some(Row::Buttons(b)) if b.iter().all(|b| matches!(b.content, ButtonContent::Glyph(_))) => Some(b),
@@ -308,6 +308,11 @@ impl Renderer {
                         }
                         Row::Block { text, kind } => {
                             let (h, max) = self.block(rt, text, *kind, y, with.block_scroll, accent, &mut hits)?;
+                            block_max = max;
+                            y += h;
+                        }
+                        Row::Mixer(channels) => {
+                            let (h, max) = self.mixer(rt, channels, y, with.block_scroll, with, accent, &mut hits)?;
                             block_max = max;
                             y += h;
                         }

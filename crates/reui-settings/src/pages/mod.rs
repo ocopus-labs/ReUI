@@ -367,7 +367,8 @@ pub mod tests {
         assert_eq!(Page::from_arg("about"), Some(Page::About));
         assert_eq!(Page::from_arg("zzz"), None);
         assert_eq!(Page::from_arg("what"), None, "welcome steps aren't Settings pages");
-        assert_eq!((Page::WelcomeShortcut.index(), Page::About.index()), (1, 12));
+        // About is always the last page, however many come before it.
+        assert_eq!((Page::WelcomeShortcut.index(), Page::About.index()), (1, Page::ALL.len() - 1));
         assert_eq!(Page::from_arg("calendar"), Some(Page::Calendar));
         assert_eq!(Page::from_arg("downloads"), Some(Page::Downloads));
         assert_eq!(Page::from_arg("appearance"), Some(Page::Appearance));

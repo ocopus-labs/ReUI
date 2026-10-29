@@ -16,7 +16,13 @@
 //! starts while it's up. ReUI's own programs never count (the island's visualizer
 //! captures loopback audio).
 //!
-//! Files: `view.rs`, `settings.rs` (`privacy.json`).
+//! Calls (docs/PRD-calls.md) live here rather than in a module of their own: a call is
+//! this module's own records read one way further (a call app holding the microphone,
+//! `calls.rs`), and the call card has to replace this module's indicator for that app.
+//! One module means one consent-store watcher and no hand-off between modules. Each call
+//! is `call:<app>` (Ongoing); the indicator leaves those apps out.
+//!
+//! Files: `view.rs`, `call_view.rs`, `settings.rs` (`privacy.json`).
 
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
@@ -28,6 +34,8 @@ use tokio::sync::mpsc;
 use tokio::time::{sleep_until, Instant};
 
 mod alive;
+mod call_view;
+mod calls;
 mod consent;
 mod settings;
 mod store;
@@ -35,6 +43,8 @@ mod tracker;
 mod view;
 
 use self::alive::Live;
+use self::call_view::CallItem;
+use self::calls::Calls;
 use self::consent::{App, Kind};
 use self::settings::Settings;
 use self::store::Watcher;
@@ -83,6 +93,9 @@ struct State {
     icons: HashMap<String, Option<ImageId>>,
     loading: HashSet<String>,
     brief_until: Option<Instant>,
+    calls: Calls,
+    /// The call activities published, so an ended call is retracted.
+    call_keys: HashSet<String>,
 }
 
 async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
@@ -101,6 +114,8 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
         icons: HashMap::new(),
         loading: HashSet::new(),
         brief_until: None,
+        calls: Calls::default(),
+        call_keys: HashSet::new(),
     };
     tokio::spawn(async move {
         let started = tokio::task::spawn_blocking(move || {
@@ -114,7 +129,7 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
     });
 
     loop {
-        let deadline = [p.tracker.next_deadline().map(Instant::from_std), p.brief_until].into_iter().flatten().min();
+        let deadline = [p.tracker.next_deadline().map(Instant::from_std), p.brief_until, p.calls.next_deadline().map(at_unix)].into_iter().flatten().min();
         tokio::select! {
             Some(live) = live_rx.recv() => {
                 p.live = live;
@@ -143,6 +158,11 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
     Ok(())
 }
 
+/// A Unix-ms deadline as an Instant (calls run on the store's clock).
+fn at_unix(ms: u64) -> Instant {
+    Instant::now() + Duration::from_millis(ms.saturating_sub(reui_protocol::unix_ms()))
+}
+
 fn app_name(app: &App) -> String {
     match app {
         App::Exe(path) => super::clipboard::app_name(path),
@@ -152,8 +172,10 @@ fn app_name(app: &App) -> String {
 
 impl State {
     fn on_live(&mut self, ctx: &ModuleContext) {
-        let reports: Vec<Report> =
-            self.live.iter().filter(|l| self.settings.shows(l.using.kind)).map(|l| Report { kind: l.using.kind, app: l.using.app.clone(), since: l.using.since, exe: l.exe.clone() }).collect();
+        let all: Vec<Report> = self.live.iter().map(|l| Report { kind: l.using.kind, app: l.using.app.clone(), since: l.using.since, exe: l.exe.clone() }).collect();
+        let settings = &self.settings;
+        self.calls.update(&all, |f| settings.calls_from(f), reui_protocol::unix_ms());
+        let reports: Vec<Report> = all.into_iter().filter(|r| self.settings.shows(r.kind)).collect();
         for exe in reports.iter().filter_map(|r| r.exe.clone()) {
             self.load_icon(exe);
         }
@@ -169,14 +191,17 @@ impl State {
             ctx.retract(STARTED);
         }
         let started = self.tracker.tick(now.into_std());
+        self.calls.tick(reui_protocol::unix_ms());
         self.refresh(ctx);
         self.brief(ctx, started);
     }
 
+    /// What the indicator shows: everything but the apps in a call, whose card says it.
     fn items(&self) -> Vec<Item> {
         self.tracker
             .shown()
             .into_iter()
+            .filter(|s| !self.calls.has_call(&s.app))
             .map(|s| Item {
                 kind: s.kind,
                 name: app_name(&s.app),
@@ -187,16 +212,32 @@ impl State {
             .collect()
     }
 
-    fn refresh(&self, ctx: &ModuleContext) {
+    fn refresh(&mut self, ctx: &ModuleContext) {
         match view::indicator(&self.items(), self.muted) {
             Some(v) => ctx.publish(INDICATOR, Priority::Ongoing, v),
             None => ctx.retract(INDICATOR),
         }
+        let mut keys = HashSet::new();
+        for call in self.calls.calls() {
+            let key = call_view::key(&call);
+            if let Some(exe) = call.exe.clone() {
+                self.load_icon(exe);
+            }
+            let icon = call.exe.as_ref().and_then(|exe| self.icons.get(exe).copied().flatten());
+            let item = CallItem { name: app_name(&call.app), icon, call };
+            ctx.publish(&key, Priority::Ongoing, call_view::call(&item, self.muted));
+            keys.insert(key);
+        }
+        for gone in self.call_keys.difference(&keys) {
+            ctx.retract(gone);
+        }
+        self.call_keys = keys;
     }
 
     /// The most important of what just started, for a moment.
     fn brief(&mut self, ctx: &ModuleContext, started: Vec<(Kind, App)>) {
         let Some((kind, app)) = started.into_iter().min_by_key(|(k, _)| *k) else { return };
+        // An app in a call says what it starts on its own card.
         let Some(item) = self.items().into_iter().find(|i| i.kind == kind && i.app == app) else { return };
         ctx.publish(STARTED, Priority::Brief, view::started(&item));
         self.brief_until = Some(Instant::now() + BRIEF_FOR);
@@ -269,6 +310,12 @@ impl State {
                 let kind = self.tracker.shown().first().map_or(Kind::Microphone, |s| s.kind);
                 tokio::task::spawn_blocking(move || open_privacy_settings(kind));
             }
+            call_view::ACTION_OPEN_APP => {
+                let Some(call) = self.calls.calls().into_iter().find(|c| call_view::key(c) == key) else { return };
+                let pids: Vec<u32> = self.live.iter().filter(|l| l.using.app == call.app).flat_map(|l| l.pids.clone()).collect();
+                let file = call.app.file_name().or_else(|| call.exe.as_deref().and_then(|e| App::Exe(e.into()).file_name()));
+                tokio::task::spawn_blocking(move || open_app(&pids, file.as_deref()));
+            }
             ACTION_OPEN if key == STARTED => {
                 self.brief_until = None;
                 ctx.retract(STARTED);
@@ -287,6 +334,20 @@ impl State {
             self.tracker.drop_kind(kind);
         }
         self.on_live(ctx);
+    }
+}
+
+/// Brings a call app's window forward: one of the processes holding the microphone, else
+/// any process of the same exe (Teams' window and its audio may be different processes).
+/// The island allowed the foreground with the click.
+fn open_app(pids: &[u32], file: Option<&str>) {
+    use super::media::player;
+    let windows = player::app_windows();
+    let by_pid = windows.iter().find(|(_, pid)| pids.contains(pid));
+    let by_exe = || windows.iter().find(|(_, pid)| file.is_some() && player::exe_name(*pid).as_deref() == file);
+    match by_pid.or_else(by_exe) {
+        Some(&(hwnd, _)) => player::focus(hwnd),
+        None => eprintln!("privacy: no window to open for {file:?}"),
     }
 }
 

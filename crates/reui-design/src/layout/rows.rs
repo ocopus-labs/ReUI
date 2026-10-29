@@ -254,3 +254,77 @@ pub fn note_height(searchable: bool) -> f32 {
         typography::NOTE.line_height
     }
 }
+
+/// One app's line in the mixer: its icon in a spot as big as the slider's buttons (so it
+/// sits under the volume's mute), then its name over its bar, as long as the volume's.
+/// Positions are from the card's left and the line's top.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MixerLine {
+    /// The icon's left and top, `icon` square.
+    pub icon: (f32, f32),
+    pub size: f32,
+    /// The bar's ends (the name starts at the left one) and tops.
+    pub bar: (f32, f32),
+    pub label_top: f32,
+    pub bar_top: f32,
+}
+
+pub fn mixer_line(look: &Look, width: f32) -> MixerLine {
+    let (h, spot, icon) = (component::mixer::HEIGHT, component::slider::HEIGHT, component::mixer::ICON);
+    let inset = look.inset();
+    let label = typography::CAPTION.line_height;
+    let bar = component::progress::HEIGHT;
+    // Name and bar centred in the line together.
+    let label_top = (h - (label + component::mixer::LABEL_GAP + bar)) / 2.0;
+    MixerLine {
+        icon: (inset + (spot - icon) / 2.0, (h - icon) / 2.0),
+        size: icon,
+        // Its ends are the volume bar's (beside the output menu), so the levels read as one column.
+        bar: (inset + spot + component::slider::GAP, width - inset - spot - component::slider::GAP),
+        label_top,
+        bar_top: label_top + label + component::mixer::LABEL_GAP,
+    }
+}
+
+/// A mixer of `count` apps: line `i`'s top in the list is `i * step`; how tall the list
+/// shows (at most `mixer.max-height`, grown with roomier padding) and how far it scrolls.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct MixerList {
+    pub step: f32,
+    pub shown: f32,
+    pub max_scroll: f32,
+}
+
+pub fn mixer_list(look: &Look, count: usize) -> MixerList {
+    let (h, gap) = (component::mixer::HEIGHT, component::mixer::GAP);
+    let content = if count == 0 { 0.0 } else { count as f32 * h + (count - 1) as f32 * gap };
+    let shown = content.min(look.max_height(component::mixer::MAX_HEIGHT));
+    MixerList { step: h + gap, shown, max_scroll: content - shown }
+}
+
+#[cfg(test)]
+mod mixer_tests {
+    use super::*;
+
+    #[test]
+    fn a_mixer_line_sits_under_the_volume_slider() {
+        let look = Look::default();
+        let (line, slider) = (mixer_line(&look, 420.0), slider(&look, 420.0, true));
+        // The icon is centred where the mute button is, the bar starts where its bar does.
+        assert!((line.icon.0 + line.size / 2.0 - (slider.button + slider.size / 2.0)).abs() < 0.01);
+        assert_eq!(line.bar, slider.bar);
+        assert!(line.bar_top + component::progress::HEIGHT <= component::mixer::HEIGHT);
+        assert!(line.label_top >= 0.0);
+    }
+
+    #[test]
+    fn a_long_mixer_scrolls_inside_the_card() {
+        let look = Look::default();
+        let three = mixer_list(&look, 3);
+        assert_eq!((three.shown, three.max_scroll), (3.0 * 32.0 + 2.0 * 8.0, 0.0));
+        let many = mixer_list(&look, 8);
+        assert_eq!(many.shown, component::mixer::MAX_HEIGHT);
+        assert_eq!(many.max_scroll, 8.0 * 32.0 + 7.0 * 8.0 - component::mixer::MAX_HEIGHT);
+        assert_eq!(mixer_list(&look, 0).shown, 0.0);
+    }
+}

@@ -92,6 +92,8 @@ Windows doesn't allow drag and drop between an app run as administrator and one 
 
 The volume and brightness keys show the level in the island. Hover or click it to drag the level, scroll to change it, click the icon to mute, or switch the output device from its menu. Caps Lock, Num Lock, battery saver and microphone mute can show too (Settings → Volume & brightness).
 
+**The mixer.** The button at the top right of the open volume card lists every app playing on the current output, each with its own level: drag or scroll a bar, click an app's icon to mute only that app. An app that pauses keeps its line while the card is open; more than three scroll inside the card (scrolling there moves the list). The card opens the way you left it; Settings → Volume & brightness → Apps in the volume pop-up does the same.
+
 **Replace Windows' pop-up** hides Windows' own volume and brightness pop-up while ReUI runs. It comes back when ReUI quits, and when you uninstall.
 
 ## Devices
@@ -119,6 +121,9 @@ Add a calendar in Settings → Calendar → Add a calendar: paste its secret add
 ## Mic & camera
 
 While an app uses your microphone or camera, or shares or records your screen, the island shows its icon and what it uses: orange for the microphone, green for the camera, purple for the screen (and blue for location, if you turn it on in Settings → Mic & camera). Click it to see every app using something and since when, mute the microphone, or open Windows' privacy settings for it. A screenshot doesn't count; a camera that turns on for a moment still shows for a few seconds.
+
+**Calls.** When Teams, Zoom, Discord, Slack, Webex, WhatsApp, Telegram or Signal has held the microphone for 5 seconds, the dot becomes the call: the app's icon and how long the call has run, counted from when the microphone went on. Open it to mute the microphone (the pill then shows a red microphone) or **Open** the app. "Video call" means the camera is on; a screen share shows in the card instead of as a second dot. The call ends 3 seconds after the app lets go of the microphone. The mute is the microphone's own, so the app may still show you unmuted while nothing reaches it. ReUI can't turn another app's camera off: Windows has no way to do that short of disabling the camera for everyone. Browsers (a Meet call) count only with Settings → Mic & camera → Calls → Browsers on, and then any browser using the microphone is a call.
+
 
 ## System stats
 

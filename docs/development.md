@@ -57,6 +57,8 @@ Setup options: `--no-autostart` (don't start with Windows), `--no-launch`, `--qu
 | `%APPDATA%\ReUI\calendar.json` | `lead_min`, `windows`, `sources` (`id`, `host`, `url` DPAPI-sealed, `on`) |
 | `%LOCALAPPDATA%\ReUI\calendar\` | Each calendar's last good copy (`<id>.cache`, DPAPI-encrypted) and `status.json` (each source's last refresh) |
 | `%APPDATA%\ReUI\downloads.json`, `screenshots.json` | Downloads: `enabled`, `folders` (watched besides Downloads); screenshots: `enabled` |
+| `%APPDATA%\ReUI\privacy.json` | The indicator's kinds (`microphone`, `camera`, `screen`, `location`), `calls` and each call app (`call_teams`, `call_zoom`, `call_discord`, `call_slack`, `call_webex`, `call_messengers`, `call_browsers`) |
+| `%APPDATA%\ReUI\osd.json` | The HUDs and states, `scroll_step`, and `mixer` (each app's level in the open volume card; its button there flips it) |
 | `%LOCALAPPDATA%\ReUI` | Caches and logs |
 | `%LOCALAPPDATA%\ReUI\update.json` | What the last update check found |
 | `%APPDATA%\ReUI\shelf.json` | File shelf: `keep` (`removed` \| `restart` \| `day` \| `week`), `saved_cap_mb` |
@@ -111,6 +113,11 @@ The hub's `clipboard` module keeps everything you copy (text with its formatting
 ## Privacy indicators internals
 
 The hub's `privacy` module shows which app is using the microphone, the camera or capturing the screen (location too, off by default), like iOS's orange and green dots: the app's icon and the kind's glyph in the pill, a dot in the bubble, and in the open card every app, since when, a mute for the microphone and **Privacy settings**. It reads Windows' own record of who uses what (the Capability Access Manager's consent store, watched for changes, no polling) and drops a use once no process from before it is running, so a crashed app never leaves a dot. ReUI's own programs never count. Settings: `%APPDATA%\ReUI\privacy.json` (Settings → Mic & camera); `--no-privacy` turns it off. Spec: [docs/PRD-privacy-indicators.md](docs/PRD-privacy-indicators.md).
+
+Calls are the same module (`calls.rs`, `call_view.rs`): a known call app's microphone use that lasts 5 s becomes `call:<exe>` (Ongoing, a `Clock` from the microphone's start), the indicator leaves that app out, and the call ends 3 s after the microphone is released. No call app's own API is used (Teams retired its local one in 2026). Spec: [docs/PRD-calls.md](docs/PRD-calls.md).
+
+The volume card's mixer (`osd/apps.rs`, `osd/mixer.rs`) runs `audio::watch_sessions` (`IAudioSessionNotification` + `IAudioSessionEvents` on the default output, its own thread) only while the card is open with the mixer on, so a closed card watches nothing. To try it without changing a real app's level, play silence from a script (a `System.Media.SoundPlayer` on a zeroed WAV); note that Windows remembers an app's level and mute per exe across runs.
+
 
 ## System stats internals
 

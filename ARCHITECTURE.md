@@ -41,7 +41,8 @@ bridge_sync.rs     keeps the installed reui-bridge (and an installed OpenCode pl
 paths.rs           %APPDATA% / %LOCALAPPDATA% / home, or REUI_CONFIG_DIR's sandbox (own pipe and lock)
 modules/
   mod.rs           Module trait, start, supervise (restart on error/panic)
-  audio/           shared Core Audio: devices, volume, outputs, per-app volume, change events
+  audio/           shared Core Audio: devices, volume, outputs, per-app volume, change events,
+                   sessions (every app's session on the default output, live, for the mixer)
   system_events/   shared hidden window: power settings, resume/unlock, volume and phone
                    arrivals, brightness keys (Raw Input), lock keys, Explorer restarts,
                    clock changes, module hotkeys
@@ -78,7 +79,9 @@ modules/
   media/           Now Playing: module loop, GSMTC sessions, card, controls, cover/artwork,
                    ranking, lyrics (LRCLIB), player activation, settings
   osd/             volume/brightness HUDs, brightness (WMI, DDC/CI), Windows flyout hiding,
-                   settings
+                   settings; the volume card's mixer: apps (the session watcher, only while
+                   the card is open with it on; levels and mutes), mixer (which apps, in what
+                   order; pure, tested)
   devices/         Bluetooth connects and batteries (watchers, containers, PnP battery and
                    Device ID reads, AirPods ads with colour and lid), anti-spam gate, low
                    battery, controllers, laptop power and time to full, drives and Eject,
@@ -94,7 +97,9 @@ modules/
                    live, pure; alive: which uses still have their process, pure; store: the
                    reui-privacy thread, RegNotifyChangeKeyValue + process waits), tracker (screen
                    settle, short uses linger, Briefs; fake-clock tests), views, mute via the
-                   shared audio module, settings (privacy.json)
+                   shared audio module, settings (privacy.json); calls (a call app holding the
+                   mic: settle, end grace, time; fake-clock tests) and call_view (the call
+                   card, which replaces the indicator for that app)
   shelf/           the file shelf (docs/PRD-file-shelf.md): what's dropped on the island,
                    held by reference (files) or saved in %LOCALAPPDATA%\ReUI\shelf (content with
                    no file, files from temporary folders): store (held.json, expiry, the cap
@@ -175,7 +180,7 @@ render/            drawing only (no behaviour state); where things go is reui_de
   rows/            timeline, controls, slider, lyrics, cards, search, tabs, note,
                    context (session strip), choices, block (scrolling text), gauges
                    (gauges with sparklines, facts: System stats), agenda (the calendar's
-                   rest of the day)
+                   rest of the day), mixer (each app's level, scrolling inside the card)
 features/          per-feature island logic
   clipboard.rs  clipboard_keys.rs   panel selection/scroll, keyboard hook
   keys.rs                           the key map of a card that has the keyboard
@@ -249,7 +254,7 @@ stats.rs           idle cost: CPU and private memory of ReUI's processes
 | `%APPDATA%\ReUI\settings.json` | island `visibility`, `show_on_desktop`, `hide_in_fullscreen`, `monitor`, `paused_until` while ReUI is paused, `hidden` while it's hidden with its shortcut (written by the island), `hide_shortcut` (read by the hub), `view_switcher`, `idle_clock`, and the look: `style` (island / notch), `theme` (auto / dark / light), `accent` (reui / windows), `roundness` (0..1), `top_gap` (0..24), `padding` (compact / regular / roomy), `scale` (0.9..1.25) |
 | `%APPDATA%\ReUI\onboarding.json` | first run done (`welcomed`), tips shown, offers answered |
 | `%APPDATA%\ReUI\clipboard.db`, `clipboard.json` | clipboard history and settings |
-| `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json`, `timers.json`, `privacy.json`, `stats.json`, `shelf.json`, `coding.json`, `downloads.json`, `screenshots.json` | music, OSD, Devices, Timers, privacy indicator, System stats, downloads, screenshots, file shelf and coding agent settings (`coding.json` is read by all three agent modules) |
+| `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json`, `timers.json`, `privacy.json`, `stats.json`, `shelf.json`, `coding.json`, `downloads.json`, `screenshots.json` | music, OSD (and the volume card's `mixer`), Devices, Timers, privacy indicator, System stats, downloads, screenshots, file shelf and coding agent settings (`coding.json` is read by all three agent modules) |
 | `%APPDATA%\ReUI\calendar.json` | Calendar: `lead_min`, `windows`, `sources` (each link DPAPI-sealed, shown by `host`) |
 | `%LOCALAPPDATA%\ReUI\calendar\` | each calendar's last good copy (`<id>.cache`, DPAPI-encrypted) and `status.json` (each source's last refresh, read by Settings) |
 | `%APPDATA%\ReUI\timer-state.json` | running and paused timers, a focus session, the stopwatch, and whether ReUI turned Do Not Disturb on |

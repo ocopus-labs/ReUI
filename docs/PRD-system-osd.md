@@ -163,6 +163,7 @@ Pressing the volume keys (or the brightness keys on a laptop) shows Windows' own
 | **M2: Brightness** (*built*) | Internal panel (power-setting event + WMI set), external DDC/CI (set only), per-monitor island, O-6–O-9 | S4, S10 |
 | **M3: Replace Windows flyout** (*built*) | Opt-in hide/restore, TaskbarCreated, crash restore, fallbacks | S9; flyout always back after quit or crash |
 | **M4: Optional states** (*built*) | Caps/Num Lock, battery saver, charging, mic mute (behind settings) | S7 |
+| **M5: Mixer** (*built*) | Each playing app's level under the volume slider (`Row::Mixer`, protocol 22): icon = the app's mute, name over its bar, scrolling past three; `IAudioSessionManager2` + `IAudioSessionNotification` + `IAudioSessionEvents` on the default output, watched only while the card is open with it on, no polling; the header's equalizer button and osd.json `mixer`. Evidence: ModernFlyouts #164 and #103, FluentFlyout #26, PILLAR ([research-features.md](research-features.md) #9) | Levels set from the card show in Windows' mixer and back; an app that pauses keeps its line |
 
 ## 12. Acceptance test plan
 

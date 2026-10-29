@@ -59,7 +59,7 @@ Drag files, an image, a link or some text to the top of the screen and the islan
 
 <img src="docs/images/volume.png" width="392" alt="The volume level in the island, at 56 %">
 
-The volume and brightness keys show their level in the island, and ReUI can replace Windows' own pop-up. Drag or scroll to change the level, click the icon to mute, switch the output device from its menu. Caps Lock, Num Lock, battery saver and microphone mute can show there too.
+The volume and brightness keys show their level in the island, and ReUI can replace Windows' own pop-up. Drag or scroll to change the level, click the icon to mute, switch the output device from its menu. The mixer button lists every app that's playing under it, each with its own level; click an app's icon to mute just that app. Caps Lock, Num Lock, battery saver and microphone mute can show there too.
 
 ### Devices
 
@@ -70,6 +70,11 @@ Bluetooth devices show their battery when they connect. Your PC and its devices 
 ### Mic, camera and screen
 
 The moment an app starts using your microphone or camera, or recording your screen, its icon and a coloured dot appear in the island: orange for the mic, green for the camera, purple for the screen. Open it to see every app and since when, and mute the microphone in one click. Settings → Mic & camera.
+
+### Calls
+
+A call in Teams, Zoom, Discord, Slack, Webex, WhatsApp, Telegram or Signal shows in the island with its running time. Open it to mute your microphone or bring the call's window back. ReUI sees the call because the app is holding your microphone, so it works in every app with no plug-in or sign-in. The mute is the microphone's own: nothing reaches the call, even if the app still shows you unmuted. Calls in a browser count if you turn that on.
+
 
 ### System stats
 

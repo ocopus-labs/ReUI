@@ -5,11 +5,13 @@
 //! settings).
 //!
 //! Files: `process.rs` (which process a player is), `apps.rs` (per-app volume),
-//! `events.rs` (change notifications); devices, system volume and outputs are here.
+//! `events.rs` (change notifications), `sessions.rs` (every app's session, live, for the
+//! mixer); devices, system volume and outputs are here.
 
 mod apps;
 mod events;
 mod process;
+mod sessions;
 
 use std::ffi::c_void;
 use std::sync::OnceLock;
@@ -26,6 +28,7 @@ use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoTaskMemFre
 pub use self::apps::{app_audio, set_app_muted, set_app_volume};
 pub use self::events::{capture_muted, default_output, set_capture_muted, watch, watch_events, AudioEvent, DefaultOutput, DeviceKind, Watch};
 pub use self::process::process_for;
+pub use self::sessions::{watch_sessions, AppSession, Sessions};
 
 /// A player's own audio session.
 #[derive(Debug, Clone, Copy, PartialEq)]

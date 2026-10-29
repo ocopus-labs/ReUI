@@ -14,7 +14,7 @@
 //! - [`header`]: the expanded header (columns, eyebrow → hero → detail, centring), the
 //!   session strip and the source switcher.
 //! - [`rows`]: the full-width rows (buttons, bars and their times, the slider, search,
-//!   tabs, choices, text blocks, lyrics).
+//!   tabs, choices, text blocks, lyrics, the mixer's lines and their scroll).
 //! - [`cards`]: the clipboard's scrolling row of cards and its tabs' scroll.
 //! - [`gauges`]: gauges side by side with their sparklines, and a line of facts (System
 //!   stats).

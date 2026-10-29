@@ -28,6 +28,7 @@ pub fn build(state: &State) -> Vec<Block> {
             flag(state, File::Osd, "brightness", "Brightness", "When the screen's brightness changes"),
             flag(state, File::Osd, "show_automatic_brightness", "Automatic brightness", "Also when Windows changes the brightness by itself"),
             flag(state, File::Osd, "show_percentage", "Show percentage", "The level as a number in the open pop-up"),
+            flag(state, File::Osd, "mixer", "Apps in the volume pop-up", "Each playing app's own level under the volume"),
             wheel,
         ],
     ));
