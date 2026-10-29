@@ -73,9 +73,17 @@ Type `focus` for a focus session (25 minutes of work, 5-minute breaks, a 15-minu
 
 ## Coding agents
 
-Claude Code, Codex and OpenCode show in the island only when they need you: a permission request you can answer with **Allow** / **Deny** (Claude Code also offers **Always**), a question, or a turn that failed. While they think and run tools, the island stays with your music and timers. Each card starts with a quiet line saying which session it is (the project, what you asked, how long it has been working); a long command or an edit's changed lines show underneath, and the mouse wheel scrolls them.
+Claude Code, Codex and OpenCode show in the island only when they need you: a permission request you can answer with **Allow** / **Deny** (Claude Code also offers **Always**), a question or a plan from Claude Code, or a turn that failed. While they think and run tools, the island stays with your music and timers. Each card starts with a quiet line saying which session it is (the project, what you asked, how long it has been working); a long command or an edit's changed lines show underneath, and the mouse wheel scrolls them. Anything that looks like a password or token shows as dots.
 
-A card that arrives by itself never takes your keyboard, so a stray Enter in your editor can't allow anything. Click the card to give it the keyboard: ↑ / ↓ move through choices, 1–9 pick one, Space ticks one, Enter answers, Esc gives the keyboard back.
+- **Deny and say why:** Alt+click **Deny** (or Shift+Enter once the card has the keyboard) opens a field, "Tell Claude what to do instead"; Enter sends it with the deny.
+- **Questions:** click an option to answer. With several to pick, tick them and press **Next** (the last step says **Send**); ‹ on the top line goes back with your answers kept. Type in "Type an answer" for something else. Nothing reaches Claude until the last step. A long list scrolls with the wheel.
+- **Plans:** **Approve**, or **Keep planning** to say what should change (Enter sends it to Claude as feedback).
+- **Answer in terminal** hands it back to Claude's own prompt at once.
+- **Several at once:** one card, oldest first; the pill shows how many, and ‹ › on the top line moves between them.
+
+A card that arrives by itself never takes your keyboard, so a stray Enter in your editor can't allow anything. Click the card to give it the keyboard: ↑ / ↓ move through choices, 1–9 pick one, Space ticks one, Enter answers (on a permission: the tinted button, Allow), Shift+Enter denies with a message, Esc gives the keyboard back. While the card has the keyboard, what you type goes to it, not to your editor.
+
+If Settings → Coding agents says Claude Code's questions need newer hooks, press **Update hooks**; until then they show with only **Answer in terminal**.
 
 Settings → Coding agents → **Show sessions** brings back what they're working on ("While working"), and **Finished turns** adds a short moment when a turn ends.
 

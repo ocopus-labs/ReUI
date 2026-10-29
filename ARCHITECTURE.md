@@ -50,8 +50,13 @@ modules/
                    (state + queue, views, system: fullscreen/pause, agent processes, Connect);
                    other modules report moments with `onboarding::note`
   agent/           Claude Code / Codex / OpenCode: sessions tracked, published only when
-                   they need you; view (what shows, the session strip, the permission
-                   card), describe (a tool request: hero, facts, body), settings
+                   they need you; events (a hook event into sessions and moments), queue
+                   (the moments in line, paged as one card; the async and blocking
+                   PreToolUse duplicates made one), moments (a permission, question or
+                   plan: steps, answers, the field), answer (the reply JSON in each
+                   agent's documented shape), card (a moment's card), plan (a plan's
+                   title, steps, prose), view (what shows, the session strip), describe
+                   (a tool request: hero, facts, body; secrets masked), settings
                    (coding.json), token usage, status (agents.json, the test event)
   clipboard/       history: module loop, notch panel, toast, paste stack, view model,
                    settings, secrets, link previews, paste-as transforms, OCR
@@ -91,6 +96,7 @@ drag_guard.rs      no hover intent while a drag from elsewhere passes over
 images.rs          encoded images from the hub
 pill/              the island's behaviour
   mod.rs           state machine, snapshot apply, render orchestration
+  link.rs          the hub link: snapshots, images and focus requests as they arrive
   setup.rs         builds the composition tree
   input.rs         clicks, wheel, drag, hover
   summon.rs        hotkey-summoned cards, keyboard capture, search
@@ -105,7 +111,9 @@ render/            drawing only (no behaviour state)
                    context (session strip), choices, block (scrolling text)
 features/          per-feature island logic
   clipboard.rs  clipboard_keys.rs   panel selection/scroll, keyboard hook
-  choices.rs                        keys in a card that asks something (once clicked)
+  keys.rs                           the key map of a card that has the keyboard
+  choices.rs                        keys in a card that asks something or a moment
+                                    (once clicked); the cursor scrolled into view
   music.rs                          scrub, slider, lyric and swipe maths
   visualizer.rs                     per-process audio loopback + FFT
   level.rs                          eased level values
