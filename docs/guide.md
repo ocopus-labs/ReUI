@@ -11,7 +11,7 @@ ReUI puts a dynamic island at the top of your screen: a small black pill that sh
 | Move the pointer away | The card folds back |
 | Scroll the wheel over the island | Steps through everything that's going on; over a row of cards it scrolls the row |
 | Click the small bubble beside the pill | Brings that activity into the pill |
-| Right-click the pill or the tray icon | Settings, Pause ReUI for 1 hour, Clipboard history, Devices, Quit |
+| Right-click the pill or the tray icon | Settings, Pause ReUI for 1 hour, Clipboard history, Devices, System stats, Quit |
 | Push the pointer against the top edge | Shows a hidden island (Settings → General → Show the island: When active / When needed) |
 
 The island hides while a game, video or presentation fills the screen (Settings → General → Hide in full screen), and can sit on your main display, the display the pointer is on, or one display you choose (Settings → General → Display). In "When active" and "When needed" it still shows in full whenever the desktop is in front (you clicked the wallpaper or pressed Win+D), and keeps out of the way inside apps (Settings → General → Always show on the desktop).
@@ -83,6 +83,10 @@ Type `focus` for a focus session (25 minutes of work, 5-minute breaks, a 15-minu
 ## Mic & camera
 
 While an app uses your microphone or camera, or shares or records your screen, the island shows its icon and what it uses: orange for the microphone, green for the camera, purple for the screen (and blue for location, if you turn it on in Settings → Mic & camera). Click it to see every app using something and since when, mute the microphone, or open Windows' privacy settings for it. A screenshot doesn't count; a camera that turns on for a moment still shows for a few seconds.
+
+## System stats
+
+Press **Win+Alt+S** (or Tray → System stats) to see how busy the PC is: CPU as the big number, then GPU, memory, disk and network as meters. On a laptop the line under CPU says what the battery gives or takes. Press the shortcut again, or click elsewhere, to close it. The numbers update once a second while the card is open and aren't read at all otherwise. Settings → System stats changes the shortcut and which rows show. `reui-bridge stats` opens it from a script.
 
 ## Coding agents
 

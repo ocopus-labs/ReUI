@@ -53,6 +53,8 @@ pub const PALETTE: char = '\u{E790}';
 pub const CAMERA: char = '\u{E722}';
 pub const SCREEN: char = MONITOR;
 pub const LOCATION: char = '\u{E81D}';
+/// A pulse line: the system stats.
+pub const DIAGNOSTIC: char = '\u{E9D9}';
 
 pub fn tile(glyph: char, color: reui_design::Color) -> Icon {
     Icon::Glyph(glyph, color)
@@ -81,6 +83,9 @@ pub fn timers() -> Icon {
 }
 pub fn indicators() -> Icon {
     tile(MIC, section::INDICATORS)
+}
+pub fn stats() -> Icon {
+    tile(DIAGNOSTIC, section::STATS)
 }
 pub fn agents() -> Icon {
     tile(CODE, section::AGENTS)

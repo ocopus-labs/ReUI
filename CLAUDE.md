@@ -17,7 +17,7 @@ pwsh scripts/package.ps1 -OutDir dist       # setup exe + zip, as .github/workfl
 
 - Windows only (MSVC toolchain). Debug builds of the hub keep a console for logs; release builds have none.
 - **Run test instances sandboxed:** `REUI_CONFIG_DIR=<dir>` gives the hub, island and Settings their own files, named pipe and single-instance lock, so they run beside the user's installed ReUI without touching its data.
-- Hub flags: `--demo`, `--no-island` (start `reui-island.exe` yourself, e.g. under a debugger), `--no-agents|--no-media|--no-clipboard|--no-osd|--no-devices|--no-timers|--no-privacy`, `--no-updates`, `--no-onboarding`, `--first-run`. Full list in the doc comment at the top of `crates/reui-hub/src/main.rs`.
+- Hub flags: `--demo`, `--no-island` (start `reui-island.exe` yourself, e.g. under a debugger), `--no-agents|--no-media|--no-clipboard|--no-osd|--no-devices|--no-timers|--no-privacy|--no-stats`, `--no-updates`, `--no-onboarding`, `--first-run`. Full list in the doc comment at the top of `crates/reui-hub/src/main.rs`.
 - Settings window: `reui-settings.exe --page <name>`, `--shots <dir>` (every page as PNG, no window; `--backdrop-color #RRGGBB` instead of the wallpaper, `--stages` only the island stages), `--perf`. `tools/readme-images.ps1` renders the README's pictures with them into `docs/images`. Perf harnesses: `crates/reui-settings/perf/harness.ps1`, `live.ps1`.
 - `tools/claude-states.ps1` drives a fake Claude Code session through every state via `reui-bridge` and captures the island into one review sheet (needs the hub running).
 - A tagged release needs a `## <version>` entry in `CHANGELOG.md` and the tag must match the `reui-hub` crate version.

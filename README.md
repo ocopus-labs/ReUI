@@ -67,6 +67,10 @@ Bluetooth devices show their battery when they connect. Your PC and its devices 
 
 The moment an app starts using your microphone or camera, or recording your screen, its icon and a coloured dot appear in the island: orange for the mic, green for the camera, purple for the screen. Open it to see every app and since when, and mute the microphone in one click. Settings → Mic & camera.
 
+### System stats
+
+Press **Win+Alt+S** to see how busy your PC is: CPU, GPU, memory, disk and network, live. It reads them only while the card is open, so it costs nothing the rest of the time.
+
 ### Timers and focus
 
 <img src="docs/images/timers.png" width="612" alt="A tea timer counting down, 3:42 left">

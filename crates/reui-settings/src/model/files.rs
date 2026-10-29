@@ -20,10 +20,11 @@ pub enum File {
     Privacy,
     /// `coding.json`, read by the three coding agent modules.
     Coding,
+    Stats,
 }
 
 impl File {
-    pub const ALL: [File; 8] = [File::Island, File::Media, File::Clipboard, File::Osd, File::Devices, File::Timers, File::Privacy, File::Coding];
+    pub const ALL: [File; 9] = [File::Island, File::Media, File::Clipboard, File::Osd, File::Devices, File::Timers, File::Privacy, File::Coding, File::Stats];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -35,6 +36,7 @@ impl File {
             File::Timers => "timers.json",
             File::Privacy => "privacy.json",
             File::Coding => "coding.json",
+            File::Stats => "stats.json",
         }
     }
 
@@ -50,6 +52,7 @@ impl File {
             File::Timers => &["timers"],
             File::Privacy => &["privacy"],
             File::Coding => &["claude", "codex", "opencode"],
+            File::Stats => &["stats"],
         }
     }
 
@@ -64,6 +67,7 @@ impl File {
             File::Timers => "timers",
             File::Privacy => "privacy",
             File::Coding => "coding",
+            File::Stats => "stats",
         }
     }
 
@@ -125,6 +129,7 @@ impl File {
             }),
             File::Privacy => json!({ "enabled": true, "microphone": true, "camera": true, "screen": true, "location": false }),
             File::Coding => json!({ "show_sessions": "needed", "show_finished": false }),
+            File::Stats => json!({ "enabled": true, "shortcut": "Win+Alt+S", "gpu": true, "disk": true, "network": true, "power": true }),
         }
     }
 
@@ -132,7 +137,7 @@ impl File {
     pub fn shortcut_key(self) -> Option<&'static str> {
         match self {
             File::Clipboard => Some("hotkey"),
-            File::Timers => Some("shortcut"),
+            File::Timers | File::Stats => Some("shortcut"),
             _ => None,
         }
     }

@@ -106,6 +106,10 @@ The hub's `clipboard` module keeps everything you copy (text with its formatting
 
 The hub's `privacy` module shows which app is using the microphone, the camera or capturing the screen (location too, off by default), like iOS's orange and green dots: the app's icon and the kind's glyph in the pill, a dot in the bubble, and in the open card every app, since when, a mute for the microphone and **Privacy settings**. It reads Windows' own record of who uses what (the Capability Access Manager's consent store, watched for changes, no polling) and drops a use once no process from before it is running, so a crashed app never leaves a dot. ReUI's own programs never count. Settings: `%APPDATA%\ReUI\privacy.json` (Settings → Mic & camera); `--no-privacy` turns it off. Spec: [docs/PRD-privacy-indicators.md](docs/PRD-privacy-indicators.md).
 
+## System stats internals
+
+The hub's `stats` module shows CPU, GPU, memory, disk and network in a card: **Win+Alt+S**, Tray → System stats, or `reui-bridge stats`. Stats have no OS events, so they're polled, but only while the card is open: opening it starts a sampler thread that reads once a second (like Task Manager), and the island's "collapsed" ends it. With the card closed the module costs nothing (measured). CPU matches Windows 11's Task Manager (`GetSystemTimes`, i.e. `% Processor Time`); GPU is the busiest engine with its processes summed, from PDH's English counter names. Settings: `%APPDATA%\ReUI\stats.json` (`shortcut`, `gpu`, `disk`, `network`, `power`). `--no-stats` turns it off. The full spec and the costs are in [docs/PRD-system-stats.md](docs/PRD-system-stats.md).
+
 ## Adding a module
 
 Implement `modules::Module` in `crates/reui-hub/src/modules/`. In `run`, publish activities with `ctx.publish(key, priority, View { accent, compact, minimal, expanded })`, retract them with `ctx.retract(key)`, and handle inputs (button presses, agent hook calls) from `ctx.next()`. Register it in `main.rs`. Modules stay event-driven (no polling where an event exists) and describe meaning only: never sizes, fonts or theme colours. New features get a PRD in `docs/` first.

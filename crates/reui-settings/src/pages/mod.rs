@@ -14,6 +14,7 @@ mod now_playing;
 mod osd;
 mod privacy;
 mod shortcut;
+mod stats;
 mod timers;
 mod welcome;
 
@@ -39,6 +40,7 @@ pub enum Page {
     Devices,
     Timers,
     Indicators,
+    Stats,
     Agents,
     Privacy,
     About,
@@ -50,7 +52,7 @@ pub enum Page {
 
 impl Page {
     /// The Settings window's pages, in the nav.
-    pub const ALL: [Page; 11] = [Page::General, Page::Appearance, Page::NowPlaying, Page::Clipboard, Page::Osd, Page::Devices, Page::Timers, Page::Indicators, Page::Agents, Page::Privacy, Page::About];
+    pub const ALL: [Page; 12] = [Page::General, Page::Appearance, Page::NowPlaying, Page::Clipboard, Page::Osd, Page::Devices, Page::Timers, Page::Indicators, Page::Stats, Page::Agents, Page::Privacy, Page::About];
     /// The welcome's steps, in its nav.
     pub const WELCOME: [Page; 3] = [Page::WelcomeFeatures, Page::WelcomeShortcut, Page::WelcomeStartup];
 
@@ -64,6 +66,7 @@ impl Page {
             Page::Devices => "Devices",
             Page::Timers => "Timers",
             Page::Indicators => "Mic & camera",
+            Page::Stats => "System stats",
             Page::Agents => "Coding agents",
             Page::Privacy => "Privacy & data",
             Page::About => "About",
@@ -94,7 +97,7 @@ impl Page {
     /// The sidebar's sections: General; the island's features; privacy and About.
     pub fn section(self) -> usize {
         match self {
-            Page::NowPlaying | Page::Clipboard | Page::Osd | Page::Devices | Page::Timers | Page::Indicators | Page::Agents => 1,
+            Page::NowPlaying | Page::Clipboard | Page::Osd | Page::Devices | Page::Timers | Page::Indicators | Page::Stats | Page::Agents => 1,
             Page::Privacy | Page::About => 2,
             _ => 0,
         }
@@ -111,6 +114,7 @@ impl Page {
             Page::Devices => icons::devices(),
             Page::Timers => icons::timers(),
             Page::Indicators => icons::indicators(),
+            Page::Stats => icons::stats(),
             Page::Agents => icons::agents(),
             Page::Privacy => icons::privacy(),
             Page::About => Icon::Mark,
@@ -172,6 +176,7 @@ pub fn build(page: Page, state: &State) -> Vec<Block> {
         Page::Devices => devices::build(state),
         Page::Timers => timers::build(state),
         Page::Indicators => indicators::build(state),
+        Page::Stats => stats::build(state),
         Page::Agents => agents::build(state),
         Page::Privacy => privacy::build(state),
         Page::About => about::build(state),
@@ -212,6 +217,7 @@ pub fn act(page: Page, state: &mut State, target: &Target, act: Act) -> Effect {
         Page::Devices => devices::act(state, target, act),
         Page::Timers => timers::act(state, target, act),
         Page::Indicators => Effect::None,
+        Page::Stats => stats::act(state, target, act),
         Page::Agents => agents::act(state, target, act),
         Page::Privacy => privacy::act(state, target, act),
         Page::About => about::act(state, target, act),
@@ -344,6 +350,7 @@ pub mod tests {
         assert_eq!(Page::from_arg("mic"), Some(Page::Indicators));
         assert_eq!(Page::from_arg("indicators"), Some(Page::Indicators));
         assert_eq!(Page::from_arg("privacy"), Some(Page::Privacy));
+        assert_eq!(Page::from_arg("stats"), Some(Page::Stats));
         assert!(Page::WelcomeStartup.is_welcome() && !Page::General.is_welcome());
     }
 }

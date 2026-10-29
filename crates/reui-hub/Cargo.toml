@@ -89,6 +89,11 @@ features = [
     # Timers: the finish sound's fallback beep, "Ends 3:42 PM" in the user's time format
     "Win32_System_Diagnostics_Debug",
     "Win32_Globalization",
+    # System stats: CPU and memory, interface counters, PDH (GPU, disk)
+    "Win32_System_SystemInformation",
+    "Win32_NetworkManagement_IpHelper",
+    "Win32_NetworkManagement_Ndis",
+    "Win32_System_Performance",
 ]
 
 [build-dependencies]

@@ -1,17 +1,17 @@
 //! ReUI hub: owns all module state, decides what's in front, and serves it to surfaces.
 //!
 //! Flags: `--demo` enables the demo module, `--no-agents` / `--no-media` / `--no-osd` /
-//! `--no-devices` / `--no-timers` / `--no-privacy` disable the coding agent (Claude Code,
-//! Codex, OpenCode) / Now Playing / system OSD / Devices / Timers / privacy indicator
-//! modules, `--no-link-previews` keeps clipboard links offline, `--no-island` doesn't
-//! launch the island (run `reui-island` yourself, e.g. under a debugger). `--no-updates`
-//! never looks for updates or mentions them. Clipboard, Now Playing, Devices, Timers and
-//! the privacy indicators also stay off when their file says `"enabled": false` (Settings,
-//! the welcome). `--no-onboarding` skips the first run and one-time tips; `--first-run`
-//! replays the demo and welcome. `--restore-flyout` only puts back Windows' volume flyout
-//! if a crashed run left it hidden, then exits (the uninstaller). `REUI_CONFIG_DIR=<dir>`
-//! keeps every file in that folder and runs beside the real ReUI (own pipe, own
-//! single-instance lock), for testing.
+//! `--no-devices` / `--no-timers` / `--no-privacy` / `--no-stats` disable the coding agent
+//! (Claude Code, Codex, OpenCode) / Now Playing / system OSD / Devices / Timers / privacy
+//! indicator / System stats modules, `--no-link-previews` keeps clipboard links offline,
+//! `--no-island` doesn't launch the island (run `reui-island` yourself, e.g. under a
+//! debugger). `--no-updates` never looks for updates or mentions them. Clipboard, Now
+//! Playing, Devices, Timers, the privacy indicators and System stats also stay off when their
+//! file says `"enabled": false` (Settings, the welcome). `--no-onboarding` skips the first
+//! run and one-time tips; `--first-run` replays the demo and welcome. `--restore-flyout` only
+//! puts back Windows' volume flyout if a crashed run left it hidden, then exits (the
+//! uninstaller). `REUI_CONFIG_DIR=<dir>` keeps every file in that folder and runs beside the
+//! real ReUI (own pipe, own single-instance lock), for testing.
 //!
 //! One hub per user: launching it again (the Start menu entry) opens Settings and exits.
 
@@ -85,6 +85,9 @@ async fn main() -> Result<()> {
     }
     if !has("--no-privacy") && feature_on("privacy.json") {
         enabled.push(Box::new(modules::privacy::Privacy));
+    }
+    if !has("--no-stats") && feature_on("stats.json") {
+        enabled.push(Box::new(modules::stats::SystemStats));
     }
     if !has("--no-updates") {
         enabled.push(Box::new(modules::updates::Updates));

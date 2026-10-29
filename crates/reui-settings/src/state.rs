@@ -57,7 +57,7 @@ impl State {
     pub fn new(paths: Paths) -> Self {
         let files = Files::open(&paths);
         let mut state = Self {
-            held_hotkeys: [File::Clipboard, File::Timers].map(|f| (f, files.shortcut(f))).to_vec(),
+            held_hotkeys: [File::Clipboard, File::Timers, File::Stats].map(|f| (f, files.shortcut(f))).to_vec(),
             files,
             startup: Startup::Off,
             agents: [Status::NotConnected; 3],

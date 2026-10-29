@@ -46,7 +46,8 @@ mod machine;
 mod moments;
 mod peripherals;
 mod pnp;
-mod power;
+/// Shared with the stats card, which reads the battery's charge rate.
+pub(crate) mod power;
 mod registry;
 mod settings;
 mod spam;
