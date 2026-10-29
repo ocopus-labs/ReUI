@@ -20,6 +20,8 @@ pub(super) struct Fonts {
     pub(super) headline: Font,
     pub(super) code: Font,
     pub(super) detail: Font,
+    /// The detail when it may take two lines (roomy cards).
+    pub(super) detail_wrap: Font,
     pub(super) compact: Font,
     pub(super) button: Font,
     pub(super) caption: Font,
@@ -43,6 +45,14 @@ pub(super) struct Fonts {
     /// Wrapping, for lyric lines too long for one line.
     pub(super) lyric_wrap: Font,
     pub(super) pager: Font,
+    /// The session strip above an agent moment's header.
+    pub(super) context: Font,
+    pub(super) choice: Font,
+    pub(super) choice_detail: Font,
+    pub(super) icon_check: Font,
+    /// Code and diff block lines (cut, not wrapped); prose blocks wrap.
+    pub(super) block_code: Font,
+    pub(super) block_prose: Font,
 }
 
 impl Renderer {

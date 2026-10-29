@@ -2,7 +2,7 @@
 //! timers (one activity, soonest in front, the rest a page away), the finish card, a focus
 //! session and its phase ends, and the stopwatch.
 
-use reui_protocol::{Button, ButtonContent, ButtonRole, Clock, CompactView, Element, ExpandedView, Headline, Pager, Rgb, Row, Tone};
+use reui_protocol::{Button, ButtonContent, ButtonRole, CardSize, Clock, CompactView, Element, ExpandedView, Headline, Pager, Rgb, Row, Tone};
 
 use super::focus::{Focus, Phase};
 use super::model::{Finished, Timer, Timers};
@@ -63,7 +63,7 @@ pub fn launcher(query: &str, parsed: &Parsed, placeholder: &str, presets: &[u32]
                 Row::Search { query: query.into(), buttons: vec![], placeholder: Some(placeholder.into()), glyph: Some(GLYPH_TIMER) },
                 Row::Buttons(presets.iter().map(|m| text(&format!("preset:{m}"), &format!("{m} min"), ButtonRole::Secondary)).collect()),
             ],
-            wide: false,
+            context: None, size: CardSize::Regular,
             tint: false,
             pager: None,
             open: None,
@@ -103,7 +103,7 @@ pub fn running(timers: &Timers, page: Option<u32>, now: u64, now_unix: u64) -> O
                 glyph(&format!("toggle:{}", shown.id), if shown.running() { GLYPH_PAUSE } else { GLYPH_PLAY }, ButtonRole::Accent),
                 glyph(&format!("cancel:{}", shown.id), GLYPH_CANCEL, ButtonRole::Secondary),
             ])],
-            wide: false,
+            context: None, size: CardSize::Regular,
             tint: false,
             pager,
             open: None,
@@ -139,7 +139,7 @@ pub fn finished(done: &[Finished], late_at: Option<u64>) -> View {
             detail: Some(detail),
             trailing: Element::Empty,
             rows: vec![Row::Buttons(vec![text(ACTION_MORE, "+1 min", ButtonRole::Secondary), text(ACTION_STOP, "Stop", ButtonRole::Primary)])],
-            wide: false,
+            context: None, size: CardSize::Regular,
             tint: false,
             pager: None,
             open: None,
@@ -175,7 +175,7 @@ pub fn focus(f: &Focus, now: u64, now_unix: u64, dnd: Option<&str>) -> View {
             detail: Some(detail),
             trailing: Element::Empty,
             rows: vec![Row::Buttons(buttons)],
-            wide: false,
+            context: None, size: CardSize::Regular,
             tint: false,
             pager: None,
             open: None,
@@ -216,7 +216,7 @@ pub fn phase_end(f: &Focus) -> View {
             detail: Some(detail),
             trailing: Element::Empty,
             rows: vec![Row::Buttons(buttons)],
-            wide: false,
+            context: None, size: CardSize::Regular,
             tint: false,
             pager: None,
             open: None,
@@ -248,7 +248,7 @@ pub fn stopwatch(s: &Stopwatch, now: u64, now_unix: u64) -> View {
                 glyph(ACTION_LAP, GLYPH_LAP, ButtonRole::Secondary),
                 glyph(ACTION_RESET, GLYPH_RESET, ButtonRole::Secondary),
             ])],
-            wide: false,
+            context: None, size: CardSize::Regular,
             tint: false,
             pager: None,
             open: None,

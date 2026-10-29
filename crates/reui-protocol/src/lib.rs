@@ -12,7 +12,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-pub const PROTOCOL_VERSION: u32 = 17;
+pub const PROTOCOL_VERSION: u32 = 18;
 const MAX_FRAME: usize = 16 * 1024 * 1024;
 
 /// Per-user pipe name; the hub also restricts the pipe's ACL to the current user. A test
@@ -295,6 +295,47 @@ pub enum Row {
     /// Synced lyrics, timed against the view's `Timeline`; the surface shows the current
     /// line and moves on by itself.
     Lyrics(Vec<LyricLine>),
+    /// A list to choose from (an agent's question). A click sends the choice's `action`;
+    /// with `multi` the module answers by publishing again with `selected` flipped, so the
+    /// surface never keeps a selection of its own. Keyboard (once the card has it): ↑/↓
+    /// move, 1–9 pick, Space picks the one under the cursor, Enter picks it (single) or
+    /// presses the primary button (multi).
+    Choices { options: Vec<Choice>, multi: bool },
+    /// A body of text under the header (a full command, an edit's changed lines, a plan)
+    /// that scrolls inside the card with the wheel instead of growing it.
+    Block { text: String, kind: BlockKind },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct Choice {
+    pub label: String,
+    /// A quieter line under the label (the option's description).
+    pub detail: Option<String>,
+    /// Checked, in a multi-select list.
+    pub selected: bool,
+    /// Sent back to the owning module when the choice is clicked or picked.
+    pub action: String,
+}
+
+/// How a [`Row::Block`] reads.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq)]
+pub enum BlockKind {
+    /// Wrapped text (a plan).
+    Prose,
+    /// Monospace lines, cut rather than wrapped (a script).
+    Code,
+    /// Monospace lines where `+` and `-` (or `−`) lines are additions and removals.
+    Diff,
+}
+
+/// Which line of a [`BlockKind::Diff`] is which: `Positive` for additions, `Negative` for
+/// removals, `Secondary` for the rest.
+pub fn diff_tone(line: &str) -> Tone {
+    match line.chars().next() {
+        Some('+') => Tone::Positive,
+        Some('-' | '\u{2212}') => Tone::Negative,
+        _ => Tone::Secondary,
+    }
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -356,20 +397,41 @@ impl Row {
     }
 }
 
+/// How wide an expanded card asks to be; the widths are the surface's.
+#[derive(Serialize, Deserialize, Debug, Clone, Copy, PartialEq, Eq, Default)]
+pub enum CardSize {
+    #[default]
+    Regular,
+    /// A little wider, for a moment with a session strip and a body (agent moments).
+    Roomy,
+    /// Rich content (a row of preview cards); a view of only rows has no header.
+    Wide,
+}
+
+/// One quiet line above the header saying whose card this is: a mark, a title and a few
+/// facts ("ReUI", ["fix the build", "4m"]), so two sessions of one agent never get confused.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct Context {
+    pub mark: Element,
+    pub title: String,
+    pub facts: Vec<String>,
+}
+
 /// Expanded presentation. Header: `leading` | eyebrow, headline, detail | `trailing`;
 /// then full-width rows. The text column always reads in three levels: a small accent
 /// eyebrow (source or category), the hero headline, and a quieter detail line.
 /// A single row of glyph-only buttons is shown inline beside the hero instead of as a row.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct ExpandedView {
+    /// Whose card this is, drawn above the header (the pager moves onto it).
+    pub context: Option<Context>,
     pub leading: Element,
     pub eyebrow: Option<String>,
     pub headline: Headline,
     pub detail: Option<String>,
     pub trailing: Element,
     pub rows: Vec<Row>,
-    /// Ask for the wide expanded island (rich content like preview cards).
-    pub wide: bool,
+    pub size: CardSize,
     /// Wash the card with the accent from the top-left (artwork colour), no blur.
     pub tint: bool,
     /// Switch between alternatives (players), shown at the top right.
@@ -451,7 +513,7 @@ impl Element {
 impl Activity {
     /// Every image this activity shows, in any presentation.
     pub fn images(&self) -> impl Iterator<Item = ImageId> + '_ {
-        let expanded = self.expanded.iter().flat_map(|e| [&e.leading, &e.trailing]);
+        let expanded = self.expanded.iter().flat_map(|e| [Some(&e.leading), Some(&e.trailing), e.context.as_ref().map(|c| &c.mark)].into_iter().flatten());
         let elements = [&self.compact.leading, &self.compact.trailing, &self.minimal].into_iter().chain(expanded).filter_map(Element::image);
         let cards = self.expanded.iter().flat_map(|e| &e.rows).flat_map(|row| match row {
             Row::Items(items) => items
@@ -544,7 +606,8 @@ mod tests {
                     headline: Headline::Value("01:45".into()),
                     detail: None,
                     trailing: Element::Glyph { glyph: '\u{E916}', tone: Tone::Accent },
-                    wide: false,
+                    context: Some(Context { mark: Element::Art(Art::Logo { image: ImageId(7), animated: false }), title: "ReUI".into(), facts: vec!["fix the build".into(), "4m".into()] }),
+                    size: CardSize::Roomy,
                     tint: false,
                     pager: None,
                     open: None,
@@ -552,10 +615,14 @@ mod tests {
                         Row::Progress { fraction: 0.4, leading: Some("1:24".into()), trailing: None },
                         Row::Timeline { position_ms: 1_000, length_ms: 60_000, playing: true, at_unix_ms: 5, seekable: true, rate: 1.0 },
                         Row::Buttons(vec![Button { action: "pause".into(), content: ButtonContent::Glyph('\u{E769}'), role: ButtonRole::Accent }]),
+                        Row::Choices { options: vec![Choice { label: "React".into(), detail: Some("A UI library".into()), selected: true, action: "pick:0".into() }], multi: true },
+                        Row::Block { text: "+ added\n- removed".into(), kind: BlockKind::Diff },
                     ],
                 }),
             }],
         });
+        let HubMsg::Snapshot(shown) = &snapshot else { unreachable!() };
+        assert_eq!(shown.activities[0].images().collect::<Vec<_>>(), vec![ImageId(7)], "the strip's mark is an image to send");
         write_frame(&mut a, &snapshot).await.unwrap();
         write_frame(&mut a, &HubMsg::Welcome { version: PROTOCOL_VERSION }).await.unwrap();
         assert_eq!(read_frame::<_, HubMsg>(&mut b).await.unwrap(), snapshot);
@@ -568,6 +635,15 @@ mod tests {
         assert_eq!(Row::timeline_position(10_000, 60_000, true, 1_000, 1.5, 3_000), 13_000);
         assert_eq!(Row::timeline_position(10_000, 60_000, false, 1_000, 1.0, 4_000), 10_000);
         assert_eq!(Row::timeline_position(59_000, 60_000, true, 1_000, 1.0, 9_000), 60_000);
+    }
+
+    #[test]
+    fn diff_lines_take_their_tones() {
+        assert_eq!(diff_tone("+ let x = 1;"), Tone::Positive);
+        assert_eq!(diff_tone("- let x = 0;"), Tone::Negative);
+        assert_eq!(diff_tone("\u{2212} gone"), Tone::Negative);
+        assert_eq!(diff_tone("  context"), Tone::Secondary);
+        assert_eq!(diff_tone(""), Tone::Secondary);
     }
 
     #[test]

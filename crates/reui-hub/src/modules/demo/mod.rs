@@ -1,32 +1,35 @@
 //! Rehearses the real flows end to end with fake data, covering the design system's
 //! building blocks: now-playing (art or a real image, bars, progress, transport), a
-//! countdown timer the island runs by itself (ring, hero numerals, inline controls, minimal bubble), and a recurring
-//! agent permission request that takes over the island and must be answered or times out
-//! and fails open, as the real bridge will.
+//! countdown timer the island runs by itself (ring, hero numerals, inline controls, minimal
+//! bubble), and recurring agent moments (`moments.rs`: a permission, a question, a plan)
+//! that take over the island and must be answered or time out and fail open, as the real
+//! bridge does.
 
 use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 
-use reui_protocol::{unix_ms, Art, Button, ButtonContent, ButtonRole, Clock, CompactView, Element, ExpandedView, Headline, ImageId, Priority, Rgb, Row, Tone};
+use reui_protocol::{unix_ms, ACTION_COLLAPSED, ACTION_EXPANDED, Art, Button, ButtonContent, ButtonRole, CardSize, Clock, CompactView, Element, ExpandedView, Headline, ImageId, Priority, Rgb, Row};
 use tokio::time::{sleep, sleep_until, Instant};
 
+use self::moments::Moments;
 use super::Module;
 use crate::hub::{ModuleContext, ModuleInput, View};
 
+mod moments;
+
 const FIRST_REQUEST: Duration = Duration::from_secs(6);
 const BETWEEN_REQUESTS: Duration = Duration::from_secs(25);
-const REQUEST_TIMEOUT: Duration = Duration::from_secs(20);
 const TIMER_LENGTH: u32 = 5 * 60;
 
 const GLYPH_PREV: char = '\u{E892}';
 const GLYPH_NEXT: char = '\u{E893}';
 const GLYPH_PLAY: char = '\u{E768}';
 const GLYPH_PAUSE: char = '\u{E769}';
-const GLYPH_TERMINAL: char = '\u{E756}';
+pub(super) const GLYPH_TERMINAL: char = '\u{E756}';
 const GLYPH_STOP: char = '\u{E711}';
 
-const AGENT_ACCENT: Rgb = Rgb(217, 119, 87);
+pub(super) const AGENT_ACCENT: Rgb = Rgb(217, 119, 87);
 const TIMER_ACCENT: Rgb = Rgb(255, 159, 10);
 
 /// Real artwork for the first track, to exercise image delivery; any JPEG or PNG works.
@@ -46,8 +49,6 @@ const TRACKS: [Track; 3] = [
     Track { title: "Nightcall", artist: "Kavinsky", from: Rgb(250, 158, 51), to: Rgb(217, 46, 77), length: 258 },
     Track { title: "Intro (a much longer title to test trimming)", artist: "The xx", from: Rgb(51, 191, 179), to: Rgb(38, 77, 204), length: 128 },
 ];
-
-const COMMANDS: [&str; 3] = ["cargo build --release", "git push origin main", "rm -rf target/"];
 
 pub struct Demo;
 
@@ -71,12 +72,11 @@ async fn run(mut ctx: ModuleContext) {
     let mut timer = Some(Clock { value_ms: u64::from(TIMER_LENGTH) * 1000, at_unix_ms: unix_ms(), running: true, down: true });
     publish_timer(&ctx, timer.unwrap());
 
-    let mut requests = 0usize;
-    let mut pending: Option<(String, Instant)> = None;
+    let mut moments = Moments::new();
     let mut next_request = Instant::now() + FIRST_REQUEST;
 
     loop {
-        let deadline = pending.as_ref().map(|(_, at)| *at).unwrap_or(next_request);
+        let deadline = moments.deadline().unwrap_or(next_request);
         let timer_left = timer.filter(|c| c.running).map(|c| Duration::from_millis(c.value_at(unix_ms())));
         tokio::select! {
             input = ctx.next() => {
@@ -99,11 +99,13 @@ async fn run(mut ctx: ModuleContext) {
                         timer = None;
                         ctx.retract("timer");
                     }
-                    (key, decision) if pending.as_ref().is_some_and(|(k, _)| k == key) => {
-                        println!("demo: {key} answered from the island: {decision}");
-                        ctx.retract(key);
-                        pending = None;
-                        next_request = Instant::now() + BETWEEN_REQUESTS;
+                    // The island saying the card opened or closed isn't an answer.
+                    (_, ACTION_EXPANDED | ACTION_COLLAPSED) => continue,
+                    (key, decision) if moments.owns(key) => {
+                        if moments.act(&ctx, decision) {
+                            next_request = Instant::now() + BETWEEN_REQUESTS;
+                        }
+                        continue;
                     }
                     (key, other) => println!("demo: ignoring {other} on {key}"),
                 }
@@ -117,17 +119,11 @@ async fn run(mut ctx: ModuleContext) {
                 ctx.retract("timer");
             }
             _ = sleep_until(deadline) => {
-                if let Some((key, _)) = pending.take() {
-                    println!("demo: {key} timed out; failing open to the agent's own prompt");
-                    ctx.retract(&key);
+                if moments.deadline().is_some() {
+                    moments.time_out(&ctx);
                     next_request = Instant::now() + BETWEEN_REQUESTS;
                 } else {
-                    let command = COMMANDS[requests % COMMANDS.len()];
-                    requests += 1;
-                    let key = format!("permission-{requests}");
-                    println!("demo: {key} asking to run `{command}`");
-                    publish_request(&ctx, &key, command);
-                    pending = Some((key, Instant::now() + REQUEST_TIMEOUT));
+                    moments.ask(&ctx);
                 }
             }
         }
@@ -140,10 +136,6 @@ fn clock(seconds: u32) -> String {
 
 fn glyph_button(action: &str, glyph: char, role: ButtonRole) -> Button {
     Button { action: action.into(), content: ButtonContent::Glyph(glyph), role }
-}
-
-fn text_button(action: &str, label: &str, role: ButtonRole) -> Button {
-    Button { action: action.into(), content: ButtonContent::Text(label.into()), role }
 }
 
 fn publish_music(ctx: &ModuleContext, track: usize, playing: bool, image: Option<ImageId>) {
@@ -167,7 +159,7 @@ fn publish_music(ctx: &ModuleContext, track: usize, playing: bool, image: Option
                 headline: Headline::Text(t.title.into()),
                 detail: Some(t.artist.into()),
                 trailing: Element::Bars { live: playing },
-                wide: false,
+                context: None, size: CardSize::Regular,
                 tint: false,
                 pager: None,
                 open: None,
@@ -206,42 +198,13 @@ fn publish_timer(ctx: &ModuleContext, clock: Clock) {
                 detail: (!running).then(|| "Paused".into()),
                 trailing: Element::Empty,
                 // A lone glyph row sits inline beside the value.
-                wide: false,
+                context: None, size: CardSize::Regular,
                 tint: false,
                 pager: None,
                 open: None,
                 rows: vec![Row::Buttons(vec![
                     glyph_button("pause", if running { GLYPH_PAUSE } else { GLYPH_PLAY }, ButtonRole::Accent),
                     glyph_button("stop", GLYPH_STOP, ButtonRole::Secondary),
-                ])],
-            }),
-        },
-    );
-}
-
-fn publish_request(ctx: &ModuleContext, key: &str, command: &str) {
-    let tile = Element::Art(Art::Glyph(GLYPH_TERMINAL));
-    ctx.publish(
-        key,
-        Priority::Decision,
-        View {
-            accent: Some(AGENT_ACCENT),
-            audio: None,
-            compact: CompactView { leading: tile.clone(), trailing: Element::Text { text: "Allow?".into(), tone: Tone::Accent } },
-            minimal: tile.clone(),
-            expanded: Some(ExpandedView {
-                leading: tile,
-                eyebrow: Some("Claude Code".into()),
-                headline: Headline::Code(command.into()),
-                detail: Some("wants to run this in ReUI".into()),
-                trailing: Element::Empty,
-                wide: false,
-                tint: false,
-                pager: None,
-                open: None,
-                rows: vec![Row::Buttons(vec![
-                    text_button("deny", "Deny", ButtonRole::Destructive),
-                    text_button("allow", "Allow once", ButtonRole::Primary),
                 ])],
             }),
         },

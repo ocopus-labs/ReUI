@@ -25,6 +25,7 @@ use windows::Win32::Graphics::Gdi::*;
 use windows::Win32::UI::Input::KeyboardAndMouse::ReleaseCapture;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
+use crate::features::choices;
 use crate::features::clipboard::{self, Key, Panel};
 use crate::features::clipboard_keys;
 use crate::features::level::Levels;
@@ -181,6 +182,14 @@ pub struct Pill {
     swipe: Swipe,
     /// Wheel travel over the source switcher, toward a whole notch.
     pager_travel: i32,
+    /// The open card was clicked, so it may have the keyboard (a card that asks something;
+    /// see `features::choices`). Never set by a card arriving on its own.
+    engaged: bool,
+    /// The choice under the keyboard cursor in the open card's list.
+    choice_cursor: Option<usize>,
+    /// How far the open card's text block is scrolled, and how far it can go.
+    block_scroll: f32,
+    block_max: f32,
     to_hub: UnboundedSender<ClientMsg>,
     events: Receiver<Event>,
 }
@@ -305,11 +314,22 @@ impl Pill {
 
     fn render(&mut self, snapshot: Snapshot) -> Result<()> {
         let previous = self.front().map(|a| (a.id.clone(), a.priority));
+        let previous_view = self.front_view().cloned();
         self.snapshot = snapshot;
         if self.front().map(|a| &a.id) != previous.as_ref().map(|(id, _)| id) {
             // Holds belong to the activity that was in front.
             self.seek_hold = None;
             self.slider_hold = None;
+            // So does the keyboard: another card never inherits it from a click on this one.
+            self.engaged = false;
+            self.block_scroll = 0.0;
+        }
+        if !choices::same_list(previous_view.as_ref(), self.front_view()) {
+            // The next step of a question starts at its first choice (shown only while the
+            // card has the keyboard).
+            let asks = self.front_view().is_some_and(|v| v.rows.iter().any(|r| matches!(r, Row::Choices { .. })));
+            self.choice_cursor = asks.then_some(0);
+            self.block_scroll = 0.0;
         }
         self.prune_hold();
         self.front_audio = self.front().and_then(|a| a.audio);
@@ -336,6 +356,7 @@ impl Pill {
         self.expanded_height = card.height;
         self.expanded_width = card.width;
         self.hits = card.hits;
+        self.block_max = card.block_max;
         self.props.InsertScalar(h!("eh"), card.height * self.scale)?;
         self.props.InsertScalar(h!("r"), card.radius * self.scale)?;
         self.set_minimal(has_second);
@@ -393,6 +414,8 @@ impl Pill {
             thumb,
             lyric: self.lyric_change.map(|(prev, at)| (prev, music::lyric_ease(at.elapsed().as_secs_f32() * 1000.0 / motion::lyrics::DURATION as f32))),
             level: self.front().and_then(|a| self.levels.value(&a.id, Instant::now())),
+            block_scroll: self.block_scroll.min(self.block_max),
+            choice: self.choice_cursor.filter(|_| clipboard_keys::captured()),
         }
     }
 
@@ -444,6 +467,9 @@ impl Pill {
         if closing {
             // A closed panel starts over next time; the closing frame isn't redrawn.
             self.panel.reset();
+            self.engaged = false;
+            self.choice_cursor = None;
+            self.block_scroll = 0.0;
             self.thumb = None;
             if self.drag.take().is_some() {
                 unsafe { _ = ReleaseCapture() };
@@ -468,7 +494,10 @@ impl Pill {
         let front = self.snapshot.activities.first();
         let accent = front.and_then(|a| a.accent).map(render::rgb).unwrap_or(color::accent::DEFAULT);
         match self.renderer.draw_expanded(&self.expanded_surface, front.and_then(|a| a.expanded.as_ref()), accent, &self.interaction()) {
-            Ok(card) => self.hits = card.hits,
+            Ok(card) => {
+                self.hits = card.hits;
+                self.block_max = card.block_max;
+            }
             Err(e) => eprintln!("island: redraw failed: {e}"),
         }
     }

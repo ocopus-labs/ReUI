@@ -220,6 +220,10 @@ impl Pill {
             thumb: None,
             swipe: Swipe::default(),
             pager_travel: 0,
+            engaged: false,
+            choice_cursor: None,
+            block_scroll: 0.0,
+            block_max: 0.0,
             to_hub,
             events,
         })

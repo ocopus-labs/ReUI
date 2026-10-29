@@ -73,7 +73,11 @@ Type `focus` for a focus session (25 minutes of work, 5-minute breaks, a 15-minu
 
 ## Coding agents
 
-Claude Code, Codex and OpenCode sessions show in the island: what they're doing, when they finish (with time and tokens), and permission requests you can answer with **Allow** / **Deny** (Claude Code also offers **Always**).
+Claude Code, Codex and OpenCode show in the island only when they need you: a permission request you can answer with **Allow** / **Deny** (Claude Code also offers **Always**), a question, or a turn that failed. While they think and run tools, the island stays with your music and timers. Each card starts with a quiet line saying which session it is (the project, what you asked, how long it has been working); a long command or an edit's changed lines show underneath, and the mouse wheel scrolls them.
+
+A card that arrives by itself never takes your keyboard, so a stray Enter in your editor can't allow anything. Click the card to give it the keyboard: ↑ / ↓ move through choices, 1–9 pick one, Space ticks one, Enter answers, Esc gives the keyboard back.
+
+Settings → Coding agents → **Show sessions** brings back what they're working on ("While working"), and **Finished turns** adds a short moment when a turn ends.
 
 Connect an agent in Settings → Coding agents (it shows the file that changes; Disconnect removes exactly what was added). Each agent's row says whether it's connected and when ReUI last heard from it; **Send test** makes the island confirm the connection. Codex asks you to trust new hooks once: run `/hooks` in Codex. OpenCode picks the plugin up on its next start.
 

@@ -5,7 +5,7 @@
 use std::collections::HashSet;
 
 use reui_design::tokens::{component, island, motion};
-use reui_protocol::{ActivityId, ExpandedView, ImageId, ItemKey, Row, Snapshot};
+use reui_protocol::{ActivityId, CardSize, ExpandedView, ImageId, ItemKey, Row, Snapshot};
 
 /// Layout of a row of `count` cards in a view `width` wide. Card `i`'s left edge is
 /// `inset + i * step - scroll`; the row runs to the panel's right edge and is clipped there.
@@ -232,11 +232,12 @@ fn content(view: Option<&ExpandedView>) -> Content {
     c
 }
 
+/// The width a view asks for (its `size`), in DIPs.
 pub fn view_width(view: &ExpandedView) -> f32 {
-    if view.wide {
-        island::expanded::WIDE_WIDTH
-    } else {
-        island::expanded::WIDTH
+    match view.size {
+        CardSize::Regular => island::expanded::WIDTH,
+        CardSize::Roomy => island::expanded::ROOMY_WIDTH,
+        CardSize::Wide => island::expanded::WIDE_WIDTH,
     }
 }
 
@@ -454,7 +455,7 @@ mod tests {
                 Row::Tabs(vec![Tab { label: tab.into(), count: 1, selected: true, action: tab.into() }]),
                 Row::Items(actions.iter().map(|a| item(a)).collect()),
             ],
-            wide: true,
+            context: None, size: CardSize::Wide,
             tint: false,
             pager: None,
             open: None,

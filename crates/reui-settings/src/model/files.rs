@@ -16,10 +16,12 @@ pub enum File {
     Osd,
     Devices,
     Timers,
+    /// `coding.json`, read by the three coding agent modules.
+    Coding,
 }
 
 impl File {
-    pub const ALL: [File; 6] = [File::Island, File::Media, File::Clipboard, File::Osd, File::Devices, File::Timers];
+    pub const ALL: [File; 7] = [File::Island, File::Media, File::Clipboard, File::Osd, File::Devices, File::Timers, File::Coding];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -29,18 +31,20 @@ impl File {
             File::Osd => "osd.json",
             File::Devices => "devices.json",
             File::Timers => "timers.json",
+            File::Coding => "coding.json",
         }
     }
 
-    /// The hub module told to `reload` after a write; the island notices on its own.
-    pub fn module(self) -> Option<&'static str> {
+    /// The hub modules told to `reload` after a write; the island notices on its own.
+    pub fn modules(self) -> &'static [&'static str] {
         match self {
-            File::Island => None,
-            File::Media => Some("media"),
-            File::Clipboard => Some("clipboard"),
-            File::Osd => Some("osd"),
-            File::Devices => Some("devices"),
-            File::Timers => Some("timers"),
+            File::Island => &[],
+            File::Media => &["media"],
+            File::Clipboard => &["clipboard"],
+            File::Osd => &["osd"],
+            File::Devices => &["devices"],
+            File::Timers => &["timers"],
+            File::Coding => &["claude", "codex", "opencode"],
         }
     }
 
@@ -53,6 +57,7 @@ impl File {
             File::Osd => "osd",
             File::Devices => "devices",
             File::Timers => "timers",
+            File::Coding => "coding",
         }
     }
 
@@ -97,6 +102,7 @@ impl File {
                 "focus_auto_start": false,
                 "focus_dnd": false,
             }),
+            File::Coding => json!({ "show_sessions": "needed", "show_finished": false }),
         }
     }
 
@@ -112,6 +118,8 @@ impl File {
 
 pub const VISIBILITY: [&str; 3] = ["always", "when-active", "when-needed"];
 pub const VISUALIZER: [&str; 3] = ["real", "simple", "off"];
+/// `show_sessions` in `coding.json`.
+pub const SHOW_SESSIONS: [&str; 2] = ["needed", "working"];
 /// `monitor` values besides a display's device name (`\\.\DISPLAY2`).
 pub const MONITOR_PRIMARY: &str = "primary";
 pub const MONITOR_CURSOR: &str = "cursor";
@@ -151,6 +159,12 @@ impl Files {
 
     pub fn paused_until(&self) -> Option<u64> {
         self.doc(File::Island).get("paused_until").and_then(Value::as_u64)
+    }
+
+    /// Index into [`SHOW_SESSIONS`]; the modules are lenient about case and spaces.
+    pub fn show_sessions(&self) -> usize {
+        let v = self.doc(File::Coding).str("show_sessions").map(|s| s.trim().to_ascii_lowercase());
+        v.and_then(|v| SHOW_SESSIONS.iter().position(|x| *x == v)).unwrap_or(0)
     }
 
     /// Index into [`VISUALIZER`]; the module is lenient about case and spaces.

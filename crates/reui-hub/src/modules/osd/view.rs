@@ -12,7 +12,7 @@
 
 use std::time::Duration;
 
-use reui_protocol::{Art, Button, ButtonContent, ButtonRole, CompactView, Element, ExpandedView, Headline, Menu, MenuOption, Row, Tone};
+use reui_protocol::{Art, Button, ButtonContent, ButtonRole, CardSize, CompactView, Element, ExpandedView, Headline, Menu, MenuOption, Row, Tone};
 use tokio::time::Instant;
 
 use crate::modules::audio::{DeviceKind, Output};
@@ -144,7 +144,7 @@ pub fn volume_view(v: &VolumeHud) -> View {
             detail,
             trailing: Element::Empty,
             rows: vec![slider],
-            wide: false,
+            context: None, size: CardSize::Regular,
             tint: false,
             pager: None,
             open: None,
@@ -209,7 +209,7 @@ pub fn brightness_view(displays: &[DisplayLevel], front: usize, show_percentage:
             detail,
             trailing: Element::Empty,
             rows,
-            wide: false,
+            context: None, size: CardSize::Regular,
             tint: false,
             pager: None,
             open: None,

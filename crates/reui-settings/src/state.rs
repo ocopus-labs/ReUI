@@ -103,7 +103,7 @@ impl State {
         match self.files.doc_mut(file).set(key, value) {
             Ok(()) => {
                 self.write_error = None;
-                if let Some(module) = file.module() {
+                for module in file.modules() {
                     self.tell_hub(module, "reload");
                 }
             }
