@@ -2,11 +2,18 @@
 //! file, the host), a detail of facts, and a body for what the hero cuts off (the whole
 //! command, an edit's changed lines). Knows Claude Code's, Codex's and OpenCode's tool
 //! names (OpenCode's are lowercase and use `filePath`; Codex passes argv arrays). Pure.
+//!
+//! The hero never repeats the body: a command shown whole in the body is introduced by
+//! what it's for (the agent's description) or its shell, and a patch's body leaves out the
+//! file header the hero already names. Secrets in any of it are masked with the
+//! clipboard's rules (PRD agent moments §5.9).
 
 use std::path::Path;
 
 use reui_protocol::{BlockKind, Headline};
 use serde_json::Value;
+
+use crate::modules::clipboard::secrets;
 
 pub(super) const GLYPH_TERMINAL: char = '\u{E756}';
 const GLYPH_EDIT: char = '\u{E70F}';
@@ -29,6 +36,16 @@ pub(super) struct Described {
 }
 
 pub(super) fn describe_tool(tool: &str, input: &Value) -> Described {
+    let d = describe(tool, input);
+    let headline = match d.headline {
+        Headline::Code(s) => Headline::Code(secrets::mask(&s)),
+        Headline::Text(s) => Headline::Text(secrets::mask(&s)),
+        other => other,
+    };
+    Described { headline, detail: d.detail.map(|s| secrets::mask(&s)), body: d.body.map(|(s, k)| (secrets::mask(&s), k)), ..d }
+}
+
+fn describe(tool: &str, input: &Value) -> Described {
     let text = |k: &str| match input.get(k) {
         Some(Value::String(s)) => s.clone(),
         // Codex passes some commands as an argv array.
@@ -44,10 +61,26 @@ pub(super) fn describe_tool(tool: &str, input: &Value) -> Described {
     match tool.to_ascii_lowercase().as_str() {
         "bash" | "powershell" | "shell" | "local_shell" | "exec_command" => {
             let command = text("command");
+            let command = command.trim();
             let first = command.lines().map(str::trim_end).find(|l| !l.trim().is_empty()).unwrap_or_default().to_string();
-            let cut = command.trim().lines().count() > 1 || first.chars().count() > LONG_COMMAND;
-            let body = cut.then(|| (first_lines(command.trim(), BODY_LINES), BlockKind::Code));
-            Described { body, ..d(GLYPH_TERMINAL, Headline::Code(first), description()) }
+            let lines = command.lines().count();
+            if lines <= 1 && first.chars().count() <= LONG_COMMAND {
+                return d(GLYPH_TERMINAL, Headline::Code(first), description());
+            }
+            // The whole command is in the body, so the hero says what it's for (the
+            // agent's own description) or, without one, what runs it; never its first line.
+            let shell = match tool.to_ascii_lowercase().as_str() {
+                "bash" => "Bash",
+                "powershell" => "PowerShell",
+                _ => "Shell",
+            };
+            let count = if lines > 1 { format!("{lines} lines") } else { String::new() };
+            let (headline, detail) = match description() {
+                Some(what) => (what, facts(&[shell, &count])),
+                None => (shell.to_string(), facts(&[&count])),
+            };
+            let body = Some((first_lines(command, BODY_LINES), BlockKind::Code));
+            Described { body, ..d(GLYPH_TERMINAL, Headline::Text(headline), detail) }
         }
         "edit" | "multiedit" => {
             let p = path();
@@ -65,16 +98,17 @@ pub(super) fn describe_tool(tool: &str, input: &Value) -> Described {
             d(GLYPH_EDIT, Headline::Text(file(&p)), facts(&["Edit", &folder(&p)]))
         }
         "apply_patch" => {
-            // The patch names its files: "*** Update File: path".
             let patch = text("input") + &text("patch") + &text("command");
-            let files: Vec<String> = patch.lines().filter_map(|l| l.split_once(" File: ").map(|(_, p)| file(p.trim()))).collect();
-            let headline = Headline::Text(files.first().cloned().unwrap_or_else(|| "Patch".into()));
-            let more = match files.len() {
-                0 | 1 => String::new(),
+            let (files, body, added, removed) = patch_body(&patch);
+            let headline = Headline::Text(files.first().map(|p| file(p)).unwrap_or_else(|| "Patch".into()));
+            let place = match files.len() {
+                0 => String::new(),
+                1 => folder(&files[0]),
                 n => format!("{n} files"),
             };
-            let body = (!patch.trim().is_empty()).then(|| (first_lines(patch.trim(), BODY_LINES), BlockKind::Diff));
-            Described { body, ..d(GLYPH_EDIT, headline, facts(&["Patch", &more])) }
+            let counts = if added + removed > 0 { format!("+{added} \u{2212}{removed}") } else { String::new() };
+            let body = (!body.is_empty()).then(|| (first_lines(&body, BODY_LINES), BlockKind::Diff));
+            Described { body, ..d(GLYPH_EDIT, headline, facts(&["Patch", &place, &counts])) }
         }
         "write" => {
             let p = path();
@@ -130,6 +164,35 @@ fn changed_lines(edits: &[(String, String)]) -> (String, usize, usize) {
     (out.join("\n"), added, removed)
 }
 
+/// A Codex `apply_patch` read for a body: the files it names ("*** Update File: path"),
+/// its lines without the Begin / End markers (a file's header kept as its bare path only
+/// when there are several, since the hero names a lone one), and how many lines it adds
+/// and removes.
+fn patch_body(patch: &str) -> (Vec<String>, String, usize, usize) {
+    let header = |l: &str| l.strip_prefix("*** ").and_then(|r| r.split_once(" File: ")).map(|(_, p)| p.trim().to_string());
+    let files: Vec<String> = patch.lines().filter_map(header).collect();
+    let (mut added, mut removed) = (0, 0);
+    let mut out = Vec::new();
+    for line in patch.lines() {
+        if let Some(path) = header(line) {
+            if files.len() > 1 {
+                out.push(path);
+            }
+            continue;
+        }
+        if line.starts_with("*** ") || line.trim().is_empty() && out.is_empty() {
+            continue;
+        }
+        match line.chars().next() {
+            Some('+') => added += 1,
+            Some('-') => removed += 1,
+            _ => {}
+        }
+        out.push(line.to_string());
+    }
+    (files, out.join("\n").trim_end().to_string(), added, removed)
+}
+
 fn first_lines(text: &str, n: usize) -> String {
     text.lines().take(n).collect::<Vec<_>>().join("\n")
 }
@@ -165,10 +228,52 @@ mod tests {
     #[test]
     fn long_and_multi_line_commands_get_the_whole_command_as_a_body() {
         let script = describe_tool("Bash", &json!({ "command": "set -e\ncargo test\ncargo build --release" }));
-        assert_eq!(script.headline, Headline::Code("set -e".into()));
         assert_eq!(script.body, Some(("set -e\ncargo test\ncargo build --release".into(), BlockKind::Code)));
-        let long = describe_tool("Bash", &json!({ "command": "git log --oneline --decorate --graph --all -- crates/reui-hub" }));
+        // The body has the command: the hero says what runs it, never its first line again.
+        assert_eq!((script.headline, script.detail.as_deref()), (Headline::Text("Bash".into()), Some("3 lines")));
+        let described = describe_tool("PowerShell", &json!({ "command": "cargo fmt --check\ncargo test", "description": "Check and test" }));
+        assert_eq!((described.headline, described.detail.as_deref()), (Headline::Text("Check and test".into()), Some("PowerShell · 2 lines")));
+        let long = describe_tool("Bash", &json!({ "command": "git log --oneline --decorate --graph --all -- crates/reui-hub", "description": "Show the history" }));
+        assert_eq!((long.headline, long.detail.as_deref()), (Headline::Text("Show the history".into()), Some("Bash")));
         assert!(long.body.is_some());
+    }
+
+    #[test]
+    fn no_hero_or_detail_repeats_the_body() {
+        let cases = [
+            describe_tool("Bash", &json!({ "command": "set -e\ncargo test", "description": "Run the tests" })),
+            describe_tool("Edit", &json!({ "file_path": "src/main.rs", "old_string": "a", "new_string": "b" })),
+            describe_tool("apply_patch", &json!({ "input": "*** Begin Patch\n*** Update File: src/pill.rs\n@@\n-old\n+new\n*** End Patch" })),
+        ];
+        for d in cases {
+            let (body, _) = d.body.clone().unwrap();
+            let hero = match &d.headline {
+                Headline::Text(s) | Headline::Code(s) => s.clone(),
+                _ => unreachable!(),
+            };
+            let first = body.lines().next().unwrap();
+            assert!(!first.contains(&hero) && !d.detail.as_deref().unwrap_or_default().contains(first), "{hero:?} / {:?} repeats {first:?}", d.detail);
+        }
+    }
+
+    #[test]
+    fn secrets_are_masked_everywhere_they_show() {
+        let short = describe_tool("Bash", &json!({ "command": "gh auth login --with-token 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" }));
+        let long = describe_tool("Bash", &json!({ "command": "export GITHUB_TOKEN=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\ngh release list" }));
+        for d in [short, long] {
+            let all = format!("{:?} {:?} {:?}", d.headline, d.detail, d.body);
+            assert!(!all.contains("ghp_") && all.contains(secrets::MASK), "{all}");
+        }
+    }
+
+    #[test]
+    fn patches_show_their_lines_without_markers() {
+        let one = describe_tool("apply_patch", &json!({ "input": "*** Begin Patch\n*** Update File: src/pill.rs\n@@ fn a\n-old\n+new\n+more\n*** End Patch" }));
+        assert_eq!((one.headline, one.detail.as_deref()), (Headline::Text("pill.rs".into()), Some("Patch · src · +2 \u{2212}1")));
+        assert_eq!(one.body.unwrap().0, "@@ fn a\n-old\n+new\n+more");
+        let two = describe_tool("apply_patch", &json!({ "input": "*** Begin Patch\n*** Update File: a/x.rs\n-x\n*** Add File: b/y.rs\n+y\n*** End Patch" }));
+        assert_eq!(two.detail.as_deref(), Some("Patch · 2 files · +1 \u{2212}1"));
+        assert_eq!(two.body.unwrap().0, "a/x.rs\n-x\nb/y.rs\n+y");
     }
 
     #[test]

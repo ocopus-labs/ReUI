@@ -39,7 +39,8 @@ mod ocr;
 mod os;
 mod panel;
 mod preview;
-mod secrets;
+/// Also masks secrets in agent moments (`agent::describe`).
+pub(crate) mod secrets;
 mod settings;
 mod stack;
 mod store;

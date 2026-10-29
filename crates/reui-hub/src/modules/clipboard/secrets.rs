@@ -5,11 +5,85 @@
 //! is one long random-looking token. The second is where false positives live, so it
 //! stays narrow: URLs, paths, emails, hex (commit hashes, digests), UUIDs and anything
 //! made of words are never "random".
+//!
+//! The same rules mask secrets in text shown elsewhere ([`mask`]): an agent's command or
+//! input in the island (agent moments PRD §5.9).
 
 /// True when `text` contains a credential, or is one.
 pub fn looks_secret(text: &str) -> bool {
     let text = text.trim();
     private_key(text) || tokens(text).any(known_token) || random_token(text)
+}
+
+/// What a masked secret reads as.
+pub const MASK: &str = "\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}\u{2022}";
+
+/// `text` with what [`looks_secret`] would find replaced by [`MASK`], the rest as it was:
+/// a private key's body (the lines between its BEGIN and END markers), a word that is one
+/// random-looking token (base64 with `+` and `/`), and known credential shapes inside a
+/// word (`--token=ghp_…`).
+pub fn mask(text: &str) -> String {
+    let mut lines = Vec::new();
+    let mut in_key = false;
+    for line in text.split('\n') {
+        let marker = line.trim().trim_matches(['\'', '"']);
+        if in_key {
+            if marker.starts_with("-----END ") {
+                in_key = false;
+                lines.push(line.to_string());
+            } else {
+                lines.push(if marker.is_empty() { line.to_string() } else { MASK.to_string() });
+            }
+        } else if marker.starts_with("-----BEGIN ") && (marker.ends_with("PRIVATE KEY-----") || marker.ends_with("PRIVATE KEY BLOCK-----")) {
+            in_key = true;
+            lines.push(line.to_string());
+        } else {
+            lines.push(mask_words(line));
+        }
+    }
+    lines.join("\n")
+}
+
+/// One line with its secret words and tokens masked; spacing kept.
+fn mask_words(line: &str) -> String {
+    let mut out = String::with_capacity(line.len());
+    for (i, word) in line.split(' ').enumerate() {
+        if i > 0 {
+            out.push(' ');
+        }
+        let core = word.trim_matches(['\'', '"', ',', ';', ')', '(']);
+        // `KEY=value`: the value is what may be secret.
+        let value = core.split_once('=').map_or(core, |(_, v)| v.trim_matches(['\'', '"']));
+        if random_token(value) {
+            out.push_str(&word.replacen(value, MASK, 1));
+        } else {
+            out.push_str(&mask_tokens(word));
+        }
+    }
+    out
+}
+
+/// Known credentials and random tokens among a word's `[A-Za-z0-9_.-]` runs (as [`tokens`]
+/// finds them).
+fn mask_tokens(word: &str) -> String {
+    let is_token = |c: char| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.');
+    let mut out = String::with_capacity(word.len());
+    let mut rest = word;
+    while let Some(start) = rest.find(is_token) {
+        out.push_str(&rest[..start]);
+        let run = &rest[start..];
+        let end = run.find(|c: char| !is_token(c)).unwrap_or(run.len());
+        let token = &run[..end];
+        let core = token.trim_matches(['.', '-']);
+        if core.len() >= 20 && (known_token(core) || random_token(core)) {
+            out.push_str(&token.replacen(core, MASK, 1));
+        } else {
+            out.push_str(token);
+        }
+        rest = &run[end..];
+    }
+    out.push_str(rest);
+    out
 }
 
 /// A PEM / OpenSSH / PGP private key header followed by key material.
@@ -216,6 +290,22 @@ mod tests {
         for s in ordinary {
             assert!(!looks_secret(s), "false positive: {s}");
         }
+    }
+
+    #[test]
+    fn masking_keeps_the_text_and_hides_the_secret() {
+        assert_eq!(mask("cargo test --workspace"), "cargo test --workspace");
+        assert_eq!(
+            mask("curl -H \"Authorization: token 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\" https://api.github.com"),
+            format!("curl -H \"Authorization: token {MASK}\" https://api.github.com")
+        );
+        assert_eq!(mask("export AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\nset KEY=q7Hc9Kd2Lp/Xw4Rt+Vb8Nm3Js6Fg1Za0"), format!("export AWS_ACCESS_KEY_ID={MASK}\nset KEY={MASK}"));
+        assert_eq!(mask("deploy --key q7Hc9Kd2Lp/Xw4Rt+Vb8Nm3Js6Fg1Za0"), format!("deploy --key {MASK}"));
+        let pem = "echo '-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA3Tz2mr7SZiAMfQyuvBjM9Oi7m2uR6vOFcVQhXZ1bXtq8+K4l\n-----END RSA PRIVATE KEY-----' > key.pem";
+        assert_eq!(mask(pem), format!("echo '-----BEGIN RSA PRIVATE KEY-----\n{MASK}\n-----END RSA PRIVATE KEY-----' > key.pem"));
+        // What isn't a secret on its own stays readable.
+        let ordinary = "git commit -m \"fix the build\" && git push origin 3f786850e387550fdab836ed7e6dc881de23001b";
+        assert_eq!(mask(ordinary), ordinary);
     }
 
     #[test]
