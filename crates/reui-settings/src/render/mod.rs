@@ -46,6 +46,10 @@ pub struct Renderer {
     dpi: f32,
 }
 
+/// An SVG document's cache key: its markup (by address: the marks are `'static`), its
+/// size's bits and its ink (none: its own colours).
+type SvgKey = (usize, u32, Option<[u8; 4]>);
+
 /// Resources tied to the GPU device: made again when it's lost.
 #[derive(Default)]
 struct Device {
@@ -55,7 +59,7 @@ struct Device {
     shapes: RefCell<HashMap<[u32; 3], ID2D1PathGeometry>>,
     /// The page and the sidebar as last drawn ([`Slot`]), and their sizes in pixels.
     cache: RefCell<[Option<(ID2D1Bitmap1, u32, u32)>; 2]>,
-    svgs: RefCell<HashMap<u32, ID2D1SvgDocument>>,
+    svgs: RefCell<HashMap<SvgKey, ID2D1SvgDocument>>,
     /// The wallpaper strip ([`crate::wallpaper`]) as uploaded, and which read it is.
     wallpaper: RefCell<Option<(u64, ID2D1BitmapBrush1)>>,
 }

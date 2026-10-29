@@ -19,7 +19,7 @@ One drawing per **kind** of device, not per brand or model: it says what the dev
 | `phone` | A phone |
 | `bluetooth` | The fallback for a device of unknown kind |
 
-`crates/reui-hub/src/modules/devices/art.rs` looks them up (`art::svg(id, small)`). It also accepts the model-family ids the device catalog uses (`airpods`, `airpods-pro`, `airpods-max`, `beats-earbuds`, `beats-headphones`, `galaxy-buds`, `headset`, `xbox-controller`, `dualsense`, `dualshock`, `switch-pro`) and gives each its kind's drawing. Brand silhouettes aren't drawn: at 24 DIP they'd blur into each other, and the kind is what the moment needs.
+`crates/reui-design/src/devices.rs` embeds them, once for the hub and Settings (whose Devices preview draws the earbuds as the island does), and `crates/reui-hub/src/modules/devices/art.rs` looks them up (`art::svg(id, small)`). It also accepts the model-family ids the device catalog uses (`airpods`, `airpods-pro`, `airpods-max`, `beats-earbuds`, `beats-headphones`, `galaxy-buds`, `headset`, `xbox-controller`, `dualsense`, `dualshock`, `switch-pro`) and gives each its kind's drawing. Brand silhouettes aren't drawn: at 24 DIP they'd blur into each other, and the kind is what the moment needs.
 
 ## Two detail levels
 
@@ -42,7 +42,7 @@ Rules, so the set reads as one family with the Segoe Fluent glyphs the island us
 ## Adding a kind
 
 1. Draw `<id>.svg` on the 48 grid and `<id>-small.svg` on the 21 grid by the rules above, in the same markup as the others (one `<g>` with the stroke attributes, then plain shapes).
-2. Add it to `KINDS` in `art.rs` (and any family ids to `FAMILIES`); its tests check every file is present, on its grid, single-colour and small.
+2. Add it to `DRAWINGS` in `crates/reui-design/src/devices.rs` (and any family ids to `FAMILIES` in `art.rs`); `art.rs`'s tests check every file is present, on its grid, single-colour and small.
 3. Add it to the contact sheet (`KINDS` in `crates/reui-island/src/render/sheet.rs`) and look at it beside the others: `cargo test -p reui-island device_art_sheet -- --ignored` writes `target/devices-art/`: each kind in a compact pill and an open card, dark and light, at 100 % and 200 %, and a magnified sheet of every drawing at its exact pixel size beside the Fluent glyph at the same size.
 
 ## Device colour
