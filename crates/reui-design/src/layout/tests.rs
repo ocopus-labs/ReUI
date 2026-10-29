@@ -78,6 +78,12 @@ fn the_compact_pill_balances_its_sides() {
     let long = compact::joined(art, island::compact::SIDE_MARGIN, 1000.0);
     assert_eq!(long.text_w, island::compact::JOINED_TEXT);
     assert_eq!(long.width, long.text_x + long.text_w + island::compact::TEXT_MARGIN);
+    // A glyph beside its mark: the pill is only the two, narrower than at the far ends.
+    let glyph = icon::COMPACT;
+    let b = compact::beside(art, compact::margin(true), glyph);
+    assert_eq!(b.text_x, j.text_x);
+    assert_eq!(b.width, b.text_x + glyph + island::compact::TEXT_MARGIN);
+    assert!(b.width < compact::sides(art, compact::margin(true), glyph, compact::margin(false)).width);
 }
 
 #[test]

@@ -17,7 +17,7 @@ use crate::render::elements::shown_level;
 impl Renderer {
     /// Draws the compact presentation centred in its surface. Both sides get the same
     /// width (the wider one's, margins included), as in Apple's compact layout, except a
-    /// text label, which sits beside its mark.
+    /// text label or a bare glyph, which sits beside its mark.
     /// `level` is the activity's level as shown right now (eased), over the view's own.
     pub fn draw_compact(&self, surface: &CompositionDrawingSurface, view: Option<&CompactView>, accent: Color, level: Option<f32>) -> Result<CompactLayout> {
         let mut layout = CompactLayout { width: island::idle::WIDTH, bars: None, logo: None };
@@ -29,17 +29,31 @@ impl Renderer {
                 layout.width = island::compact::METER_WIDTH;
                 return Ok(());
             }
-            // Windows has no camera cutout to keep clear: a label reads with its mark, side
-            // by side, and the pill is only as wide as the two.
-            if let (Element::Text { text, tone }, false) = (trailing.as_ref(), matches!(*leading, Element::Empty)) {
+            // Windows has no camera cutout to keep clear: a label or a bare glyph reads with
+            // its mark, side by side, and the pill is only as wide as the two. Rings, clocks,
+            // bars and art keep the far end, where they read as the activity's state.
+            let joined = !matches!(*leading, Element::Empty) && matches!(trailing.as_ref(), Element::Text { .. } | Element::Glyph { .. });
+            if joined {
                 let (lw, _) = self.measure(&leading, Slot::Compact)?;
                 let lm = compact_margin(&view.leading);
-                let font = self.text_font(Slot::Compact);
-                let j = compact::joined(lw, lm, self.text_width(text, font)?);
-                let left = compact::left(j.width);
                 let mid = COMPACT_SURFACE.1 / 2.0;
+                let j = match trailing.as_ref() {
+                    Element::Text { text, tone } => {
+                        let font = self.text_font(Slot::Compact);
+                        let j = compact::joined(lw, lm, self.text_width(text, font)?);
+                        let left = compact::left(j.width);
+                        self.text(rt, text, font, left + j.text_x, mid - font.style.line_height / 2.0, j.text_w, Align::Start, self.tone_color(*tone, accent))?;
+                        j
+                    }
+                    glyph => {
+                        let (gw, _) = self.measure(glyph, Slot::Compact)?;
+                        let j = compact::beside(lw, lm, gw);
+                        self.element(rt, glyph, Slot::Compact, compact::left(j.width) + j.text_x, mid, Align::Start, accent)?;
+                        j
+                    }
+                };
+                let left = compact::left(j.width);
                 self.element(rt, &leading, Slot::Compact, left + lm, mid, Align::Start, accent)?;
-                self.text(rt, text, font, left + j.text_x, mid - font.style.line_height / 2.0, j.text_w, Align::Start, self.tone_color(*tone, accent))?;
                 layout.width = j.width;
                 let tile = component::art::COMPACT;
                 layout.logo = match &view.leading {

@@ -55,11 +55,11 @@ pub fn sides(leading: f32, leading_margin: f32, trailing: f32, trailing_margin: 
     Sides { width, leading: leading_margin, trailing: width - trailing_margin }
 }
 
-/// A text label beside its mark.
+/// A text label (or a glyph) beside its mark.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Joined {
     pub width: f32,
-    /// The text's left edge and the width it's drawn in.
+    /// The text's (or glyph's) left edge and the width it's drawn in.
     pub text_x: f32,
     pub text_w: f32,
 }
@@ -72,6 +72,16 @@ pub fn joined(mark: f32, margin: f32, text: f32) -> Joined {
     let gap = island::compact::JOINED_GAP;
     let width = (margin + mark + gap + text_w + island::compact::TEXT_MARGIN).max(island::idle::WIDTH);
     Joined { width, text_x: margin + mark + gap, text_w }
+}
+
+/// A bare glyph beside its mark (the privacy indicator's app and microphone, an agent's
+/// mark and its check), by the same rule as a label: at the pill's far ends the two read
+/// as unrelated things with a hole between them. Unlike a label it has no length to fill
+/// the resting width with, so the pill is only as wide as the two; floored at the resting
+/// width it would just move the hole to the end. `glyph`: the glyph's width.
+pub fn beside(mark: f32, margin: f32, glyph: f32) -> Joined {
+    let x = margin + mark + island::compact::JOINED_GAP;
+    Joined { width: x + glyph + island::compact::TEXT_MARGIN, text_x: x, text_w: glyph }
 }
 
 /// A level (volume, brightness) as the whole pill: the pill is the track, an accent fill
