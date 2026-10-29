@@ -219,6 +219,32 @@ pub fn lyrics_height() -> f32 {
     typography::LYRIC.line_height * rows as f32
 }
 
+/// An agenda of `n` lines (a calendar's rest of the day), each one line of `fact` type.
+pub fn agenda_height(n: usize) -> f32 {
+    let n = n as f32;
+    if n == 0.0 {
+        return 0.0;
+    }
+    n * typography::FACT.line_height + (n - 1.0) * component::agenda::LINE_GAP
+}
+
+/// One agenda line's columns across a card `width` wide: the time column `time_w` wide
+/// (the widest time, so titles line up), then the title, and the where at the right end,
+/// `detail_w` wide but never more than its share of the line. Returns (title left, title
+/// width, detail left, detail width); no detail, or no room for one, gives it 0.
+pub fn agenda_line(look: &Look, width: f32, time_w: f32, detail_w: f32) -> (f32, f32, f32, f32) {
+    let inset = look.inset();
+    let title_left = inset + time_w + component::agenda::TIME_GAP;
+    let right = width - inset;
+    let free = (right - title_left).max(0.0);
+    let detail_w = detail_w.min(free * component::agenda::DETAIL_SHARE);
+    if detail_w <= 0.0 {
+        return (title_left, free, right, 0.0);
+    }
+    let detail_left = right - detail_w;
+    (title_left, (detail_left - space::MD - title_left).max(0.0), detail_left, detail_w)
+}
+
 /// A note standing in for empty content. Under a search field it keeps the cards' height,
 /// so the panel doesn't jump while typing.
 pub fn note_height(searchable: bool) -> f32 {

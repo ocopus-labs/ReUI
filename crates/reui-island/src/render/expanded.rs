@@ -237,7 +237,7 @@ impl Renderer {
                             seek: seekable.then_some(*length_ms),
                         })
                     }
-                    Row::Buttons(_) | Row::Items(_) | Row::Search { .. } | Row::Tabs(_) | Row::Note(_) | Row::Slider { .. } | Row::Lyrics(_) | Row::Choices { .. } | Row::Block { .. } | Row::Gauges(_) | Row::Facts(_) => None,
+                    Row::Buttons(_) | Row::Items(_) | Row::Search { .. } | Row::Tabs(_) | Row::Note(_) | Row::Slider { .. } | Row::Lyrics(_) | Row::Choices { .. } | Row::Block { .. } | Row::Gauges(_) | Row::Facts(_) | Row::Agenda(_) => None,
                 };
                 let controls = match rows.get(i + 1) {
                     Some(Row::Buttons(b)) if b.iter().all(|b| matches!(b.content, ButtonContent::Glyph(_))) => Some(b),
@@ -299,6 +299,7 @@ impl Renderer {
                         Row::Lyrics(lines) => y += self.lyrics(rt, lines, track_at, y, with.lyric)?,
                         Row::Gauges(list) => y += self.gauges(rt, list, y, accent)?,
                         Row::Facts(facts) => y += self.facts(rt, facts, y, accent)?,
+                        Row::Agenda(entries) => y += self.agenda(rt, entries, y)?,
                         Row::Choices { options, multi } => {
                             let list = self.choices(rt, options, *multi, with.choice, y, with.block_scroll, accent, &mut hits)?;
                             block_max = list.max_scroll;
