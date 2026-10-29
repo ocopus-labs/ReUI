@@ -18,6 +18,8 @@ pub(super) struct Fonts {
     pub(super) eyebrow: Font,
     pub(super) value: Font,
     pub(super) headline: Font,
+    /// The hero when it may wrap (a roomy card's question or title).
+    pub(super) headline_wrap: Font,
     pub(super) code: Font,
     pub(super) detail: Font,
     /// The detail when it may take two lines (roomy cards).

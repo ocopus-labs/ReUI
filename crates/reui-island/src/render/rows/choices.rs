@@ -49,7 +49,7 @@ impl Renderer {
             sized.push(self.choice_height(choice, text_w)?);
         }
         let heights: Vec<f32> = sized.iter().map(|&(h, _)| h).collect();
-        let list = rows::choice_list(&heights);
+        let list = rows::choice_list(&heights, self.taken.get());
         let rows: Vec<(f32, f32, bool)> = list.tops.iter().zip(&sized).map(|(&top, &(h, wraps))| (top, h, wraps)).collect();
         let (shown, max_scroll) = (list.shown, list.max_scroll);
         let scroll = scroll.clamp(0.0, max_scroll);

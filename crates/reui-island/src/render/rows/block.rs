@@ -31,7 +31,7 @@ impl Renderer {
             let layout = unsafe { self.dwrite.CreateTextLayout(&wide, &font.format, (r - l) * s, 100_000.0)? };
             let mut metrics = DWRITE_TEXT_METRICS::default();
             unsafe { layout.GetMetrics(&mut metrics)? };
-            let (shown, max) = rows::prose_block((metrics.height / s).ceil());
+            let (shown, max) = rows::prose_block((metrics.height / s).ceil(), self.taken.get());
             let scroll = scroll.clamp(0.0, max);
             unsafe {
                 rt.PushAxisAlignedClip(&self.rect(l, y, r, y + shown), D2D1_ANTIALIAS_MODE_ALIASED);
@@ -46,7 +46,7 @@ impl Renderer {
         let line = font.style.line_height;
         let pad = component::block::PADDING;
         let lines: Vec<&str> = text.lines().take(MAX_LINES).collect();
-        let (shown, h, max) = rows::code_block(lines.len());
+        let (shown, h, max) = rows::code_block(lines.len(), self.taken.get());
         let scroll = scroll.clamp(0.0, max);
         unsafe { self.round_rect(rt, l, y, r, y + h, self.concentric().min(h / 2.0), self.pal().fill_quaternary)? };
         let (top, bottom) = (y + pad, y + pad + shown);

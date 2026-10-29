@@ -53,6 +53,14 @@ impl Text {
         }
     }
 
+    /// A text hero that wraps to `lines` lines ([`hero_lines`]).
+    pub fn with_hero_lines(mut self, lines: f32) -> Self {
+        if lines > 1.0 {
+            self.hero = lines * typography::HEADLINE.line_height;
+        }
+        self
+    }
+
     pub fn height(&self) -> f32 {
         self.eyebrow + self.hero + self.detail
     }
@@ -75,6 +83,20 @@ pub fn detail_lines(measured: Option<f32>, roomy: bool, text_w: f32) -> f32 {
         Some(w) if roomy && w > text_w => 2.0,
         Some(_) => 1.0,
         None => 0.0,
+    }
+}
+
+/// A roomy card's text hero (an agent's question, a plan's title) is said in full: it wraps
+/// to at most this many lines rather than being cut after one.
+pub const HERO_MAX_LINES: u32 = 3;
+
+/// How many lines a text hero takes, given how many it wraps to in its column: one outside
+/// roomy cards (a song title, a device name: cut with an ellipsis as before).
+pub fn hero_lines(wrapped: u32, roomy: bool) -> f32 {
+    if roomy {
+        wrapped.clamp(1, HERO_MAX_LINES) as f32
+    } else {
+        1.0
     }
 }
 

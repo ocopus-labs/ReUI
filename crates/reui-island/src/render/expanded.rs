@@ -107,7 +107,13 @@ impl Renderer {
                 None => None,
             };
             let detail_lines = header::detail_lines(measured, roomy, text_w);
-            let text = header::Text::new(view.eyebrow.is_some(), hero, detail_lines);
+            // An agent's question is the one thing to read on its card: said in full.
+            let hero_lines = match &view.headline {
+                Headline::Text(t) if roomy && !t.is_empty() => header::hero_lines(self.wrapped_lines(t, &self.fonts.headline_wrap, text_w)?, roomy),
+                _ => 1.0,
+            };
+            let text = header::Text::new(view.eyebrow.is_some(), hero, detail_lines).with_hero_lines(hero_lines);
+            self.taken.set((hero_lines - 1.0) * reui_design::tokens::typography::HEADLINE.line_height);
             let (eyebrow_h, hero_h, detail_h) = (text.eyebrow, text.hero, text.detail);
             // A view of only rows (e.g. clipboard cards) has no header at all.
             let headless = view.context.is_none()
@@ -181,6 +187,7 @@ impl Renderer {
                     let tone = if c.running { self.pal().label_primary } else { self.pal().label_secondary };
                     self.text(rt, &clock::text(c, reui_protocol::unix_ms(), *tenths), &self.fonts.value, text_left, y, line_w, Align::Start, tone)?
                 }
+                Headline::Text(s) if hero_lines > 1.0 => self.text_block(rt, s, &self.fonts.headline_wrap, text_left, y, text_w, hero_h, self.pal().label_primary)?,
                 Headline::Text(s) => self.text(rt, s, &self.fonts.headline, text_left, y, line_w, Align::Start, self.pal().label_primary)?,
                 Headline::Code(s) => {
                     let (px, py) = (component::chip::PADDING_X, component::chip::PADDING_Y);

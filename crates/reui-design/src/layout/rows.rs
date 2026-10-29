@@ -167,8 +167,10 @@ pub fn choice_height(detail_lines: f32) -> f32 {
 }
 
 /// A list of choices `heights` tall: each one's top in the list, how tall the list shows
-/// (at most `choice.max-height`; a longer one scrolls inside the card) and how far it
-/// can scroll.
+/// (at most `choice.max-height`, less `taken`; a longer one scrolls inside the card) and
+/// how far it can scroll. `taken`: what the header grew by (a question said over several
+/// lines), so the card keeps its height and nothing under the list is pushed out of it;
+/// the first choice always shows.
 #[derive(Clone, Debug, PartialEq)]
 pub struct ChoiceList {
     pub tops: Vec<f32>,
@@ -176,7 +178,7 @@ pub struct ChoiceList {
     pub max_scroll: f32,
 }
 
-pub fn choice_list(heights: &[f32]) -> ChoiceList {
+pub fn choice_list(heights: &[f32], taken: f32) -> ChoiceList {
     let mut tops = Vec::with_capacity(heights.len());
     let mut top = 0.0;
     for (i, h) in heights.iter().enumerate() {
@@ -186,24 +188,28 @@ pub fn choice_list(heights: &[f32]) -> ChoiceList {
         tops.push(top);
         top += h;
     }
-    let shown = top.min(component::choice::MAX_HEIGHT);
+    let room = (component::choice::MAX_HEIGHT - taken).max(heights.first().copied().unwrap_or(0.0));
+    let shown = top.min(room);
     ChoiceList { tops, shown, max_scroll: top - shown }
 }
 
 /// A code or diff block of `lines` lines in its well: how much of it shows (whole lines
 /// only, so the last one shown is never cut through), the well's height, and how far it
-/// can scroll.
-pub fn code_block(lines: usize) -> (f32, f32, f32) {
+/// can scroll. `taken`: what the header grew by ([`choice_list`]); three lines always show.
+pub fn code_block(lines: usize, taken: f32) -> (f32, f32, f32) {
     let line = typography::BLOCK_CODE.line_height;
     let pad = component::block::PADDING;
     let content = lines.max(1) as f32 * line;
-    let shown = content.min(((component::block::MAX_HEIGHT - 2.0 * pad) / line).floor() * line);
+    let fits = ((component::block::MAX_HEIGHT - taken - 2.0 * pad) / line).floor().max(3.0);
+    let shown = content.min(fits * line);
     (shown, shown + 2.0 * pad, content - shown)
 }
 
 /// Prose `content` tall (bare wrapped text): how much shows and how far it can scroll.
-pub fn prose_block(content: f32) -> (f32, f32) {
-    let shown = content.min(component::block::MAX_HEIGHT);
+/// `taken`: what the header grew by ([`choice_list`]); three lines always show.
+pub fn prose_block(content: f32, taken: f32) -> (f32, f32) {
+    let room = (component::block::MAX_HEIGHT - taken).max(3.0 * typography::BLOCK_PROSE.line_height);
+    let shown = content.min(room);
     (shown, content - shown)
 }
 

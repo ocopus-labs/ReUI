@@ -115,6 +115,14 @@ fn the_header_centres_short_text_on_the_tile() {
     assert_eq!(header::detail_lines(Some(500.0), true, 300.0), 2.0);
     assert_eq!(header::detail_lines(Some(500.0), false, 300.0), 1.0);
     assert_eq!(header::detail_lines(None, true, 300.0), 0.0);
+    // A question is said in full in a roomy card, up to three lines; elsewhere one.
+    assert_eq!(header::hero_lines(2, true), 2.0);
+    assert_eq!(header::hero_lines(7, true), header::HERO_MAX_LINES as f32);
+    assert_eq!(header::hero_lines(0, true), 1.0);
+    assert_eq!(header::hero_lines(3, false), 1.0);
+    let one = header::Text::new(true, header::Hero::Text, 1.0);
+    assert_eq!(one.with_hero_lines(2.0).height() - one.height(), crate::tokens::typography::HEADLINE.line_height);
+    assert_eq!(one.with_hero_lines(1.0), one);
 }
 
 #[test]
@@ -137,16 +145,16 @@ fn button_rows_fill_the_card() {
 #[test]
 fn long_lists_and_blocks_scroll_inside_the_card() {
     let h = rows::choice_height(1.0);
-    let list = rows::choice_list(&[h; 12]);
+    let list = rows::choice_list(&[h; 12], 0.0);
     assert_eq!(list.shown, component::choice::MAX_HEIGHT);
     assert!(list.max_scroll > 0.0);
     assert_eq!(list.tops[1], h + component::choice::GAP);
-    let short = rows::choice_list(&[h, h]);
+    let short = rows::choice_list(&[h, h], 0.0);
     assert_eq!((short.shown, short.max_scroll), (2.0 * h + component::choice::GAP, 0.0));
-    let (shown, well, max) = rows::code_block(200);
+    let (shown, well, max) = rows::code_block(200, 0.0);
     assert!(well <= component::block::MAX_HEIGHT && max > 0.0);
     assert_eq!(shown % typography::BLOCK_CODE.line_height, 0.0, "whole lines");
-    assert_eq!(rows::code_block(0).2, 0.0);
+    assert_eq!(rows::code_block(0, 0.0).2, 0.0);
 }
 
 /// System stats: an eyebrow alone (Task Manager at its end), two gauges, a line of facts.
@@ -163,4 +171,20 @@ fn the_stats_card() {
 
     let (left, top, size) = header::end_button(&l, 480.0, head.mid);
     assert_eq!((top + size / 2.0, left + size / 2.0), (head.mid, 480.0 - l.inset() - icon::HEADER / 2.0), "on the eyebrow's line at the inset");
+}
+
+#[test]
+fn a_question_said_in_full_takes_its_lines_from_what_scrolls() {
+    use crate::tokens::typography;
+    let h = rows::choice_height(1.0);
+    let extra = 2.0 * typography::HEADLINE.line_height;
+    let full = rows::choice_list(&[h; 6], 0.0);
+    let less = rows::choice_list(&[h; 6], extra);
+    assert_eq!(full.shown - less.shown, extra, "the list gives the header exactly what it took");
+    assert!(less.max_scroll > full.max_scroll, "and scrolls the rest");
+    assert_eq!(rows::choice_list(&[h; 6], 10_000.0).shown, h, "the first choice always shows");
+    let (code_full, ..) = rows::code_block(50, 0.0);
+    let (code_less, ..) = rows::code_block(50, extra);
+    assert!(code_less < code_full && code_less >= 3.0 * typography::BLOCK_CODE.line_height);
+    assert!(rows::prose_block(1_000.0, 10_000.0).0 >= 3.0 * typography::BLOCK_PROSE.line_height);
 }

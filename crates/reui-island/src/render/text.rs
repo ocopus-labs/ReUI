@@ -30,6 +30,14 @@ impl Renderer {
         Ok((metrics.widthIncludingTrailingWhitespace / self.scale).ceil())
     }
 
+    /// How many lines `text` wraps to in a `width`-wide column (`font` must wrap).
+    pub(super) fn wrapped_lines(&self, text: &str, font: &Font, width: f32) -> Result<u32> {
+        let layout = self.layout(text, font, width)?;
+        let mut metrics = DWRITE_TEXT_METRICS::default();
+        unsafe { layout.GetMetrics(&mut metrics)? };
+        Ok(metrics.lineCount)
+    }
+
     /// One line of text in a `width`-wide box whose top is `top`; ellipsised if it doesn't fit.
     #[allow(clippy::too_many_arguments)]
     pub(super) fn text(&self, rt: &ID2D1RenderTarget, text: &str, font: &Font, left: f32, top: f32, width: f32, align: Align, color: Color) -> Result<()> {

@@ -204,6 +204,9 @@ pub struct Renderer {
     /// Size of the expanded view being drawn: a roomy card lays out its buttons and detail
     /// like an alert.
     size: Cell<CardSize>,
+    /// What the card's header grew by (a question over several lines): its scrolling rows
+    /// give that back, so the card keeps its height.
+    taken: Cell<f32>,
 }
 
 impl Renderer {
@@ -237,7 +240,7 @@ impl Renderer {
             )?
         };
         let fonts = fonts(&dwrite, scale)?;
-        Ok(Self { graphics, factory, dwrite, wic, images: HashMap::new(), tabular, round, fonts, scale, look, width: Cell::new(island::expanded::WIDTH), size: Cell::new(CardSize::Regular) })
+        Ok(Self { graphics, factory, dwrite, wic, images: HashMap::new(), tabular, round, fonts, scale, look, width: Cell::new(island::expanded::WIDTH), size: Cell::new(CardSize::Regular), taken: Cell::new(0.0) })
     }
 
     /// A new look, or the same look at another scale (Size, another display): the device,
@@ -390,6 +393,7 @@ fn fonts(dwrite: &IDWriteFactory, scale: f32) -> Result<Fonts> {
         eyebrow: f(typography::EYEBROW, false)?,
         value: f(typography::VALUE, true)?,
         headline: f(typography::HEADLINE, false)?,
+        headline_wrap: wrapped(typography::HEADLINE)?,
         code: f(typography::CODE, false)?,
         detail: f(typography::DETAIL, false)?,
         detail_wrap: wrapped(typography::DETAIL)?,
