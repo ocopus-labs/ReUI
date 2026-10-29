@@ -1,6 +1,6 @@
 # PRD: A considerate island (when it appears, opens and interrupts)
 
-Status: planned · Owner: Rohit · Oct 30, 2026
+Status: M1–M5 built · Owner: Rohit · Oct 30, 2026
 
 **Ask (Rohit):** make ReUI the most *considerate* island: give people control over how and when it appears and interrupts.
 
@@ -98,8 +98,8 @@ Nothing new runs at rest: the foreground hook existed; one snooze timer runs onl
 
 | # | What | Status |
 |---|---|---|
-| M1 | Opening style and hover delay; Settings rows | Planned |
-| M2 | Reveal zone; a just-shown pill waits for the rest | Planned |
-| M3 | Per-app rules; Settings → App rules | Planned |
-| M4 | Quiet from the moment (protocol v22, osd / devices / clipboard / timers); Settings → Snoozed with Undo | Planned |
-| M5 | Measured cost in the README; `tools/perf-sample.ps1` | Planned |
+| M1 | Opening style and hover delay; Settings rows | Done: `intent.rs` tested; a sandboxed debug island with a running timer opened its card after a posted pointer rested on it |
+| M2 | Reveal zone; a just-shown pill waits for the rest | Done: tested; sandboxed, *Pill* didn't reveal beside the pill and did above it, click-through until the rest; *Off* never; *Wide* beside it |
+| M3 | Per-app rules; Settings → App rules | Done: `app_rules.rs` and Settings tested; sandboxed with a debug-only foreground message: hidden for one app, only a permission request for another, back for a third |
+| M4 | Quiet from the moment (protocol v22; osd, devices, clipboard, timers, coding agents); Settings → Snoozed with Undo | Done: tested (hub declaration, island menu, snooze, file write); sandboxed with a debug-only pick message (no menu at the user's pointer): a finished Claude turn snoozed (the next held, a permission request through), then turned off (`show_finished` false, other keys kept). The real Win32 menu wasn't driven |
+| M5 | Measured cost in the README; `tools/perf-sample.ps1` | Done |

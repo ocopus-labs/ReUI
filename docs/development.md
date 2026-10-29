@@ -35,7 +35,9 @@ To drive a sandboxed island without touching the real mouse or keyboard, post to
 
 The hub starts the island plus every module. `--no-agents`, `--no-media`, `--no-clipboard`, `--no-osd`, `--no-devices`, `--no-timers` skip one; `--no-link-previews` keeps clipboard links offline; `--no-updates` never looks for updates or mentions them. `--no-island` runs the hub alone so you can start `reui-island.exe` yourself (under a debugger, say). `--no-onboarding` skips the first run and one-time tips; `--first-run` replays the demo and welcome. The full list is the doc comment at the top of `crates/reui-hub/src/main.rs`.
 
-`--demo` enables a module that shows now-playing, a 5-minute timer and, 25 s after each one is settled, the next agent moment: a permission with a scrolling script, a three-step question (one step multi-select) and a plan to approve. They take over the pill, answer nothing real, and time out and fail open (20 s for the permission, 60 s for the others). Hover to peek, click to expand, right-click the pill to quit ReUI.
+`--demo` enables a module that shows now-playing, a 5-minute timer and, 25 s after each one is settled, the next agent moment: a permission with a scrolling script, a three-step question (one step multi-select) and a plan to approve. They take over the pill, answer nothing real, and time out and fail open (20 s for the permission, 60 s for the others). Hover to peek, click to expand, right-click the pill to quit ReUI. `--demo-music` runs only its music (no timer, no moments): what `tools/perf-sample.ps1` measures for "music playing".
+
+`pwsh -File tools/perf-sample.ps1 [-Seconds 60] [-NoBuild]` measures the README's Performance table: it builds release, runs the hub and island sandboxed (`REUI_CONFIG_DIR` in `%TEMP%`, the modules that react to the user's own input off) through three scenes (at rest, music playing with the card closed, the System stats card open) and prints CPU (share of the whole machine), mean private memory, and how busy the rest of the machine was meanwhile.
 
 ## Settings' flags
 

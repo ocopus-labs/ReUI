@@ -1,6 +1,7 @@
 //! ReUI hub: owns all module state, decides what's in front, and serves it to surfaces.
 //!
-//! Flags: `--demo` enables the demo module, `--no-agents` / `--no-media` / `--no-osd` /
+//! Flags: `--demo` enables the demo module (`--demo-music`: only its music, no timer or
+//! agent moments, for measuring what playing music costs), `--no-agents` / `--no-media` / `--no-osd` /
 //! `--no-devices` / `--no-timers` / `--no-privacy` / `--no-stats` disable the coding agent
 //! (Claude Code, Codex, OpenCode) / Now Playing / system OSD / Devices / Timers / privacy
 //! indicator / System stats modules, `--no-link-previews` keeps clipboard links offline,
@@ -94,8 +95,8 @@ async fn main() -> Result<()> {
     }
     // The island's hide shortcut: the island is always there to hide.
     enabled.push(Box::new(modules::hide::HideIsland));
-    if has("--demo") {
-        enabled.push(Box::new(modules::demo::Demo));
+    if has("--demo") || has("--demo-music") {
+        enabled.push(Box::new(modules::demo::Demo { music_only: has("--demo-music") }));
     }
     modules::start(&hub, enabled);
     tokio::spawn(server.run(hub.clone()));

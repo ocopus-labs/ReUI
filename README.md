@@ -85,6 +85,10 @@ Press **Win+Ctrl+T** and type how long: `10`, `90s`, `1h30`, `10m tea`. Run seve
 
 Claude Code, Codex and OpenCode show in the island only when they need you: a permission to allow or deny, a question, a plan or an MCP server's form, a turn that failed. Answer from the island and stay in your editor, or jump straight to the agent's terminal. Each card says which session is asking, shows the full command or the changed lines, and hides anything that looks like a secret. A card never takes your keyboard by itself, so a stray Enter can't allow anything. Connect an agent in Settings → Coding agents.
 
+### Out of your way
+
+You decide how the island behaves. Open it with a click, or by resting the pointer on it, and choose how long that rest is. Keep it hidden until something needs you, and choose how much of the top edge brings it back, or none. Clicks still go to the browser tab underneath until you rest on it, even when it has only just appeared. Give an app its own rule: hide the island while a game or a presentation is in front, or let only permission requests through while you record. Right-click a moment you don't need (a copy, the volume, a device connecting) to turn that kind off or snooze it for an hour. Permission requests always come through.
+
 ### Appearance
 
 <p>
@@ -95,6 +99,18 @@ Claude Code, Codex and OpenCode show in the island only when they need you: a pe
 Dark, light, or following Windows' own mode. *Island* floats just below the top edge; *Notch* joins it to the edge like a laptop's notch. Roundness, padding, size and the accent (ReUI blue or your Windows accent) are yours to set, and the island picks up a change at once.
 
 Every feature, shortcut and gesture is in the [guide](docs/guide.md).
+
+## Performance
+
+What ReUI's two programs use, measured with the release build:
+
+| | Hub | Island |
+| --- | --- | --- |
+| At rest, nothing happening | 0.00 % CPU · 2 MB | 0.00 % CPU · 57 MB |
+| Music playing, card closed | 0.00 % CPU · 4–5 MB | 0.04–0.05 % CPU · 61–63 MB |
+| System stats card open | 0.02–0.03 % CPU · 7 MB | 0.01–0.04 % CPU · 62 MB |
+
+CPU is the share of the whole machine; memory is private memory. Three runs of 60 s per scene (50 s with the stats card) on October 30, 2026: AMD Ryzen 5 5600 (6 cores, 12 threads), Windows 11 build 26200, one 1920 × 1080 display at 100 %. The machine was busy with other work during the runs (about 80 %), so these are ReUI's numbers under load. Not included: Windows' compositor drawing the island, and the music player itself (the music here is ReUI's demo track, with the live bars). Most of the island's memory is its graphics device and fonts. `tools/perf-sample.ps1` repeats the measurement.
 
 ## Install
 

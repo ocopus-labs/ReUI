@@ -50,7 +50,11 @@ const TRACKS: [Track; 3] = [
     Track { title: "Intro (a much longer title to test trimming)", artist: "The xx", from: Rgb(51, 191, 179), to: Rgb(38, 77, 204), length: 128 },
 ];
 
-pub struct Demo;
+pub struct Demo {
+    /// Only the playing track: no timer and no agent moments, so a measurement of what
+    /// music costs at rest (`tools/perf-sample.ps1`) isn't interrupted.
+    pub music_only: bool,
+}
 
 impl Module for Demo {
     fn name(&self) -> &'static str {
@@ -58,22 +62,25 @@ impl Module for Demo {
     }
 
     fn run(self: Box<Self>, ctx: ModuleContext) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        Box::pin(run(ctx))
+        Box::pin(run(ctx, self.music_only))
     }
 }
 
-async fn run(mut ctx: ModuleContext) {
+async fn run(mut ctx: ModuleContext, music_only: bool) {
     let image = std::fs::read(DEMO_ART).ok().map(|bytes| ctx.image(bytes));
     let mut track = 0;
     let mut playing = true;
     publish_music(&ctx, track, playing, image);
 
     // The island runs the clock; the hub only wakes when it ends or is paused.
-    let mut timer = Some(Clock { value_ms: u64::from(TIMER_LENGTH) * 1000, at_unix_ms: unix_ms(), running: true, down: true });
-    publish_timer(&ctx, timer.unwrap());
+    let mut timer = (!music_only).then(|| Clock { value_ms: u64::from(TIMER_LENGTH) * 1000, at_unix_ms: unix_ms(), running: true, down: true });
+    if let Some(clock) = timer {
+        publish_timer(&ctx, clock);
+    }
 
     let mut moments = Moments::new();
-    let mut next_request = Instant::now() + FIRST_REQUEST;
+    // Music only: the first moment is a year away.
+    let mut next_request = Instant::now() + if music_only { Duration::from_secs(365 * 86_400) } else { FIRST_REQUEST };
 
     loop {
         let deadline = moments.deadline().unwrap_or(next_request);
