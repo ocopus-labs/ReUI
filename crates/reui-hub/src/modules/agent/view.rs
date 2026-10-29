@@ -1,21 +1,22 @@
-//! How a session and a permission request look on the island: which phases show at all
-//! (per `coding.json`), the status per phase, the session strip, and the published
-//! activities. What a tool request is about is `describe.rs`.
+//! What of the agent shows on the island: which session phases show at all (per
+//! `coding.json`), the status per phase, the session strip, and the published activities
+//! (sessions, the moments card, the test confirmation). A moment's card is `card.rs`.
 
+use std::collections::HashMap;
 use std::time::Duration;
 
-use reui_protocol::{Button, ButtonContent, ButtonRole, CardSize, CompactView, Context, Element, ExpandedView, Headline, Priority, Row, Tone};
-use serde_json::Value;
+use reui_protocol::{CardSize, CompactView, Context, Element, ExpandedView, Headline, Priority, Row, Tone};
 
-use super::describe::describe_tool;
+use super::card::{card, GLYPH_DONE};
 use super::settings::{Settings, ShowSessions};
 use super::usage::format_tokens;
-use super::{permission_key, session_key, Agentry, Phase, Session};
+use super::{session_key, Agentry, Moments, Phase, Session};
 use crate::hub::{ModuleContext, View};
 
-const GLYPH_DONE: char = '\u{E73E}';
 const GLYPH_FAILED: char = '\u{E7BA}';
-const GLYPH_DENY: char = '\u{E711}';
+
+/// The one activity every waiting moment of this agent shares (paged on its strip).
+pub(super) const MOMENTS_KEY: &str = "moments";
 
 /// Whether a session in this phase is in the island at all. By default only what needs
 /// you: a question and a failed turn (permissions are their own activities and always
@@ -41,7 +42,7 @@ fn present(phase: &Phase, session: &Session) -> (Priority, Element, String) {
         Phase::Thinking => (Priority::Ongoing, quiet("Thinking"), with_agents("Thinking".into())),
         Phase::Tool(tool) => (Priority::Ongoing, quiet(tool), with_agents(format!("Running {tool}"))),
         Phase::Compacting => (Priority::Ongoing, quiet("Compacting"), "Compacting the conversation".into()),
-        Phase::WaitingPermission => (Priority::Ongoing, quiet("Waiting"), "Waiting for your permission".into()),
+        Phase::WaitingPermission => (Priority::Ongoing, quiet("Waiting"), "Waiting for you".into()),
         Phase::NeedsInput(_) | Phase::Failed { .. } => (Priority::Alert, Element::Empty, String::new()),
         Phase::Done { took } => {
             let mut parts = vec![match took {
@@ -168,40 +169,22 @@ pub(super) fn publish_test(ctx: &ModuleContext, me: &Agentry) {
     );
 }
 
-/// A permission request (PRD agent moments §5.3): the strip, "Permission", the tool's
-/// glyph and hero, the facts, the body the hero cuts off, and Deny / Always / Allow with
-/// Allow as the tinted main action. A short request with nothing more to say and no
-/// Always keeps the card small: Deny and Allow as two circles beside the hero.
-pub(super) fn publish_request(ctx: &ModuleContext, me: &Agentry, id: u64, session: &Session, tool: &str, input: &Value, can_always: bool) {
-    let described = describe_tool(tool, input);
-    let text = |action: &str, label: &str, role| Button { action: action.into(), content: ButtonContent::Text(label.into()), role };
-    let glyph = |action: &str, glyph: char, role| Button { action: action.into(), content: ButtonContent::Glyph(glyph), role };
-    let mut rows = Vec::new();
-    if let Some((body, kind)) = described.body.clone() {
-        rows.push(Row::Block { text: body, kind });
-    }
-    let buttons = if rows.is_empty() && !can_always {
-        vec![glyph("deny", GLYPH_DENY, ButtonRole::Destructive), glyph("allow", GLYPH_DONE, ButtonRole::Accent)]
-    } else {
-        let mut b = vec![text("deny", "Deny", ButtonRole::Secondary)];
-        if can_always {
-            b.push(text("always", "Always", ButtonRole::Secondary));
-        }
-        b.push(text("allow", "Allow", ButtonRole::Accent));
-        b
+/// The moments card (PRD agent moments §5): the one in front with its session's strip and
+/// the pager over the rest, at decision priority. Gone when nothing waits.
+pub(super) fn publish_moments(ctx: &ModuleContext, me: &Agentry, moments: &Moments, sessions: &HashMap<String, Session>) {
+    let Some(moment) = moments.queue.current() else {
+        ctx.retract(MOMENTS_KEY);
+        return;
     };
-    rows.push(Row::Buttons(buttons));
-    let leading = Element::Glyph { glyph: described.glyph, tone: Tone::Accent };
+    let strip = match sessions.get(&moment.session) {
+        Some(session) => context(me, session),
+        None => Context { mark: me.mark.clone(), title: me.profile.display.into(), facts: Vec::new() },
+    };
+    let (trailing, expanded) = card(moment, strip, moments.queue.position(), me.profile.short);
     ctx.publish(
-        &permission_key(id),
+        MOMENTS_KEY,
         Priority::Decision,
-        View {
-            accent: Some(me.profile.accent),
-            audio: None,
-            compact: CompactView { leading: me.mark.clone(), trailing: Element::Text { text: "Allow?".into(), tone: Tone::Accent } },
-            minimal: me.mark.clone(),
-            expanded: Some(moment(me, session, leading, "Permission", described.headline, described.detail, rows)),
-        },
+        View { accent: Some(me.profile.accent), audio: None, compact: CompactView { leading: me.mark.clone(), trailing }, minimal: me.mark.clone(), expanded: Some(expanded) },
     );
 }
 
