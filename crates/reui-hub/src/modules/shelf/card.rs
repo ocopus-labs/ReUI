@@ -15,7 +15,8 @@ use crate::modules::clipboard::{age, classify};
 
 /// Package: things set aside to take somewhere.
 pub const GLYPH: char = '\u{E7B8}';
-const GLYPH_CLEAR: char = '\u{E894}';
+/// Delete: everything held goes (a card's hover shows the same bin for one).
+const GLYPH_CLEAR: char = '\u{E74D}';
 pub const ACCENT: Rgb = Rgb(48, 176, 199);
 
 /// What the disk says about the held things, looked up off the hub thread.

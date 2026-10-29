@@ -52,7 +52,7 @@ The island must accept a drag only over itself, and stay click-through everywher
 
 1. **A drag passes near.** The mouse hook sees a button held that went down elsewhere (`DragGuard`) and the pointer within `island.shelf.reach` (24 DIPs) of the island's shape. Only then does the island drop `WS_EX_TRANSPARENT`, so the next move of the drag finds it. Away from that zone it is click-through again at once, so a drop on a page right under the island's empty area still lands there.
 2. **Windows asks (`DragEnter`).** ReUI looks at the formats on offer (never the content yet): files (`CF_HDROP`), virtual files (`FileGroupDescriptorW` + `FileContents`, a browser's image), a URL (`UniformResourceLocatorW`), a PNG, text. Nothing it can hold, or a drag ReUI itself started: no effect, the cursor says no, the island doesn't change.
-3. **The target.** Something it can hold: the pill grows into the drop target, the shelf's mark and **Drop to hold** in `label.secondary`, `island.shelf.drop-grow` (10) larger than the compact pill in both directions, on `motion.spring.expand` (critically damped: it arrives and stops). With Windows' animation effects off, the reduced spring. The shell's drag image keeps following the pointer over it (`IDropTargetHelper`).
+3. **The target.** Something it can hold: the pill grows into the drop target, the shelf's mark and **Drop to hold** in `label.secondary`, `island.shelf.drop-grow` (24) wider than the compact pill and as tall as a peek, on `motion.spring.expand` (critically damped: it arrives and stops). With Windows' animation effects off, the reduced spring. The shell's drag image keeps following the pointer over it (`IDropTargetHelper`).
 4. **The effect.** Copy where the source allows it, else Link. **Never Move**: a source that sees Move may delete its original after the drop.
 5. **Let go (`Drop`).** The island reads the data then (one pass, on its own thread's time, a few milliseconds for files) and sends it to the hub; the target folds into the shelf's pill showing the new count. Leaving the zone instead (`DragLeave`) folds it back to what was there.
 
@@ -80,7 +80,7 @@ The user decides, in Settings → Shelf → **Keep**: *Until removed* (default),
 
 - **The pill, while something is held.** A Passive activity: the shelf's mark and the count (`1`, `3`) beside it, as a label sits beside its mark. With something more important in front, the shelf rides in the minimal bubble. Nothing held: no activity at all.
 - **A place.** The shelf joins the view switcher and the idle pill's row of places (glyph Package `E7B8`, after Clipboard), opened by its `open` command like the others. Opened empty it reads "Nothing held".
-- **The card.** Wide, eyebrow "Shelf", a clear button at its end (glyph `E894`, plain), then the row of cards, newest first; the clipboard's faces, menu and keyboard (←/→, Enter opens, Delete removes).
+- **The card.** Wide, eyebrow "Shelf", a clear button at its end (Delete `E74D`, plain), then the row of cards, newest first; the clipboard's faces, menu and keyboard (←/→, Enter opens, Delete removes).
 - **Drag out.** Press a card and move past the system's drag distance: Windows' drag starts with the shell's own image of the files. Dragging the **compact pill** drags every held file at once (S2). Effects offered: Copy and Link, never Move. A card stays held after it's dragged out.
 - **Tray.** Tray → Shelf → Open shelf, Clear shelf.
 
