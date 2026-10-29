@@ -42,7 +42,7 @@ pub struct Target {
 
 impl Target {
     /// `helper`: show the shell's drag image over the island (off in tests: no window).
-    pub fn new(hwnd: HWND, on: On, helper: bool) -> IDropTarget {
+    pub fn create(hwnd: HWND, on: On, helper: bool) -> IDropTarget {
         let helper = helper.then(|| unsafe { CoCreateInstance::<_, IDropTargetHelper>(&CLSID_DragDropHelper, None, CLSCTX_INPROC_SERVER).ok() }).flatten();
         Target { hwnd, helper, on, holdable: Cell::new(false) }.into()
     }
@@ -132,7 +132,7 @@ mod tests {
             log.borrow_mut().push(e);
             ok
         });
-        (Target::new(HWND::default(), on, false), seen)
+        (Target::create(HWND::default(), on, false), seen)
     }
 
     #[test]

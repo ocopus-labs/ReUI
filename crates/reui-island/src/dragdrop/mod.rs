@@ -20,7 +20,7 @@ pub fn register(hwnd: HWND, on: target::On) -> bool {
             eprintln!("island: no drag and drop ({e})");
             return false;
         }
-        match RegisterDragDrop(hwnd, &target::Target::new(hwnd, on, true)) {
+        match RegisterDragDrop(hwnd, &target::Target::create(hwnd, on, true)) {
             Ok(()) => true,
             Err(e) => {
                 eprintln!("island: can't take drops ({e})");
