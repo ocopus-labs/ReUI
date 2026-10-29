@@ -32,6 +32,7 @@ $pick = [ordered]@{
     "volume"            = "stage-meter"
     "devices"           = "stage-devices"
     "timers"            = "stage-timer"
+    "system-stats"      = "stage-stats"
     "agents"            = "stage-permission"
     "appearance-light"  = "stage-timer-light"
     "appearance-notch"  = "stage-timer-notch"

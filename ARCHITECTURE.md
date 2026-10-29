@@ -22,7 +22,7 @@ reui-settings.exe  the Settings window, opened from the tray; single instance
 | Crate | Job |
 |---|---|
 | `reui-protocol` | Wire types: `Activity`, presentations (compact, minimal, expanded), rows, priorities, actions; postcard framing. Also `version` (semver comparison for update.json) and `install` (the lines `reui-settings --install-update` prints) |
-| `reui-design` | `design/tokens.json` compiled into constants at build time (plus a `Palette` per theme); `look.rs` turns the Appearance settings into a `Look` (palette, radii, insets, the concentric maths) for the island and Settings' previews alike; `layout/` is the island's geometry over that `Look` (compact pill and bubble, the expanded header, every row, the card row, each card's width and height), pure and tested, which both lay out with; `icon.rs` turns `design/logo/reui.ico` into the icon resource every program's `build.rs` links in |
+| `reui-design` | `design/tokens.json` compiled into constants at build time (plus a `Palette` per theme); `look.rs` turns the Appearance settings into a `Look` (palette, radii, insets, the concentric maths) for the island and Settings' previews alike; `layout/` is the island's geometry over that `Look` (compact pill and bubble, the expanded header, every row, the card row, gauges and their sparklines, each card's width and height), pure and tested, which both lay out with; `icon.rs` turns `design/logo/reui.ico` into the icon resource every program's `build.rs` links in |
 | `reui-hub` | Feature modules and the hub that orders their activities |
 | `reui-island` | The island window: Windows.UI.Composition + Direct2D/DirectWrite |
 | `reui-bridge` | Hook entry point for coding agents (`main.rs`; `parents.rs`: its parent process chain, sent for "Open terminal"), the hook installer (`install.rs`), and the OpenCode plugin it installs (`opencode-plugin.js`, tested by `tools/opencode-plugin-test.mjs`) |
@@ -89,7 +89,8 @@ modules/
                    only while open: card (open/closed, deadlines; pure, tested), sampler (its
                    own thread, 1 Hz), os (GetSystemTimes, GlobalMemoryStatusEx, GetIfTable2),
                    pdh (GPU engines and memory, disk; English counter names), maths (deltas,
-                   counted interfaces, the busiest GPU engine, number text; tested), view,
+                   counted interfaces, the busiest GPU engine, number text; tested), history
+                   (the open card's last minute per gauge, sustained-high tone; tested), view,
                    settings (stats.json)
   updates/         daily update check, the update card (an Alert: Later / Install, then
                    download progress, installing or why it failed), "Updated" brief:
@@ -132,7 +133,8 @@ render/            drawing only (no behaviour state); where things go is reui_de
   compact.rs  minimal.rs  expanded.rs (strip + header + row layout)
   notch.rs         the Notch style's ears
   rows/            timeline, controls, slider, lyrics, cards, search, tabs, note,
-                   context (session strip), choices, block (scrolling text)
+                   context (session strip), choices, block (scrolling text), gauges
+                   (gauges with sparklines, facts: System stats)
 features/          per-feature island logic
   clipboard.rs  clipboard_keys.rs   panel selection/scroll, keyboard hook
   keys.rs                           the key map of a card that has the keyboard
@@ -174,7 +176,7 @@ render/            drawing only: Renderer/Painter primitives, fonts, text (layou
   preview/         the hero card's island on the top of the screen: mod (stage, placement),
                    parts (shape and notch ears, tiles, rings, buttons, rows, placed by
                    reui_design::layout as the island places them), one file per moment: compact, music, clipboard (+ toast),
-                   levels, devices, timers, agents
+                   levels, devices, timers, stats, agents
 pages/             one file per page: build its rows from State, handle its controls;
                    welcome.rs is the three-step welcome (first run, Replay the tour)
 model/             settings files (read, change a key, atomic write, keep unknown keys,
