@@ -1,6 +1,8 @@
-//! The island's component library and layout, drawn with Direct2D/DirectWrite into
-//! composition surfaces. Every size, colour and font comes from `reui_design::tokens`;
-//! this module only decides how the protocol's semantic view model maps onto them. Here:
+//! The island's component library, drawn with Direct2D/DirectWrite into composition
+//! surfaces. Every size, colour and font comes from `reui_design::tokens`, and where each
+//! piece goes from `reui_design::layout` (pure, shared with Settings' previews, so they
+//! can't drift); this module measures text, feeds it the protocol's semantic view model
+//! and draws what it lays out. Here:
 //! the `Renderer`, surfaces and painting, and the layout/hit types the pill reads back;
 //! each presentation, element kind and row type draws in its own child module.
 //!

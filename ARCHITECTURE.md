@@ -22,7 +22,7 @@ reui-settings.exe  the Settings window, opened from the tray; single instance
 | Crate | Job |
 |---|---|
 | `reui-protocol` | Wire types: `Activity`, presentations (compact, minimal, expanded), rows, priorities, actions; postcard framing. Also `version` (semver comparison for update.json) and `install` (the lines `reui-settings --install-update` prints) |
-| `reui-design` | `design/tokens.json` compiled into constants at build time (plus a `Palette` per theme); `look.rs` turns the Appearance settings into a `Look` (palette, radii, insets, the concentric maths) for the island and Settings' previews alike; `icon.rs` turns `design/logo/reui.ico` into the icon resource every program's `build.rs` links in |
+| `reui-design` | `design/tokens.json` compiled into constants at build time (plus a `Palette` per theme); `look.rs` turns the Appearance settings into a `Look` (palette, radii, insets, the concentric maths) for the island and Settings' previews alike; `layout/` is the island's geometry over that `Look` (compact pill and bubble, the expanded header, every row, the card row, each card's width and height), pure and tested, which both lay out with; `icon.rs` turns `design/logo/reui.ico` into the icon resource every program's `build.rs` links in |
 | `reui-hub` | Feature modules and the hub that orders their activities |
 | `reui-island` | The island window: Windows.UI.Composition + Direct2D/DirectWrite |
 | `reui-bridge` | Hook entry point for coding agents, and the hook installer |
@@ -109,7 +109,7 @@ pill/              the island's behaviour
   visibility.rs    size springs, show/hide, reveal, fullscreen, topmost
   timers.rs        tick, clocks, bars, scroll, lyric, level timers
   visuals.rs       level bars, logo
-render/            drawing only (no behaviour state)
+render/            drawing only (no behaviour state); where things go is reui_design::layout
   mod.rs           Renderer, surfaces, layouts, hit testing
   fonts.rs  text.rs  images.rs  elements.rs
   compact.rs  minimal.rs  expanded.rs (strip + header + row layout)
@@ -147,13 +147,14 @@ app/               state machine: page, scroll, hover, focus, menus, drags
   shot.rs          offscreen rendering for --shots
 ui/                pages as data: blocks, rows, parts (controls)
   layout.rs        where everything goes (pure, tested): rows, controls, scrolling, nav
-  stage.rs         each page's island size in the user's Look and its stage's height (pure, tested)
+  stage.rs         each page's island in the user's Look (its size, an open card's header and
+                   rows, from reui_design::layout) and its stage's height (pure, tested)
   chrome.rs        sidebar and caption geometry      icons.rs   page icons and tile colours
 render/            drawing only: Renderer/Painter primitives, fonts, text (layout cache),
                    shapes, icons, sidebar, frame (caption, scrollbar), page, controls, menu
   preview/         the hero card's island on the top of the screen: mod (stage, placement),
-                   parts (shape and notch ears, tiles, rings, buttons, rows, as the island
-                   draws them), one file per moment: compact, music, clipboard (+ toast),
+                   parts (shape and notch ears, tiles, rings, buttons, rows, placed by
+                   reui_design::layout as the island places them), one file per moment: compact, music, clipboard (+ toast),
                    levels, devices, timers, agents
 pages/             one file per page: build its rows from State, handle its controls;
                    welcome.rs is the three-step welcome (first run, Replay the tour)
