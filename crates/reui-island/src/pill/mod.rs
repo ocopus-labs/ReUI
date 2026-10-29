@@ -194,6 +194,8 @@ pub struct Pill {
     slider_hold: Option<(String, f32)>,
     /// The bar under the pointer shows its thumb.
     thumb: Option<Thumb>,
+    /// The card under the pointer, which shows its pin and delete actions.
+    hover_card: Option<usize>,
     swipe: Swipe,
     /// Wheel travel over the source switcher, toward a whole notch.
     pager_travel: i32,
@@ -370,6 +372,7 @@ impl Pill {
             hold: self.seek_hold,
             slider,
             thumb,
+            hover_card: self.hover_card,
             lyric: self.lyric_change.map(|(prev, at)| (prev, music::lyric_ease(at.elapsed().as_secs_f32() * 1000.0 / motion::lyrics::DURATION as f32))),
             level: self.front().and_then(|a| self.levels.value(&a.id, Instant::now())),
             block_scroll: self.block_scroll.min(self.block_max),
@@ -429,6 +432,7 @@ impl Pill {
             self.choice_cursor = None;
             self.block_scroll = 0.0;
             self.thumb = None;
+            self.hover_card = None;
             if self.drag.take().is_some() {
                 unsafe { _ = ReleaseCapture() };
             }

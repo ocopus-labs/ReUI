@@ -56,6 +56,7 @@ Everything you copy (text with its formatting, images, files) is kept on this PC
 | Delete | Deletes (Ctrl+Z brings it back) |
 | Tab | Next tab (All, Pinned, Links, Images, Text, Code, Colors, Files) |
 | Esc | Clears the search, then closes |
+| Point at a card | Its star (pin or unpin) and bin (delete; Ctrl+Z brings it back) appear in its corner |
 | Right-click a card | Its menu |
 | **Ctrl+Alt+1 … Ctrl+Alt+9** | Pastes a recent item without opening anything |
 

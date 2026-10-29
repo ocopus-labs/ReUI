@@ -310,6 +310,7 @@ impl Pill {
             seek_hold: None,
             slider_hold: None,
             thumb: None,
+            hover_card: None,
             swipe: Swipe::default(),
             pager_travel: 0,
             engaged: false,

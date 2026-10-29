@@ -112,6 +112,12 @@ pub fn hit_at(hits: &[Hit], x: f32, y: f32) -> Option<&Hit> {
     hits.iter().find(|h| x >= h.left && x < h.right && y >= h.top && y < h.bottom)
 }
 
+/// The card (in a row of cards) under (`x`, `y`), wherever on it the point is: also over
+/// the hover actions drawn on top of it, whose own hits come first.
+pub fn card_at(hits: &[Hit], x: f32, y: f32) -> Option<usize> {
+    hits.iter().filter(|h| h.card.is_some()).find(|h| x >= h.left && x < h.right && y >= h.top && y < h.bottom)?.card
+}
+
 /// Where the compact presentation put things the pill animates itself.
 pub struct CompactLayout {
     pub width: f32,
@@ -141,6 +147,8 @@ pub struct Interaction<'a> {
     pub slider: Option<(&'a str, f32, bool)>,
     /// The bar under the pointer (or being dragged) shows its thumb.
     pub thumb: Option<Thumb>,
+    /// The card under the pointer shows its pin and delete actions.
+    pub hover_card: Option<usize>,
     /// A lyric line just started: the line before it and how far (0..=1, eased) the column
     /// has slid up from it.
     pub lyric: Option<(usize, f32)>,
@@ -415,6 +423,16 @@ fn fonts(dwrite: &IDWriteFactory, scale: f32) -> Result<Fonts> {
 
 #[cfg(test)]
 mod tests {
+    #[test]
+    fn a_cards_hover_actions_take_the_click_and_keep_the_hover() {
+        // As the card row pushes them: the actions first, then the card under them.
+        let hits = [super::Hit::new(100.0, 4.0, 124.0, 28.0, "delete:7"), super::Hit { card: Some(3), ..super::Hit::new(0.0, 0.0, 128.0, 116.0, "paste:7") }];
+        assert_eq!(super::hit_at(&hits, 110.0, 10.0).map(|h| (h.action.as_str(), h.card)), Some(("delete:7", None)), "a click on the bin deletes, without the card's paste");
+        assert_eq!(super::card_at(&hits, 110.0, 10.0), Some(3), "the card stays hovered over its own actions");
+        assert_eq!(super::card_at(&hits, 50.0, 60.0), Some(3));
+        assert_eq!(super::card_at(&hits, 200.0, 60.0), None);
+    }
+
     #[test]
     fn clicking_a_seekable_bar_seeks_proportionally() {
         let hit = super::Hit { seek: Some((20.0, 400.0, 200_000)), ..super::Hit::new(20.0, 0.0, 400.0, 10.0, "seek") };

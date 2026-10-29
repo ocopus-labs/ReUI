@@ -91,6 +91,7 @@ impl Pill {
             self.set_clickthrough(false);
         }
         self.update_thumb(pt);
+        self.update_hover_card(pt, inside);
         if inside == self.inside {
             return;
         }
@@ -368,6 +369,21 @@ impl Pill {
         }
     }
 
+    /// The card under the pointer (screen point) shows its pin and delete actions; redrawn
+    /// only when that changes.
+    fn update_hover_card(&mut self, pt: POINT, inside: bool) {
+        let want = if inside && self.state == State::Expanded && self.shown && self.drag.is_none() {
+            let (cx, cy) = self.card_point((pt.x - self.window.left) as f32, (pt.y - self.window.top) as f32);
+            render::card_at(&self.hits, cx, cy)
+        } else {
+            None
+        };
+        if want != self.hover_card {
+            self.hover_card = want;
+            self.redraw_expanded();
+        }
+    }
+
     /// The context menu entries (label, action) of the card under client point (`x`, `y`),
     /// or `None` when it isn't over a card.
     /// Each entry says whether picking it closes the panel (see [`Self::act`]).
@@ -376,7 +392,7 @@ impl Pill {
             return None;
         }
         let (cx, cy) = self.card_point(x, y);
-        let i = render::hit_at(&self.hits, cx, cy)?.card?;
+        let i = render::card_at(&self.hits, cx, cy)?;
         let closes = |a: &reui_protocol::ItemAction| matches!(a.key, Some(ItemKey::ShiftEnter | ItemKey::CtrlEnter));
         Some(self.items().get(i)?.actions.iter().map(|a| (a.label.clone(), a.action.clone(), closes(a), false)).collect())
     }
