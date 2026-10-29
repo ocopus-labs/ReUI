@@ -115,7 +115,8 @@ fn stages(app: &mut App, dir: &Path) -> Result<()> {
             let (w, _) = stage::size(moment, &look);
             let w = if moment == Moment::Compact { 2.0 * w - stage::music_pill().width } else { w };
             let width = w * look.size + 2.0 * STAGE_SIDE;
-            let (w, h, pixels) = app.stage_snapshot(Preview { moment, look }, width.ceil())?;
+            let switcher = app.state.files.doc(crate::model::files::File::Island).bool("view_switcher");
+            let (w, h, pixels) = app.stage_snapshot(Preview { moment, look, switcher }, width.ceil())?;
             png(&dir.join(format!("stage-{}{suffix}.png", format!("{moment:?}").to_lowercase())), w, h, &pixels)?;
         }
     }

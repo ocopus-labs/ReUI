@@ -72,6 +72,36 @@ impl Switcher {
     }
 }
 
+/// A decision waiting behind the open place (docs/PRD-view-switcher.md M2): a bubble the
+/// switcher's height beside its end, holding the decision's accent dot. Detached rather
+/// than a tab, so the tabs never shift under the pointer as it comes and goes, and a
+/// moment never reads as one of the places.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Waiting {
+    /// Its left edge, from the switcher's left.
+    pub left: f32,
+    pub size: f32,
+    /// Its corner radius: the switcher's, so the two square off together.
+    pub radius: f32,
+    /// The hover fill inside it, one inset in, and its radius.
+    pub inner: f32,
+    pub inner_radius: f32,
+}
+
+impl Switcher {
+    /// The waiting bubble beside this switcher.
+    pub fn waiting(&self) -> Waiting {
+        let inset = island::switcher::INSET;
+        Waiting { left: self.width + island::switcher::WAITING_GAP, size: HEIGHT, radius: self.radius, inner: TAB, inner_radius: concentric(self.radius, inset).min(TAB / 2.0) }
+    }
+
+    /// Whether a point (switcher DIPs) is on the waiting bubble.
+    pub fn on_waiting(&self, x: f32, y: f32) -> bool {
+        let w = self.waiting();
+        (0.0..self.height).contains(&y) && (w.left..w.left + w.size).contains(&x)
+    }
+}
+
 /// The next place `step` tabs on from `current` (Ctrl+Tab, the wheel), wrapping; from no
 /// current place, the first or the last.
 pub fn step(count: usize, current: Option<usize>, step: i32) -> Option<usize> {
@@ -128,6 +158,18 @@ mod tests {
         assert_eq!(Switcher::new(&look(1.0), 12).tabs.len(), MAX_TABS);
         assert!((width(12) - SURFACE.0).abs() < 1e-4);
         assert_eq!(width(0), 0.0);
+    }
+
+    #[test]
+    fn a_waiting_decision_sits_beside_the_switcher_not_in_it() {
+        let s = Switcher::new(&look(1.0), 4);
+        let w = s.waiting();
+        assert_eq!(w.left, s.width + island::switcher::WAITING_GAP);
+        assert_eq!(w.size, s.height);
+        assert_eq!(w.radius, s.radius, "the same shape as the switcher's ends");
+        assert!((w.inner_radius - s.tab_radius).abs() < 1e-4);
+        assert!(s.on_waiting(w.left + 1.0, 1.0) && !s.on_waiting(s.width - 1.0, 1.0));
+        assert_eq!(s.tab_at(w.left + 1.0, 1.0), None, "never a tab");
     }
 
     #[test]

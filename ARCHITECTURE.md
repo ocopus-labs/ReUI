@@ -132,7 +132,7 @@ pill/              the island's behaviour
   input.rs         clicks, wheel, drag, hover
   summon.rs        hotkey-summoned cards, keyboard capture, search
   switcher.rs      the view switcher: places, when it shows, its tabs placed and drawn,
-                   click / wheel / Ctrl+Tab to another place
+                   click / wheel / Ctrl+Tab to another place, a waiting decision's bubble beside it
   visibility.rs    size springs, show/hide, reveal, fullscreen, topmost
   timers.rs        tick, clocks, bars, scroll, lyric, level timers
   visuals.rs       level bars, logo
@@ -142,7 +142,7 @@ render/            drawing only (no behaviour state); where things go is reui_de
   compact.rs  minimal.rs  expanded.rs (strip + header + row layout)
   notch.rs         the Notch style's ears
   sheet.rs         test-only: the device-drawing contact sheet (target/devices-art/)
-  switcher.rs      the view switcher's tabs
+  switcher.rs      the view switcher's tabs and the waiting decision's dot
   rows/            timeline, controls, slider, lyrics, cards, search, tabs, note,
                    context (session strip), choices, block (scrolling text), gauges
                    (gauges with sparklines, facts: System stats)
@@ -155,7 +155,8 @@ features/          per-feature island logic
   visualizer.rs                     per-process audio loopback + FFT
   level.rs                          eased level values
   clock.rs                          how clocks read, and when they next change
-  switcher.rs                       when the view switcher shows, which tab is selected
+  switcher.rs                       when the view switcher shows, which tab is selected,
+                                    which decision waits beside it
 ```
 
 **Rules:**
@@ -188,7 +189,7 @@ render/            drawing only: Renderer/Painter primitives, fonts, text (layou
   preview/         the hero card's island on the top of the screen: mod (stage, placement),
                    parts (shape and notch ears, tiles, rings, buttons, rows, placed by
                    reui_design::layout as the island places them), one file per moment: compact, music, clipboard (+ toast),
-                   levels, devices, timers, stats, agents
+                   levels, devices, timers, stats, agents; switcher (under the timer card)
 pages/             one file per page: build its rows from State, handle its controls;
                    welcome.rs is the three-step welcome (first run, Replay the tour)
 model/             settings files (read, change a key, atomic write, keep unknown keys,

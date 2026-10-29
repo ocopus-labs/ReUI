@@ -6,7 +6,8 @@
 
 use reui_design::layout::switcher::{self as geometry, Switcher};
 use reui_design::tokens::motion;
-use reui_protocol::Destination;
+use reui_design::Color;
+use reui_protocol::{ActivityId, Destination};
 use windows::core::{h, Result};
 use windows::UI::Composition::{CompositionDrawingSurface, CompositionRoundedRectangleGeometry, ShapeVisual, SpriteVisual};
 use windows::Win32::Foundation::POINT;
@@ -25,6 +26,14 @@ pub(super) struct Tabs {
     /// The light theme's hairline (none in dark).
     pub edge: Option<ShapeVisual>,
     pub surface: CompositionDrawingSurface,
+    /// The waiting bubble's face (its visual rides `p.wv`).
+    pub waiting_surface: CompositionDrawingSurface,
+    /// The decision waiting behind the open place, and its accent, while the switcher shows.
+    pub waiting: Option<(ActivityId, Color)>,
+    /// The pointer is on the waiting bubble.
+    pub waiting_hover: bool,
+    /// What the bubble last showed (accent, hover).
+    pub waiting_drawn: Option<(Color, bool)>,
     /// The places, as the hub last sent them.
     pub places: Vec<Destination>,
     /// Settings → General → View switcher.
@@ -94,6 +103,53 @@ impl Pill {
                 eprintln!("island: spring failed: {e}");
             }
         }
+        self.sync_waiting();
+    }
+
+    /// Shows the decision waiting behind the open place beside the switcher (PRD M2), in
+    /// the same pass that draws the snapshot it arrived in. Quiet: no sound, no motion
+    /// beyond its own arrival, and the place stays open until the user goes to it.
+    fn sync_waiting(&mut self) {
+        let default_accent = self.look.accent;
+        let now = switcher::waiting(&self.snapshot.activities, self.tabs.selected.is_some())
+            .map(|a| (a.id.clone(), a.accent.map(crate::render::rgb).unwrap_or(default_accent)));
+        let was = self.tabs.waiting.is_some();
+        self.tabs.waiting = now;
+        if self.tabs.waiting.is_none() {
+            self.tabs.waiting_hover = false;
+        } else if let Err(e) = self.draw_waiting() {
+            eprintln!("island: switcher failed: {e}");
+        }
+        if was != self.tabs.waiting.is_some() {
+            let (to, preset) = match self.tabs.waiting {
+                Some(_) if self.reduced_motion => (1.0, motion::spring::REDUCED),
+                Some(_) => (1.0, motion::spring::EXPAND),
+                None => (0.0, motion::spring::REDUCED),
+            };
+            if let Err(e) = self.spring(h!("wv"), to, preset) {
+                eprintln!("island: spring failed: {e}");
+            }
+        }
+    }
+
+    fn draw_waiting(&mut self) -> Result<()> {
+        let Some((_, accent)) = self.tabs.waiting.clone() else { return Ok(()) };
+        let now = (accent, self.tabs.waiting_hover);
+        if self.tabs.waiting_drawn == Some(now) {
+            return Ok(());
+        }
+        self.renderer.draw_waiting(&self.tabs.waiting_surface, &self.tabs.layout.waiting(), accent, now.1)?;
+        self.tabs.waiting_drawn = Some(now);
+        Ok(())
+    }
+
+    /// Goes to the waiting decision: it takes the island in the place's stead, as if the
+    /// user had brought it forward from the bubble. The place isn't summoned any more, so
+    /// it doesn't come back over the decision; it's one tab or hotkey away.
+    fn open_waiting(&mut self) {
+        let Some((id, _)) = self.tabs.waiting.clone() else { return };
+        self.summoned = false;
+        self.bring_forward(id);
     }
 
     /// Sizes the capsule for the number of places (rare: a module starting, Now Playing's
@@ -145,6 +201,8 @@ impl Pill {
     /// to a tab doesn't start the card's collapse.
     pub(super) fn switcher_zone(&self) -> Option<(f32, f32, f32, f32)> {
         let (l, _, r, b) = self.switcher_rect()?;
+        // A waiting bubble and the gap before it belong to it too.
+        let r = if self.tabs.waiting.is_some() { let w = self.tabs.layout.waiting(); l + (w.left + w.size) * self.scale } else { r };
         Some((l, self.window.top as f32 + (self.look.top() + self.expanded_height) * self.scale, r, b))
     }
 
@@ -152,6 +210,12 @@ impl Pill {
     fn switcher_tab(&self, x: f32, y: f32) -> Option<usize> {
         let (l, t, ..) = self.switcher_rect()?;
         self.tabs.layout.tab_at((x - l) / self.scale, (y - t) / self.scale)
+    }
+
+    /// Whether screen point (`x`, `y`) is on the waiting bubble.
+    fn on_waiting(&self, x: f32, y: f32) -> bool {
+        let Some((l, t, ..)) = self.switcher_rect().filter(|_| self.tabs.waiting.is_some()) else { return false };
+        self.tabs.layout.on_waiting((x - l) / self.scale, (y - t) / self.scale)
     }
 
     /// A click at client point (`x`, `y`): on a tab it goes to that place. `true` when the
@@ -162,7 +226,9 @@ impl Pill {
         if !(sx >= l && sx < r && sy >= t && sy < b) {
             return false;
         }
-        if let Some(i) = self.switcher_tab(sx, sy) {
+        if self.on_waiting(sx, sy) {
+            self.open_waiting();
+        } else if let Some(i) = self.switcher_tab(sx, sy) {
             self.open_place(i);
         }
         true
@@ -189,6 +255,13 @@ impl Pill {
         if want != self.tabs.hover {
             self.tabs.hover = want;
             if let Err(e) = self.draw_switcher() {
+                eprintln!("island: switcher failed: {e}");
+            }
+        }
+        let on_waiting = self.shown && self.on_waiting(pt.x as f32, pt.y as f32);
+        if on_waiting != self.tabs.waiting_hover {
+            self.tabs.waiting_hover = on_waiting;
+            if let Err(e) = self.draw_waiting() {
                 eprintln!("island: switcher failed: {e}");
             }
         }

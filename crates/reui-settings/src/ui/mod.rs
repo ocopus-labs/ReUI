@@ -27,6 +27,8 @@ pub enum Icon {
 pub struct Preview {
     pub moment: Moment,
     pub look: reui_design::look::Look,
+    /// Settings → General → View switcher: an open place's card shows it underneath.
+    pub switcher: bool,
 }
 
 /// The one state of the island a page is about (sizes and drawing: [`stage`] and

@@ -1,7 +1,7 @@
 //! When the view switcher shows and which tab is selected (docs/PRD-view-switcher.md §5.2).
 //! Pure, so the rules are testable without a window; the pill draws and places it.
 
-use reui_protocol::{Destination, Priority};
+use reui_protocol::{Activity, Destination, Priority};
 
 /// What the switcher is deciding about: the island's state and the card that's open.
 #[derive(Clone, Copy, Debug)]
@@ -31,9 +31,36 @@ pub fn selected(places: &[Destination], open: Option<Open<'_>>) -> Option<usize>
     places.iter().take(reui_design::layout::switcher::MAX_TABS).position(|p| p.module == open.module)
 }
 
+/// The decision waiting behind the open place while the switcher shows (PRD M2): the
+/// first one after the front in display order. Only decisions: they're what can't go on
+/// without you (an alert says something happened and keeps), and they're what a summoned
+/// place holds back (`order::arrange`).
+pub fn waiting(shown: &[Activity], switcher: bool) -> Option<&Activity> {
+    if !switcher {
+        return None;
+    }
+    shown.iter().skip(1).find(|a| a.priority == Priority::Decision)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use reui_protocol::{ActivityId, CompactView, Element};
+
+    fn activity(module: &str, priority: Priority) -> Activity {
+        Activity { id: ActivityId { module: module.into(), key: "k".into() }, priority, accent: None, compact: CompactView::default(), minimal: Element::Empty, audio: None, expanded: None }
+    }
+
+    #[test]
+    fn a_decision_behind_the_place_waits_on_the_switcher() {
+        let shown = [activity("clipboard", Priority::Passive), activity("media", Priority::Ongoing), activity("claude", Priority::Decision)];
+        assert_eq!(waiting(&shown, true).map(|a| a.id.module.as_str()), Some("claude"));
+        assert!(waiting(&shown, false).is_none(), "only while the switcher shows");
+        let alert = [activity("clipboard", Priority::Passive), activity("timers", Priority::Alert)];
+        assert!(waiting(&alert, true).is_none(), "alerts keep");
+        let front = [activity("claude", Priority::Decision)];
+        assert!(waiting(&front, true).is_none(), "the one in front isn't waiting");
+    }
 
     fn places(modules: &[&str]) -> Vec<Destination> {
         modules.iter().map(|m| Destination { module: (*m).into(), glyph: 'x', name: (*m).into(), open: "open".into() }).collect()

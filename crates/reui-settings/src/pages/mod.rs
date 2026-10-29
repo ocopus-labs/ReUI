@@ -142,7 +142,8 @@ impl Page {
 
     /// The page's island in the user's look.
     pub fn preview(self, state: &State) -> Option<Preview> {
-        self.moment().map(|moment| Preview { moment, look: look(state) })
+        let switcher = state.files.doc(crate::model::files::File::Island).bool("view_switcher");
+        self.moment().map(|moment| Preview { moment, look: look(state), switcher })
     }
 
     /// `--page clipboard`, for opening on a page.
