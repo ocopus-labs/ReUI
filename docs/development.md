@@ -33,13 +33,13 @@ To drive a sandboxed island without touching the real mouse or keyboard, post to
 
 ## The hub's flags
 
-The hub starts the island plus every module. `--no-agents`, `--no-media`, `--no-clipboard`, `--no-osd`, `--no-devices`, `--no-timers` skip one; `--no-link-previews` keeps clipboard links offline; `--no-updates` never looks for updates or mentions them. `--no-island` runs the hub alone so you can start `reui-island.exe` yourself (under a debugger, say). `--no-onboarding` skips the first run and one-time tips; `--first-run` replays the demo and welcome. The full list is the doc comment at the top of `crates/reui-hub/src/main.rs`.
+The hub starts the island plus every module. `--no-agents`, `--no-media`, `--no-clipboard`, `--no-osd`, `--no-devices`, `--no-timers`, `--no-privacy`, `--no-stats`, `--no-downloads`, `--no-screenshots` skip one; `--no-link-previews` keeps clipboard links offline; `--no-updates` never looks for updates or mentions them. `--no-island` runs the hub alone so you can start `reui-island.exe` yourself (under a debugger, say). `--no-onboarding` skips the first run and one-time tips; `--first-run` replays the demo and welcome. The full list is the doc comment at the top of `crates/reui-hub/src/main.rs`.
 
 `--demo` enables a module that shows now-playing, a 5-minute timer and, 25 s after each one is settled, the next agent moment: a permission with a scrolling script, a three-step question (one step multi-select) and a plan to approve. They take over the pill, answer nothing real, and time out and fail open (20 s for the permission, 60 s for the others). Hover to peek, click to expand, right-click the pill to quit ReUI.
 
 ## Settings' flags
 
-`reui-settings.exe --page <name>` opens on a page (general, now, clipboard, osd, devices, coding, privacy, about); `--welcome` opens the three welcome steps; `--perf` logs frame times. `--shots <dir>` saves every page as a PNG without showing the window; add `--backdrop-color #RRGGBB` to put that colour on the island stages instead of your wallpaper, and `--stages` to save only the stages, each alone at 200 % (`stage-<moment>[-light|-notch].png`). `pwsh -File tools\readme-images.ps1` renders the README's pictures that way, sandboxed, into `docs/images`.
+`reui-settings.exe --page <name>` opens on a page (general, now, clipboard, osd, devices, downloads, coding, privacy, about); `--welcome` opens the three welcome steps; `--perf` logs frame times. `--shots <dir>` saves every page as a PNG without showing the window; add `--backdrop-color #RRGGBB` to put that colour on the island stages instead of your wallpaper, and `--stages` to save only the stages, each alone at 200 % (`stage-<moment>[-light|-notch].png`). `pwsh -File tools\readme-images.ps1` renders the README's pictures that way, sandboxed, into `docs/images`.
 
 ## Install, by hand
 
@@ -54,6 +54,7 @@ Setup options: `--no-autostart` (don't start with Windows), `--no-launch`, `--qu
 | `%APPDATA%\ReUI\clipboard.db` | Clipboard history |
 | `%APPDATA%\ReUI\coding.json` | Coding agents: `show_sessions` (`needed` \| `working`), `show_finished` |
 | `%APPDATA%\ReUI\clipboard.json` | `hotkey`, `retention_days`, `ignored_apps`, `link_previews` |
+| `%APPDATA%\ReUI\downloads.json`, `screenshots.json` | Downloads: `enabled`, `folders` (watched besides Downloads); screenshots: `enabled` |
 | `%LOCALAPPDATA%\ReUI` | Caches and logs |
 | `%LOCALAPPDATA%\ReUI\update.json` | What the last update check found |
 | `%LOCALAPPDATA%\ReUI\agents.json` | Each coding agent's last event (at most one write per 10 s) |
@@ -112,6 +113,12 @@ The hub's `privacy` module shows which app is using the microphone, the camera o
 The hub's `island` module (`modules/hide.rs`) registers the island's hide shortcut (`hide_shortcut` in `settings.json`, Win+Alt+I by default; Win+Alt+H is Windows' voice typing) and relays a press as `HubMsg::ToggleHidden`; the island keeps the state (`hidden` in `settings.json`). `reui-bridge hide` sends the same request through the pipe, which is how scripts test it without pressing keys.
 
 The hub's `stats` module shows CPU, GPU, memory, disk and network in a card: **Win+Alt+S**, Tray → System stats, or `reui-bridge stats`. Stats have no OS events, so they're polled, but only while the card is open: opening it starts a sampler thread that reads once a second (like Task Manager), and the island's "collapsed" ends it. With the card closed the module costs nothing (measured). CPU matches Windows 11's Task Manager (`GetSystemTimes`, i.e. `% Processor Time`); GPU is the busiest engine with its processes summed, from PDH's English counter names. Settings: `%APPDATA%\ReUI\stats.json` (`shortcut`, `gpu`, `disk`, `network`, `power`). `--no-stats` turns it off. The full spec and the costs are in [docs/PRD-system-stats.md](docs/PRD-system-stats.md).
+
+## Downloads and screenshots internals
+
+The hub's `downloads` and `screenshots` modules share `modules/folders/`: an overlapped `ReadDirectoryChangesW` per folder on one thread per module, so nothing runs between downloads or shots. Downloads are recognised by the browsers' partial files (`.crdownload`, `.opdownload`, `.part`, `.partial`, `.!qB`, `.!ut`), sized at most once a second after a write, and done when renamed to their final name; no browser records the total, so there's no percentage. Screenshots come from `Pictures\Screenshots` and from the clipboard module, which hands Snipping Tool's images over (`screenshots::claim`) instead of showing its own toast. Spec: [PRD-downloads-screenshots.md](PRD-downloads-screenshots.md). `--no-downloads` / `--no-screenshots` turn them off.
+
+To try them without touching your own folders, a sandboxed hub (`REUI_CONFIG_DIR` set) also reads `REUI_DOWNLOADS_DIR` and `REUI_SCREENSHOTS_DIR` and watches those instead; outside a sandbox they're ignored. Grow a file named `<name>.crdownload` there from a script (append and flush every 250 ms), rename it to `<name>`, or save a PNG into the screenshots folder.
 
 ## Adding a module
 

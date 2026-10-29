@@ -73,6 +73,10 @@ The moment an app starts using your microphone or camera, or recording your scre
 
 Press **Win+Alt+S** to see how busy your PC is: CPU and memory with their last minute, then GPU, disk and network, live. A number that stays over 90 % turns orange, and the button at the top right opens Task Manager. It reads them only while the card is open, so it costs nothing the rest of the time.
 
+### Downloads and screenshots
+
+A download from your browser shows in the island while it arrives, with its size and speed, then **Open** and **Show in folder** when it's done. Chrome, Edge, Firefox, Opera and Brave all work, and you can add the folders they save to. Take a screenshot with Win+Shift+S or PrtScn and its thumbnail appears with the same buttons, saying when it's already on the clipboard. Settings → Downloads & screenshots.
+
 ### Timers and focus
 
 <img src="docs/images/timers.png" width="612" alt="A tea timer counting down, 3:42 left">

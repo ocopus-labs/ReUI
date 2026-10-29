@@ -32,7 +32,7 @@ reui-settings.exe  the Settings window, opened from the tray; single instance
 
 ```
 main.rs            flags (--no-agents, --no-media, --no-clipboard, --no-osd, --no-devices, --no-timers,
-                   --no-privacy, --no-stats, …), module list
+                   --no-privacy, --no-stats, --no-downloads, --no-screenshots, …), module list
 hub.rs             activities, ordering, ModuleContext (publish, retract, focus, image store)
 ipc.rs             the pipe: snapshots + images to surfaces, actions/commands/hooks back
 island.rs          launches and supervises reui-island
@@ -101,6 +101,17 @@ modules/
                    counted interfaces, the busiest GPU engine, number text; tested), history
                    (the open card's last minute per gauge, sustained-high tone; tested), view,
                    settings (stats.json)
+  folders/         shared by downloads and screenshots: notify (a ReadDirectoryChangesW buffer
+                   as changes, renames paired; pure, tested), watch (one thread, an overlapped
+                   read per folder, a stop event), shell (known folders, Open, Show in folder,
+                   file icons; a sandbox may point Downloads / Screenshots at temp folders)
+  downloads/       a browser's download in progress, then "Downloaded" with Open / Show in
+                   folder: partial (each browser's partial-file names; pure), tracker (appear,
+                   grow, settle a name, finish, cancel, speed, the once-a-second size reads,
+                   paused ones hidden; fake clock), view, settings (downloads.json: folders)
+  screenshots/     the screenshot card: shots (a Snipping Tool copy and its saved file as one
+                   shot, files seen once, PNG size; fake clock), view; `claim` is how the
+                   clipboard module hands it Snipping Tool's images instead of its toast
   updates/         daily update check, the update card (an Alert: Later / Install, then
                    download progress, installing or why it failed), "Updated" brief:
                    update.json + offer/snooze rules, card phases (pure, tested), views,
@@ -221,7 +232,7 @@ stats.rs           idle cost: CPU and private memory of ReUI's processes
 | `%APPDATA%\ReUI\settings.json` | island `visibility`, `show_on_desktop`, `hide_in_fullscreen`, `monitor`, `paused_until` while ReUI is paused, `hidden` while it's hidden with its shortcut (written by the island), `hide_shortcut` (read by the hub), `view_switcher`, `idle_clock`, and the look: `style` (island / notch), `theme` (auto / dark / light), `accent` (reui / windows), `roundness` (0..1), `top_gap` (0..24), `padding` (compact / regular / roomy), `scale` (0.9..1.25) |
 | `%APPDATA%\ReUI\onboarding.json` | first run done (`welcomed`), tips shown, offers answered |
 | `%APPDATA%\ReUI\clipboard.db`, `clipboard.json` | clipboard history and settings |
-| `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json`, `timers.json`, `privacy.json`, `stats.json`, `coding.json` | music, OSD, Devices, Timers, privacy indicator, System stats and coding agent settings (`coding.json` is read by all three agent modules) |
+| `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json`, `timers.json`, `privacy.json`, `stats.json`, `coding.json`, `downloads.json`, `screenshots.json` | music, OSD, Devices, Timers, privacy indicator, System stats, coding agent, downloads (extra folders) and screenshots settings (`coding.json` is read by all three agent modules) |
 | `%APPDATA%\ReUI\timer-state.json` | running and paused timers, a focus session, the stopwatch, and whether ReUI turned Do Not Disturb on |
 | `%LOCALAPPDATA%\ReUI\lyrics\` | lyrics cache |
 | `%LOCALAPPDATA%\ReUI\hub.log` | panics |
