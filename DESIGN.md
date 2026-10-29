@@ -13,6 +13,7 @@ The look and behaviour of every ReUI surface. The island is the first surface; t
 | Semantic view model (what modules may say) | `crates/reui-protocol` |
 | References | `design/reference/` (Figma kit export, moodboard in `inspiration/`) |
 | Figma | [Dynamic Island – Live Activities (Community)](https://www.figma.com/design/Oavznl8mcr41wrSfXdpCNs/Dynamic-Island---Live-Activities--Community-) by Jasper Cheyney; island geometry comes from here |
+| Figma (system alerts) | [iOS 17 Dynamic Island Components (Community)](https://www.figma.com/design/Q5jcdhxYldk71bDnC5VzIE/iOS17-Dynamic-Island-Components--Community-); its alerts with buttons shape the agent cards (see `docs/PRD-agent-moments.md` §5.8) |
 
 **The rule that keeps redesigns cheap:** modules describe *meaning* (priority, regions, element kinds, tones, button roles, an accent colour). Only the island decides *appearance*, and only from tokens. A redesign changes `tokens.json` and `render.rs`, never a module or the protocol. No hard-coded sizes, colours or fonts outside the token file.
 
@@ -34,7 +35,7 @@ Following Apple's Live Activity model, from the Figma kit:
 | Presentation | When | Anatomy |
 | --- | --- | --- |
 | **Idle** | No activities | Black capsule, `island.idle.width` × `island.height` |
-| **Compact** | One activity in front | `leading` · `center-gap` · `trailing`. Both sides are the **same width** (the wider side, margin included). Round content (art, ring) is inset `side-margin` so it sits concentric in the capsule's end; text and bare glyphs keep `text-margin` clear of the curve. Text is capped at `max-side`. Apple reserves 126 in the middle for the camera; Windows has no cutout, so the gap is only 48 |
+| **Compact** | One activity in front | `leading` · `center-gap` · `trailing`. Both sides are the **same width** (the wider side, margin included). Round content (art, ring) is inset `side-margin` so it sits concentric in the capsule's end; text and bare glyphs keep `text-margin` clear of the curve. Text is capped at `max-side`. Apple reserves 126 in the middle for the camera; Windows has no cutout, so the gap is only 48. **A text label** (copied, Caps Lock on, a device, "Allow?") instead sits `joined-gap` after its mark and the pill is only as wide as the two; a level fills the whole pill (see `Level` below) |
 | **Peek** | Pointer over compact | Compact grown by `island.compact.peek-grow` |
 | **Minimal** | A second activity exists | Detached circle `island.minimal.size`, `gap` to the right of the pill, showing the second activity's `minimal` element |
 | **Expanded** | Click, or a decision or alert arrives | Width `island.expanded.width`. Header: `leading` · eyebrow / hero / detail · `trailing` (or inline controls). Then full-width rows. Height fits content between `min-height` 84 and `max-height` 200 |
@@ -137,6 +138,7 @@ Elements a module can put in a region (`reui_protocol::Element`). Sizes depend o
 | `Ring(progress)` | 24, stroke 3 | 56, stroke 6 | 56, stroke 6 |
 | `Bars { live }` | Live visuals moving at `motion.bars.fps` while live and shown (in the pill, the open card and the minimal bubble, each in its own activity's accent); resting levels otherwise, flat when not live | Same | Same |
 | `Dot` | 8, accent | same | same |
+| `Level { value, dim }` | As the compact trailing side, the **whole pill is the meter** (`island.compact.meter-width`): the pill is the track, an accent fill at `opacity.meter-fill` grows from the left, inset `meter-inset` so its round ends stay concentric with the pill's; the leading glyph sits bare in the fill's left end and the percentage (tabular) at the right end. `dim` (muted) dims the fill and quiets the number. In the bubble: a ring | Accent bar on a track | Same |
 
 Images are sent once per surface (`HubMsg::Image`) ahead of the first snapshot that uses them, decoded with WIC, downscaled to 256 px on the short side and drawn cover-fitted (centre crop) into the shape. Until they arrive, a `fill.tertiary` placeholder of the same shape shows.
 

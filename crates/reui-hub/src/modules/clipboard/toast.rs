@@ -9,7 +9,6 @@ use super::store::{Kind, Saved};
 use super::{App, ACCENT, BLOCKED_TOAST, KEY, STACK_KEY, TOAST};
 use crate::hub::{ModuleContext, View};
 
-const GLYPH_TEXT: char = '\u{E8D2}';
 const GLYPH_LINK: char = '\u{E71B}';
 const GLYPH_FILE: char = '\u{E8A5}';
 const GLYPH_COLOR: char = '\u{E790}';
@@ -71,12 +70,13 @@ fn toast_view(ctx: &ModuleContext, latest: &Saved) -> View {
     }
 }
 
+/// What kind of thing was copied; plain text and code show "copied" itself.
 fn glyph_for(saved: &Saved) -> char {
     match saved.category.as_str() {
         "links" => GLYPH_LINK,
         "files" => GLYPH_FILE,
         "colors" => GLYPH_COLOR,
-        _ => GLYPH_TEXT,
+        _ => GLYPH_COPY,
     }
 }
 

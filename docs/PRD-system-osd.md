@@ -55,10 +55,10 @@ Pressing the volume keys (or the brightness keys on a laptop) shows Windows' own
 
 ### 5.1 Presentations
 
-- **Compact (the HUD):**
-  - Leading: the glyph, which changes by tier: speaker 0 / 1 / 2 / 3 waves, muted; sun dim / bright.
-  - Trailing: a **level bar** (new element `Element::Level`, accent fill on a track, ~64 DIP wide) that animates between values.
-  - A percentage appears only while dragging or if enabled (setting).
+- **Compact (the HUD):** the whole pill is the meter (revised Oct 29, 2026, from Rohit's sketch).
+  - The pill is the track; an accent fill grows from the left, inset so its round ends stay concentric with the pill's, and animates between values (`Element::Level` as the compact trailing side).
+  - The glyph sits in the fill's left end and changes by tier: speaker 0 / 1 / 2 / 3 waves, muted; sun dim / bright.
+  - The percentage is always at the right end. Muted dims the fill and quiets the number. The "Show percentage" setting covers the open pop-up only.
   - **Audio device:** the device glyph or short name ("AirPods", "Speakers") replaces the speaker glyph when it isn't the usual speakers.
 - **Minimal (bubble, when something else holds the pill):** a small **level ring** (`Element::Ring(level)`) with the glyph inside it.
 - **Expanded (hover or click on the HUD):**
