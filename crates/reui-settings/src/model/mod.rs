@@ -2,6 +2,7 @@
 //! coding agents.
 
 pub mod agents;
+pub mod calendar;
 pub mod doc;
 pub mod files;
 pub mod hotkey;
