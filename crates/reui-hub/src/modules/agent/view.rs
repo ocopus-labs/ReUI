@@ -15,7 +15,6 @@ use crate::hub::{ModuleContext, View};
 
 const GLYPH_DONE: char = '\u{E73E}';
 const GLYPH_FAILED: char = '\u{E7BA}';
-const GLYPH_QUESTION: char = '\u{E897}';
 const GLYPH_DENY: char = '\u{E711}';
 
 /// Whether a session in this phase is in the island at all. By default only what needs
@@ -100,7 +99,7 @@ pub(super) fn publish_session(ctx: &ModuleContext, me: &Agentry, id: &str, sessi
             Priority::Alert,
             Element::Text { text: "Question".into(), tone: Tone::Accent },
             // Not answerable here yet (agent moments M2): the question, read-only.
-            moment(me, session, Element::Glyph { glyph: GLYPH_QUESTION, tone: Tone::Accent }, "Question", Headline::Text(question.clone().unwrap_or_else(|| "Question".into())), None, Vec::new()),
+            moment(me, session, Element::Empty, "Question", Headline::Text(question.clone().unwrap_or_else(|| "Question".into())), None, Vec::new()),
         ),
         Phase::Failed { reason } => (
             Priority::Alert,

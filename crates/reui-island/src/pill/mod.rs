@@ -325,8 +325,10 @@ impl Pill {
             self.block_scroll = 0.0;
         }
         if !choices::same_list(previous_view.as_ref(), self.front_view()) {
-            // The next step of a question starts at its first choice.
-            self.choice_cursor = None;
+            // The next step of a question starts at its first choice (shown only while the
+            // card has the keyboard).
+            let asks = self.front_view().is_some_and(|v| v.rows.iter().any(|r| matches!(r, Row::Choices { .. })));
+            self.choice_cursor = asks.then_some(0);
             self.block_scroll = 0.0;
         }
         self.prune_hold();
