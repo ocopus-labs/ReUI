@@ -48,6 +48,8 @@ pub enum Moment {
     Devices,
     /// A running timer's card (Timers, and Appearance).
     Timer,
+    /// How busy the PC is: System stats' gauges and facts.
+    Stats,
     /// A coding agent asking permission.
     Permission,
 }

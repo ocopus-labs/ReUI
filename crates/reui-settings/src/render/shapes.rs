@@ -149,6 +149,49 @@ impl Painter<'_> {
         Ok(())
     }
 
+    /// A line through `points` with round joins and caps (a sparkline).
+    pub fn polyline(&self, points: &[(f32, f32)], width: f32, color: Color) -> Result<()> {
+        let Some((&(x0, y0), rest)) = points.split_first() else { return Ok(()) };
+        unsafe {
+            let factory = &self.r.gpu.factory;
+            let path = factory.CreatePathGeometry()?;
+            let sink = path.Open()?;
+            sink.BeginFigure(Vector2::new(x0, y0), D2D1_FIGURE_BEGIN_HOLLOW);
+            for &(x, y) in rest {
+                sink.AddLine(Vector2::new(x, y));
+            }
+            sink.EndFigure(D2D1_FIGURE_END_OPEN);
+            sink.Close()?;
+            let props = D2D1_STROKE_STYLE_PROPERTIES { startCap: D2D1_CAP_STYLE_ROUND, endCap: D2D1_CAP_STYLE_ROUND, lineJoin: D2D1_LINE_JOIN_ROUND, ..Default::default() };
+            let base: ID2D1Factory = factory.cast()?;
+            let style = base.CreateStrokeStyle(&props, None)?;
+            self.dc.DrawGeometry(&path, self.brush(color), width, &style);
+        }
+        Ok(())
+    }
+
+    /// The area under a line through `points` down to `bottom`, filled with `color` at
+    /// `top` fading to nothing at `bottom` (a sparkline's fill).
+    pub fn area_fading(&self, points: &[(f32, f32)], top: f32, bottom: f32, color: Color) -> Result<()> {
+        let (Some(&(first, _)), Some(&(last, _))) = (points.first(), points.last()) else { return Ok(()) };
+        let (a, b, _) = self.pair(color, color.with_alpha(0.0));
+        unsafe {
+            let path = self.r.gpu.factory.CreatePathGeometry()?;
+            let sink = path.Open()?;
+            sink.BeginFigure(Vector2::new(first, bottom), D2D1_FIGURE_BEGIN_FILLED);
+            for &(x, y) in points {
+                sink.AddLine(Vector2::new(x, y));
+            }
+            sink.AddLine(Vector2::new(last, bottom));
+            sink.EndFigure(D2D1_FIGURE_END_CLOSED);
+            sink.Close()?;
+            let props = D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES { startPoint: Vector2::new(0.0, top), endPoint: Vector2::new(0.0, bottom) };
+            let brush = self.dc.CreateLinearGradientBrush(&props, None, &self.stops(a, b)?)?;
+            self.dc.FillGeometry(&path, &brush, None);
+        }
+        Ok(())
+    }
+
     /// An arc of a circle with round caps, clockwise from 12 o'clock over `sweep` (0..=1).
     pub fn arc(&self, cx: f32, cy: f32, radius: f32, width: f32, sweep: f32, color: Color) -> Result<()> {
         let sweep = sweep.clamp(0.0, 0.9999);

@@ -58,7 +58,7 @@ pub fn line(p: &Painter, text: &str, font: IslandFont, x: f32, top: f32, w: f32,
     let r = Rect::at(x, top, w, h);
     match font {
         // The island's tabular formats.
-        IslandFont::Value | IslandFont::Compact | IslandFont::Caption => p.figures(text, Font::Island(font), r, align, ink),
+        IslandFont::Value | IslandFont::Compact | IslandFont::Caption | IslandFont::Fact => p.figures(text, Font::Island(font), r, align, ink),
         _ => p.text(text, Font::Island(font), r, align, ink),
     }
 }

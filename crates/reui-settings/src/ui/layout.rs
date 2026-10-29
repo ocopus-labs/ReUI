@@ -43,6 +43,9 @@ pub enum IslandFont {
     Context,
     CardTitle,
     CardCode,
+    GaugeLabel,
+    FactLabel,
+    Fact,
 }
 
 pub trait Measure {
