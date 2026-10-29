@@ -50,7 +50,7 @@ mod view;
 mod window;
 
 use self::link::LinkMeta;
-pub(crate) use self::os::thumbnail;
+pub(crate) use self::os::{app_name, exe_icon, thumbnail};
 use self::os::{Captured, Clipboard, Command, Content, Hotkey, OsEvent, OsStatus, Target};
 use self::settings::Settings;
 use self::stack::PasteStack;

@@ -24,7 +24,7 @@ use windows::Win32::System::Com::StructuredStorage::{PropVariantClear, PropVaria
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoTaskMemFree, CLSCTX_ALL, COINIT_MULTITHREADED, STGM_READ};
 
 pub use self::apps::{app_audio, set_app_muted, set_app_volume};
-pub use self::events::{capture_muted, default_output, watch, watch_events, AudioEvent, DefaultOutput, DeviceKind, Watch};
+pub use self::events::{capture_muted, default_output, set_capture_muted, watch, watch_events, AudioEvent, DefaultOutput, DeviceKind, Watch};
 pub use self::process::process_for;
 
 /// A player's own audio session.

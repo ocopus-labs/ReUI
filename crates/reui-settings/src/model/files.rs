@@ -16,12 +16,14 @@ pub enum File {
     Osd,
     Devices,
     Timers,
+    /// `privacy.json`: the privacy indicators (mic, camera, screen, location in use).
+    Privacy,
     /// `coding.json`, read by the three coding agent modules.
     Coding,
 }
 
 impl File {
-    pub const ALL: [File; 7] = [File::Island, File::Media, File::Clipboard, File::Osd, File::Devices, File::Timers, File::Coding];
+    pub const ALL: [File; 8] = [File::Island, File::Media, File::Clipboard, File::Osd, File::Devices, File::Timers, File::Privacy, File::Coding];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -31,6 +33,7 @@ impl File {
             File::Osd => "osd.json",
             File::Devices => "devices.json",
             File::Timers => "timers.json",
+            File::Privacy => "privacy.json",
             File::Coding => "coding.json",
         }
     }
@@ -45,6 +48,7 @@ impl File {
             File::Osd => &["osd"],
             File::Devices => &["devices"],
             File::Timers => &["timers"],
+            File::Privacy => &["privacy"],
             File::Coding => &["claude", "codex", "opencode"],
         }
     }
@@ -58,6 +62,7 @@ impl File {
             File::Osd => "osd",
             File::Devices => "devices",
             File::Timers => "timers",
+            File::Privacy => "privacy",
             File::Coding => "coding",
         }
     }
@@ -118,6 +123,7 @@ impl File {
                 "focus_auto_start": false,
                 "focus_dnd": false,
             }),
+            File::Privacy => json!({ "enabled": true, "microphone": true, "camera": true, "screen": true, "location": false }),
             File::Coding => json!({ "show_sessions": "needed", "show_finished": false }),
         }
     }

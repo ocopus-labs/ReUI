@@ -220,7 +220,7 @@ Agreed Oct 27, 2026. One feature at a time, each end to end (real source → hub
 | 6.5 | **Product shell** (install, first run, Settings window, trust) | Spec: [docs/PRD-product-shell.md](docs/PRD-product-shell.md) (P0–P5), draft for review. Comes before feature #7 |
 | 7 | Timers and focus | Spec: [docs/PRD-timers-focus.md](docs/PRD-timers-focus.md). Built Oct 28 (M0–M4): island-run clocks (protocol v17), typed timers (`10m tea`) from Win+Ctrl+T / tray / `reui-bridge timer`, several at once, a finish that opens and rings, late finishes after sleep or restart, focus sessions (ask or auto-start, optional Do Not Disturb, checked), stopwatch with laps, Settings → Timers. Open: hands-on typing and clicks, sleep/resume with a running timer |
 | 8 | Notifications (needs package identity) | |
-| 9 | Mic / camera in use | |
+| 9 | Mic / camera in use | Spec: [docs/PRD-privacy-indicators.md](docs/PRD-privacy-indicators.md). Built Oct 30 (M0–M1): the consent store watched with `RegNotifyChangeKeyValue`, uses checked against their processes, mic, camera, screen capture (`graphicsCaptureProgrammatic`) and location, mic mute, Settings → Mic & camera. Open: Core Audio capture sessions (M2), HKLM for elevated apps |
 | 10 | Calendar | |
 | 11 | Stats, downloads, file shelf | |
 

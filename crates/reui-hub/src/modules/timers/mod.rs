@@ -49,6 +49,8 @@ mod stopwatch;
 mod store;
 mod view;
 
+/// Also the privacy indicator's "Since 10:42".
+pub(crate) use self::view::time_of_day;
 use self::focus::{Focus, Phase, Plan};
 use self::model::{Cancelled, Finished, Timers, LATE_MS};
 use self::parse::Parsed;

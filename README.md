@@ -63,6 +63,10 @@ The volume and brightness keys show their level in the island, and ReUI can repl
 
 Bluetooth devices show their battery when they connect. Your PC and its devices warn at 20 % and 10 %, plugging in shows the time to full, and USB drives and memory cards come with **Eject**.
 
+### Mic, camera and screen
+
+The moment an app starts using your microphone or camera, or recording your screen, its icon and a coloured dot appear in the island: orange for the mic, green for the camera, purple for the screen. Open it to see every app and since when, and mute the microphone in one click. Settings → Mic & camera.
+
 ### Timers and focus
 
 <img src="docs/images/timers.png" width="612" alt="A tea timer counting down, 3:42 left">

@@ -102,6 +102,10 @@ The hub's `clipboard` module keeps everything you copy (text with its formatting
 - Privacy: copies that apps mark private (password managers) are never read; copies from ignored apps and text that looks like a secret (private keys, API tokens, JWTs) are never stored; history older than 30 days is removed except pinned items; up to 1 000 items / 500 MB. Pause for an hour or clear history from the tray. Nothing leaves the machine except link previews (public sites only, fetched when the card is shown; links that look like reset/sign-in/signed URLs only fetch the site's name).
 - Settings: `%APPDATA%\ReUI\clipboard.json` (`hotkey`, `retention_days`, `ignored_apps`, `link_previews`). `--no-link-previews` and `--no-clipboard` turn previews / the module off.
 
+## Privacy indicators internals
+
+The hub's `privacy` module shows which app is using the microphone, the camera or capturing the screen (location too, off by default), like iOS's orange and green dots: the app's icon and the kind's glyph in the pill, a dot in the bubble, and in the open card every app, since when, a mute for the microphone and **Privacy settings**. It reads Windows' own record of who uses what (the Capability Access Manager's consent store, watched for changes, no polling) and drops a use once no process from before it is running, so a crashed app never leaves a dot. ReUI's own programs never count. Settings: `%APPDATA%\ReUI\privacy.json` (Settings → Mic & camera); `--no-privacy` turns it off. Spec: [docs/PRD-privacy-indicators.md](docs/PRD-privacy-indicators.md).
+
 ## Adding a module
 
 Implement `modules::Module` in `crates/reui-hub/src/modules/`. In `run`, publish activities with `ctx.publish(key, priority, View { accent, compact, minimal, expanded })`, retract them with `ctx.retract(key)`, and handle inputs (button presses, agent hook calls) from `ctx.next()`. Register it in `main.rs`. Modules stay event-driven (no polling where an event exists) and describe meaning only: never sizes, fonts or theme colours. New features get a PRD in `docs/` first.

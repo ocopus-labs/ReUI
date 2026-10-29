@@ -47,7 +47,8 @@ use windows::Win32::Foundation::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
 pub use crate::modules::hotkey::Hotkey;
-pub(crate) use self::image::thumbnail;
+pub(crate) use self::image::{exe_icon, thumbnail};
+pub(crate) use self::target::app_name;
 pub use self::window::start_with;
 use self::window::WM_STACK;
 
