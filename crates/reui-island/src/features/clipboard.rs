@@ -152,8 +152,6 @@ mod tests {
     use reui_design::tokens::island;
     use reui_protocol::{CardSize, CompactView, Element, Headline, Item, Preview, Tab};
 
-    const W: f32 = 560.0;
-
     #[test]
     fn easing_settles_exactly_on_the_target() {
         let (mut x, mut moving) = (0.0, true);
