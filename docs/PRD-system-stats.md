@@ -39,7 +39,7 @@ Status: M0–M1 built, M2–M3 proposed · Owner: Rohit · "System stats" in [PL
 
 | # | Scenario | v1 |
 |---|---|---|
-| S1 | Fan spins up | Win+Alt+S. The card opens with CPU 87 % as the hero, GPU 12 %, memory "21.4 of 31.7 GB". Esc, a click elsewhere or Win+Alt+S again closes it, and sampling stops |
+| S1 | Fan spins up | Win+Alt+S. The card opens with CPU 87 % as the hero, GPU 12 %, memory "21.4 of 31.7 GB". Switching apps or Win+Alt+S again closes it, and sampling stops |
 | S2 | Download crawling | Tray → System stats. Network reads "↓ 1.2 MB/s ↑ 80 KB/s", the bar a sliver of the link |
 | S3 | Game stutters | Win+Alt+S over a windowed game: GPU 99 % · 7.8 GB. In exclusive fullscreen the island is hidden, so the card doesn't open and nothing is sampled |
 | S4 | Laptop on battery | The detail line reads "CPU · On battery, 14 W"; plugged in, "CPU · Charging, 45 W" |
@@ -51,7 +51,7 @@ Status: M0–M1 built, M2–M3 proposed · Owner: Rohit · "System stats" in [PL
 
 ### 5.1 Opening it
 
-- **Hotkey:** **Win+Alt+S** by default, configurable like the clipboard's and the timers'. Chosen because Windows 11 doesn't use it (Microsoft's list has Win+Alt+B, D, H, K, R and Enter; Game Bar adds G, R, T, M and PrtScn), PowerToys' defaults don't either, and it sits beside ReUI's Win+Alt+V. Win+Ctrl+S was the old Speech Recognition toggle and Win+Ctrl+P is free but meaningless. If another app has it, Settings says so (like the others) and the tray still works.
+- **Hotkey:** **Win+Alt+S** by default, configurable like the clipboard's and the timers'. Chosen because Windows 11 doesn't use it (Microsoft's list has Win+Alt+B, D, H, K, R and Enter; Game Bar adds G, R, T and PrtScn), PowerToys' defaults don't either, and it sits beside ReUI's Win+Alt+V. Win+Ctrl+S was the old Speech Recognition toggle and Win+Ctrl+P is free but meaningless. If another app has it, Settings says so (like the others) and the tray still works.
 - **Tray and pill menu:** "System stats", after Devices.
 - **Settings → System stats → Show**, and `reui-bridge stats`.
 - Pressing the hotkey again closes it, like the clipboard panel.
