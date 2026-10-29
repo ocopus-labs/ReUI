@@ -26,6 +26,7 @@ impl Renderer {
         let mut bars = None;
         let mut width = island::expanded::WIDTH;
         let mut block_max = 0.0;
+        let mut choice_spans = None;
         let max_height = match view.map(|v| v.size) {
             Some(CardSize::Roomy) => island::expanded::ROOMY_MAX_HEIGHT,
             _ => island::expanded::MAX_HEIGHT,
@@ -272,7 +273,12 @@ impl Renderer {
                             y += self.slider(rt, leading, value, action, trailing.as_ref(), y, thumb, dragging, accent, &mut hits)?
                         }
                         Row::Lyrics(lines) => y += self.lyrics(rt, lines, track_at, y, with.lyric)?,
-                        Row::Choices { options, multi } => y += self.choices(rt, options, *multi, with.choice, y, accent, &mut hits)?,
+                        Row::Choices { options, multi } => {
+                            let list = self.choices(rt, options, *multi, with.choice, y, with.block_scroll, accent, &mut hits)?;
+                            block_max = list.max_scroll;
+                            choice_spans = Some((list.spans, list.height));
+                            y += list.height;
+                        }
                         Row::Block { text, kind } => {
                             let (h, max) = self.block(rt, text, *kind, y, with.block_scroll, accent, &mut hits)?;
                             block_max = max;
@@ -307,7 +313,7 @@ impl Renderer {
             Ok(())
         })?;
         let radius = if view.is_some_and(|v| v.size == CardSize::Wide) { island::expanded::PANEL_RADIUS } else { island::expanded::RADIUS };
-        Ok(ExpandedLayout { width, height, radius, hits, bars, block_max })
+        Ok(ExpandedLayout { width, height, radius, hits, bars, block_max, choices: choice_spans })
     }
 
     /// The accent washed in from the top-left corner, fading out by `tint-extent` of the

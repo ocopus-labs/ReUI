@@ -5,7 +5,7 @@ use std::time::Instant;
 
 use reui_design::tokens::{component, island, motion, typography};
 use reui_protocol::{
-    ActivityId, ClientMsg, ItemKey, Row, ACTION_SWIPE_NEXT, ACTION_SWIPE_PREV,
+    ActivityId, ClientMsg, ItemKey, Row, ACTION_ALT, ACTION_SWIPE_NEXT, ACTION_SWIPE_PREV,
 };
 use windows::Win32::Foundation::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
@@ -134,8 +134,9 @@ impl Pill {
         }
     }
 
-    /// `x`, `y` are client pixels. Shift+click on a card is its Shift+Enter action.
-    pub fn on_click(&mut self, x: f32, y: f32, shift: bool) {
+    /// `x`, `y` are client pixels. Shift+click on a card is its Shift+Enter action; Alt+click
+    /// on a moment's button is its second meaning (`ACTION_ALT`: Deny → deny and say why).
+    pub fn on_click(&mut self, x: f32, y: f32, shift: bool, alt: bool) {
         // A click on the minimal bubble swaps that activity into the pill.
         if let Some((l, t, r, b)) = self.bubble_rect() {
             let (sx, sy) = (x + self.window.left as f32, y + self.window.top as f32);
@@ -172,7 +173,11 @@ impl Pill {
                 Some(i) if shift => self.item_action(i, ItemKey::ShiftEnter),
                 _ => None,
             };
-            let action = action.unwrap_or_else(|| hit.action_at(cx));
+            let mut action = action.unwrap_or_else(|| hit.action_at(cx));
+            let moment = self.front_view().is_some_and(|v| v.context.is_some());
+            if alt && moment && !hit.pager && hit.choice.is_none() && !action.is_empty() {
+                action = format!("{ACTION_ALT}{action}");
+            }
             // The switcher's middle ("1/2") is only a wheel target.
             if !action.is_empty() {
                 self.act(action, card);

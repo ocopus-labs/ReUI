@@ -184,6 +184,8 @@ struct Usage {
 struct Moments {
     queue: Queue,
     replies: HashMap<u64, oneshot::Sender<Option<String>>>,
+    /// The moment whose card is published (`view::MOMENT_PREFIX`).
+    published: Option<u64>,
 }
 
 /// Everything a module instance needs besides its sessions.
@@ -244,7 +246,7 @@ async fn run(profile: &'static Profile, mut ctx: ModuleContext) {
                             _ => Phase::Thinking,
                         };
                         resume(&ctx, &me, &mut sessions, &m.session, next);
-                        publish_moments(&ctx, &me, &moments, &sessions);
+                        publish_moments(&ctx, &me, &mut moments, &sessions);
                     }
                 }
                 Some(ModuleInput::Action(action)) if action.key.is_empty() && action.action == "reload" => {
@@ -253,7 +255,7 @@ async fn run(profile: &'static Profile, mut ctx: ModuleContext) {
                         publish_session(&ctx, &me, id, session);
                     }
                 }
-                Some(ModuleInput::Action(action)) if action.key == view::MOMENTS_KEY => {
+                Some(ModuleInput::Action(action)) if action.key.starts_with(view::MOMENT_PREFIX) => {
                     on_moment_action(&ctx, &me, &action.action, &mut sessions, &mut moments);
                 }
                 Some(ModuleInput::Action(_)) => {}
@@ -278,7 +280,7 @@ async fn run(profile: &'static Profile, mut ctx: ModuleContext) {
                     moments.replies.remove(&m.id);
                 }
                 if !expired.is_empty() {
-                    publish_moments(&ctx, &me, &moments, &sessions);
+                    publish_moments(&ctx, &me, &mut moments, &sessions);
                 }
                 sessions.retain(|id, session| {
                     let gone = session.retract_at.is_some_and(|t| t <= now) || session.last_event + STALE_AFTER <= now;

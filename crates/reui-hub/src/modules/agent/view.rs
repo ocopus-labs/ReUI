@@ -15,8 +15,10 @@ use crate::hub::{ModuleContext, View};
 
 const GLYPH_FAILED: char = '\u{E7BA}';
 
-/// The one activity every waiting moment of this agent shares (paged on its strip).
-pub(super) const MOMENTS_KEY: &str = "moments";
+/// The moment in front is the activity `moment-<id>`; the others wait behind its pager.
+/// A key per moment, so the island treats the next one as new: it opens by itself and
+/// never inherits the keyboard a click gave the last one (PRD agent moments §5.7).
+pub(super) const MOMENT_PREFIX: &str = "moment-";
 
 /// Whether a session in this phase is in the island at all. By default only what needs
 /// you: a question and a failed turn (permissions are their own activities and always
@@ -171,9 +173,15 @@ pub(super) fn publish_test(ctx: &ModuleContext, me: &Agentry) {
 
 /// The moments card (PRD agent moments §5): the one in front with its session's strip and
 /// the pager over the rest, at decision priority. Gone when nothing waits.
-pub(super) fn publish_moments(ctx: &ModuleContext, me: &Agentry, moments: &Moments, sessions: &HashMap<String, Session>) {
+pub(super) fn publish_moments(ctx: &ModuleContext, me: &Agentry, moments: &mut Moments, sessions: &HashMap<String, Session>) {
+    let shown = moments.queue.current().map(|m| m.id);
+    // The new one first, then the old one away, so the island never sees neither.
+    let retract = moments.published.filter(|old| Some(*old) != shown);
+    moments.published = shown;
     let Some(moment) = moments.queue.current() else {
-        ctx.retract(MOMENTS_KEY);
+        if let Some(old) = retract {
+            ctx.retract(&format!("{MOMENT_PREFIX}{old}"));
+        }
         return;
     };
     let strip = match sessions.get(&moment.session) {
@@ -182,10 +190,13 @@ pub(super) fn publish_moments(ctx: &ModuleContext, me: &Agentry, moments: &Momen
     };
     let (trailing, expanded) = card(moment, strip, moments.queue.position(), me.profile.short);
     ctx.publish(
-        MOMENTS_KEY,
+        &format!("{MOMENT_PREFIX}{}", moment.id),
         Priority::Decision,
         View { accent: Some(me.profile.accent), audio: None, compact: CompactView { leading: me.mark.clone(), trailing }, minimal: me.mark.clone(), expanded: Some(expanded) },
     );
+    if let Some(old) = retract {
+        ctx.retract(&format!("{MOMENT_PREFIX}{old}"));
+    }
 }
 
 fn format_duration(d: Duration) -> String {

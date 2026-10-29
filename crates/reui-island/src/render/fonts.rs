@@ -49,6 +49,8 @@ pub(super) struct Fonts {
     pub(super) context: Font,
     pub(super) choice: Font,
     pub(super) choice_detail: Font,
+    /// A description too long for one line wraps to a second (E-A6).
+    pub(super) choice_detail_wrap: Font,
     pub(super) icon_check: Font,
     /// Code and diff block lines (cut, not wrapped); prose blocks wrap.
     pub(super) block_code: Font,

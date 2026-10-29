@@ -10,7 +10,7 @@ use reui_protocol::{
 use windows::Win32::UI::WindowsAndMessaging::*;
 
 use crate::features::choices;
-use crate::features::clipboard::{self, Key};
+use crate::features::keys::{self, Key};
 use crate::features::clipboard_keys;
 use crate::settings::Visibility;
 
@@ -141,7 +141,7 @@ impl Pill {
             Key::Backspace => query.pop().is_some(),
             Key::BackspaceWord => {
                 let before = query.len();
-                clipboard::delete_word(query);
+                keys::delete_word(query);
                 query.len() != before
             }
             Key::Escape if !query.is_empty() => {
@@ -217,10 +217,10 @@ impl Pill {
         match choices::on_key(key, view, self.choice_cursor, typing, self.summoned) {
             choices::Effect::Pass => return false,
             choices::Effect::Ignore => {}
-            choices::Effect::Cursor(i) => self.choice_cursor = Some(i),
+            choices::Effect::Cursor(i) => self.set_choice_cursor(i),
             choices::Effect::Send { action, at } => {
-                if at.is_some() {
-                    self.choice_cursor = at;
+                if let Some(i) = at {
+                    self.set_choice_cursor(i);
                 }
                 self.send_action(action);
             }
