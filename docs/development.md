@@ -29,6 +29,8 @@ Release builds of the hub have no console window; debug builds (`cargo build`) k
 
 **Run test instances sandboxed:** `REUI_CONFIG_DIR=<dir>` gives the hub, island and Settings their own files, named pipe and single-instance lock, so they run beside an installed ReUI without touching its data.
 
+To drive a sandboxed island without touching the real mouse or keyboard, post to its own window (class `ReUI.Island`, found by its process): `WM_LBUTTONDOWN` / `WM_LBUTTONUP` at client pixels click it, and in debug builds `WM_APP + 20` with screen pixels in `lparam` (as `WM_MOUSEMOVE` packs them) is the pointer resting there, for hover and peek. Module commands go through the pipe (`reui-bridge stats`, `reui-bridge hide`).
+
 ## The hub's flags
 
 The hub starts the island plus every module. `--no-agents`, `--no-media`, `--no-clipboard`, `--no-osd`, `--no-devices`, `--no-timers` skip one; `--no-link-previews` keeps clipboard links offline; `--no-updates` never looks for updates or mentions them. `--no-island` runs the hub alone so you can start `reui-island.exe` yourself (under a debugger, say). `--no-onboarding` skips the first run and one-time tips; `--first-run` replays the demo and welcome. The full list is the doc comment at the top of `crates/reui-hub/src/main.rs`.
@@ -106,6 +108,8 @@ The hub's `clipboard` module keeps everything you copy (text with its formatting
 The hub's `privacy` module shows which app is using the microphone, the camera or capturing the screen (location too, off by default), like iOS's orange and green dots: the app's icon and the kind's glyph in the pill, a dot in the bubble, and in the open card every app, since when, a mute for the microphone and **Privacy settings**. It reads Windows' own record of who uses what (the Capability Access Manager's consent store, watched for changes, no polling) and drops a use once no process from before it is running, so a crashed app never leaves a dot. ReUI's own programs never count. Settings: `%APPDATA%\ReUI\privacy.json` (Settings → Mic & camera); `--no-privacy` turns it off. Spec: [docs/PRD-privacy-indicators.md](docs/PRD-privacy-indicators.md).
 
 ## System stats internals
+
+The hub's `island` module (`modules/hide.rs`) registers the island's hide shortcut (`hide_shortcut` in `settings.json`, Win+Alt+I by default; Win+Alt+H is Windows' voice typing) and relays a press as `HubMsg::ToggleHidden`; the island keeps the state (`hidden` in `settings.json`). `reui-bridge hide` sends the same request through the pipe, which is how scripts test it without pressing keys.
 
 The hub's `stats` module shows CPU, GPU, memory, disk and network in a card: **Win+Alt+S**, Tray → System stats, or `reui-bridge stats`. Stats have no OS events, so they're polled, but only while the card is open: opening it starts a sampler thread that reads once a second (like Task Manager), and the island's "collapsed" ends it. With the card closed the module costs nothing (measured). CPU matches Windows 11's Task Manager (`GetSystemTimes`, i.e. `% Processor Time`); GPU is the busiest engine with its processes summed, from PDH's English counter names. Settings: `%APPDATA%\ReUI\stats.json` (`shortcut`, `gpu`, `disk`, `network`, `power`). `--no-stats` turns it off. The full spec and the costs are in [docs/PRD-system-stats.md](docs/PRD-system-stats.md).
 

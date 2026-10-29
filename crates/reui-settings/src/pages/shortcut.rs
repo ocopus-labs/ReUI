@@ -1,4 +1,4 @@
-//! Shortcut rows (the clipboard history's, the timers', the stats card's): showing one, and what the recorder
+//! Shortcut rows (the clipboard history's, the timers', the stats card's, hiding the island): showing one, and what the recorder
 //! does with the chord it heard.
 
 use serde_json::Value;
@@ -9,18 +9,24 @@ use crate::model::hotkey::{self, Hotkey, Problem};
 use crate::state::State;
 use crate::ui::{Part, Row, Tone};
 
-/// The files with a shortcut, and what each is called in a clash.
-const OWNERS: [(File, &str); 3] = [(File::Clipboard, "Clipboard history"), (File::Timers, "Timers"), (File::Stats, "System stats")];
+/// The files with a shortcut, and what each does, for a clash ("Win+Alt+V already opens
+/// Clipboard history").
+const OWNERS: [(File, &str); 4] = [(File::Clipboard, "opens Clipboard history"), (File::Timers, "opens Timers"), (File::Stats, "opens System stats"), (File::Island, "hides the island")];
 
 /// A "Shortcut" row for `file`: its caps (or the recorder's prompt), and the recorder's
 /// last note in place of `detail`.
 pub fn row(state: &State, file: File, detail: &str) -> Row {
+    named(state, file, "Shortcut", detail)
+}
+
+/// The same, titled for a page where "Shortcut" alone wouldn't say what it's for.
+pub fn named(state: &State, file: File, title: &str, detail: &str) -> Row {
     let (detail, tone) = match &state.hotkey_note {
         Some((f, text, tone)) if *f == file => (text.clone(), *tone),
         _ => (detail.to_string(), Tone::Secondary),
     };
     let ok = state.files.doc(file).error().is_none();
-    let row = Row::new("hotkey", "Shortcut");
+    let row = Row::new("hotkey", title);
     let row = if detail.is_empty() { row } else { row.detail(detail).tone(tone) };
     row.part(Part::Hotkey { caps: hotkey::caps(&state.files.shortcut(file)), recording: state.recording == Some(file) })
         .enabled(ok)
@@ -43,7 +49,7 @@ pub fn chord(state: &mut State, mods: u32, vk: u32) {
     }
     // Another of ReUI's own shortcuts.
     if let Some((_, name)) = OWNERS.iter().find(|(other, _)| *other != file && Hotkey::parse(&state.files.shortcut(*other), keys::vk_of).as_ref() == Some(&key)) {
-        return note(state, &format!("{} already opens {name}", key.label()), Tone::Negative);
+        return note(state, &format!("{} already {name}", key.label()), Tone::Negative);
     }
     let held = state.held_hotkeys.iter().any(|(f, h)| *f == file && Hotkey::parse(h, keys::vk_of).is_some_and(|h| h == key));
     if !held && !keys::hotkey_free(&key) {
@@ -85,6 +91,11 @@ mod tests {
         assert_eq!((note.0, note.2), (File::Timers, Tone::Negative));
         assert!(note.1.contains("Clipboard history"));
         assert_eq!(state.files.shortcut(File::Timers), "Win+Ctrl+T");
+        // The island's hide shortcut takes part too.
+        state.recording = Some(File::Stats);
+        chord(&mut state, 0x0008 | 0x0001, u32::from(b'I'));
+        assert!(state.hotkey_note.clone().unwrap().1.contains("hides the island"));
+        assert_eq!(state.files.shortcut(File::Island), "Win+Alt+I");
         _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -55,11 +55,11 @@ pub fn sides(leading: f32, leading_margin: f32, trailing: f32, trailing_margin: 
     Sides { width, leading: leading_margin, trailing: width - trailing_margin }
 }
 
-/// A text label beside its mark.
+/// A text label (or a glyph) beside its mark.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Joined {
     pub width: f32,
-    /// The text's left edge and the width it's drawn in.
+    /// The text's (or glyph's) left edge and the width it's drawn in.
     pub text_x: f32,
     pub text_w: f32,
 }
@@ -72,6 +72,37 @@ pub fn joined(mark: f32, margin: f32, text: f32) -> Joined {
     let gap = island::compact::JOINED_GAP;
     let width = (margin + mark + gap + text_w + island::compact::TEXT_MARGIN).max(island::idle::WIDTH);
     Joined { width, text_x: margin + mark + gap, text_w }
+}
+
+/// A bare glyph beside its mark (the privacy indicator's app and microphone, an agent's
+/// mark and its check), by the same rule as a label: at the pill's far ends the two read
+/// as unrelated things with a hole between them. Unlike a label it has no length to fill
+/// the resting width with, so the pill is only as wide as the two; floored at the resting
+/// width it would just move the hole to the end. `glyph`: the glyph's width.
+pub fn beside(mark: f32, margin: f32, glyph: f32) -> Joined {
+    let x = margin + mark + island::compact::JOINED_GAP;
+    Joined { width: x + glyph + island::compact::TEXT_MARGIN, text_x: x, text_w: glyph }
+}
+
+/// The resting island's clock: the date, then the time, `joined-gap` apart and centred, as
+/// a label sits beside its mark. A peek on the idle pill shows both; the resting pill (with
+/// `idle_clock` on) only the time, so `date` is 0 there.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Clock {
+    pub width: f32,
+    /// The date's left edge (when there is one) and the time's, from the pill's left.
+    pub date_x: f32,
+    pub time_x: f32,
+}
+
+/// `date` and `time`: their measured widths; `rest`: the resting pill's width (the notch's
+/// is narrower), which the pill never goes under.
+pub fn clock(date: f32, time: f32, rest: f32) -> Clock {
+    let gap = if date > 0.0 { island::compact::JOINED_GAP } else { 0.0 };
+    let content = date + gap + time;
+    let width = (content + 2.0 * island::compact::TEXT_MARGIN).max(rest);
+    let date_x = (width - content) / 2.0;
+    Clock { width, date_x, time_x: date_x + date + gap }
 }
 
 /// A level (volume, brightness) as the whole pill: the pill is the track, an accent fill

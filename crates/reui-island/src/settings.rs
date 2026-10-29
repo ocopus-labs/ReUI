@@ -1,13 +1,14 @@
 //! User settings for the island, stored as JSON in `%APPDATA%\ReUI\settings.json`
 //! (`REUI_CONFIG_DIR\roaming` when that's set, for testing). Written by the Settings window
-//! and the tray (pause); the island watches the folder ([`watch`]) and applies changes as
-//! they land. Unknown or missing fields fall back to defaults; keys this version doesn't
+//! and the tray (pause, hide); the island watches the folder ([`watch`]) and applies changes
+//! as they land. Unknown or missing fields fall back to defaults; keys this version doesn't
 //! know are kept when saving, and a file that isn't a JSON object is never overwritten.
 //!
 //! Keys: `visibility` ("always" | "when-active" | "when-needed"), `paused_until` (Unix ms),
+//! `hidden` (bool: hidden with the hide shortcut or the tray until asked again),
 //! `hide_in_fullscreen` (bool, default true), `show_on_desktop` (bool, default true), `monitor` ("primary" | "cursor" | a display's
 //! device name such as `\\.\DISPLAY2`), `view_switcher` (bool, default true: tabs under an
-//! open place's card), and the look (`style`, `theme`, `roundness`, `top_gap`,
+//! open place's card), `idle_clock` (bool, default false: the time in the resting pill), and the look (`style`, `theme`, `roundness`, `top_gap`,
 //! `padding`, `scale`, `accent`; read by `reui_design::look::Appearance`).
 
 use std::path::{Path, PathBuf};
@@ -78,6 +79,10 @@ pub struct Settings {
     /// "Pause ReUI": the island stays hidden (and clipboard recording is paused) until this
     /// Unix time in ms. A time in the past means not paused.
     pub paused_until: Option<u64>,
+    /// Hidden with the hide shortcut (or the tray) until asked again. Unlike a pause,
+    /// modules and clipboard recording carry on; decisions still come through. Kept in the
+    /// file, so a restarted island stays as the user left it.
+    pub hidden: bool,
     /// Hide while a game, video or presentation is fullscreen.
     pub hide_in_fullscreen: bool,
     /// While the desktop is in front, show as if `visibility` were Always: in apps the island
@@ -87,13 +92,15 @@ pub struct Settings {
     pub monitor: MonitorChoice,
     /// The view switcher under an open place's card (docs/PRD-view-switcher.md).
     pub view_switcher: bool,
+    /// The time in the resting island (for a hidden taskbar). Off: the quiet empty pill.
+    pub idle_clock: bool,
     /// Style, theme, shape and size (Settings > Appearance).
     pub appearance: Appearance,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { visibility: Visibility::default(), paused_until: None, hide_in_fullscreen: true, show_on_desktop: true, monitor: MonitorChoice::default(), view_switcher: true, appearance: Appearance::default() }
+        Self { visibility: Visibility::default(), paused_until: None, hidden: false, hide_in_fullscreen: true, show_on_desktop: true, monitor: MonitorChoice::default(), view_switcher: true, idle_clock: false, appearance: Appearance::default() }
     }
 }
 
@@ -119,10 +126,12 @@ impl Settings {
         Self {
             visibility: map.get("visibility").and_then(Value::as_str).and_then(Visibility::parse).unwrap_or_default(),
             paused_until: map.get("paused_until").and_then(Value::as_u64),
+            hidden: map.get("hidden").and_then(Value::as_bool).unwrap_or(false),
             hide_in_fullscreen: map.get("hide_in_fullscreen").and_then(Value::as_bool).unwrap_or(true),
             show_on_desktop: map.get("show_on_desktop").and_then(Value::as_bool).unwrap_or(true),
             monitor: map.get("monitor").and_then(Value::as_str).map(MonitorChoice::parse).unwrap_or_default(),
             view_switcher: map.get("view_switcher").and_then(Value::as_bool).unwrap_or(true),
+            idle_clock: map.get("idle_clock").and_then(Value::as_bool).unwrap_or(false),
             appearance: Appearance::read(|k| map.get(k).and_then(Value::as_str).map(str::to_string), |k| map.get(k).and_then(Value::as_f64)),
         }
     }
@@ -153,6 +162,10 @@ impl Settings {
         match self.paused_until {
             Some(until) => map.insert("paused_until".into(), Value::from(until)),
             None => map.remove("paused_until"),
+        };
+        match self.hidden {
+            true => map.insert("hidden".into(), Value::Bool(true)),
+            false => map.remove("hidden"),
         };
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
@@ -203,6 +216,7 @@ mod tests {
         assert_eq!(Settings::parse(r#"{"monitor":"\\\\.\\DISPLAY2"}"#).monitor, MonitorChoice::Named(r"\\.\DISPLAY2".into()));
         assert!(Settings::default().hide_in_fullscreen);
         assert!(Settings::default().view_switcher && !Settings::parse(r#"{"view_switcher":false}"#).view_switcher);
+        assert!(!Settings::default().idle_clock && Settings::parse(r#"{"idle_clock":true}"#).idle_clock);
         // Missing or extra fields fall back to defaults instead of failing.
         assert_eq!(Settings::parse(r#"{"other":1}"#), Settings::default());
         assert_eq!(Settings::parse(r#"{"visibility":"sometimes"}"#), Settings::default());
@@ -224,6 +238,13 @@ mod tests {
         std::fs::write(&path, "{ broken").unwrap();
         assert!(s.save_to(&path).is_err());
         assert_eq!(std::fs::read_to_string(&path).unwrap(), "{ broken");
+        // Hidden is written while it's on and goes when it's off.
+        std::fs::write(&path, "{}").unwrap();
+        let hidden = Settings { hidden: true, ..Settings::default() };
+        hidden.save_to(&path).unwrap();
+        assert!(Settings::parse(&std::fs::read_to_string(&path).unwrap()).hidden);
+        Settings::default().save_to(&path).unwrap();
+        assert!(!std::fs::read_to_string(&path).unwrap().contains("hidden"));
         _ = std::fs::remove_dir_all(&dir);
     }
 

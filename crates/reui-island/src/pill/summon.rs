@@ -75,13 +75,16 @@ impl Pill {
     /// field, a choice list) and was asked to: opened by its hotkey, or clicked. The hook is
     /// gone the moment that stops being true.
     pub(super) fn update_capture(&mut self) {
-        let want = self.state == State::Expanded && self.shown && (self.summoned || self.engaged) && self.front_view().is_some_and(choices::wants_keys);
+        // The idle pill's row of places reads Esc alone, to close it.
+        let places = self.state == State::Places && self.shown;
+        clipboard_keys::escape_only(places);
+        let want = places || self.state == State::Expanded && self.shown && (self.summoned || self.engaged) && self.front_view().is_some_and(choices::wants_keys);
         if want == clipboard_keys::captured() {
             return;
         }
         if want {
             clipboard_keys::capture(self.hwnd);
-            if !clipboard_keys::captured() {
+            if !clipboard_keys::captured() || places {
                 return;
             }
             self.panel.query = Some(self.panel.module_query().unwrap_or_default().to_string());
@@ -129,6 +132,9 @@ impl Pill {
     }
 
     fn on_key(&mut self, key: Key) {
+        if self.state == State::Places {
+            return self.places_key();
+        }
         if let Key::View(step) = key {
             return self.step_place(step);
         }

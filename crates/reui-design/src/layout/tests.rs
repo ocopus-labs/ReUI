@@ -78,6 +78,25 @@ fn the_compact_pill_balances_its_sides() {
     let long = compact::joined(art, island::compact::SIDE_MARGIN, 1000.0);
     assert_eq!(long.text_w, island::compact::JOINED_TEXT);
     assert_eq!(long.width, long.text_x + long.text_w + island::compact::TEXT_MARGIN);
+    // A glyph beside its mark: the pill is only the two, narrower than at the far ends.
+    let glyph = icon::COMPACT;
+    let b = compact::beside(art, compact::margin(true), glyph);
+    assert_eq!(b.text_x, j.text_x);
+    assert_eq!(b.width, b.text_x + glyph + island::compact::TEXT_MARGIN);
+    assert!(b.width < compact::sides(art, compact::margin(true), glyph, compact::margin(false)).width);
+}
+
+#[test]
+fn the_idle_clock_is_centred_and_never_narrower_than_the_resting_pill() {
+    let rest = island::idle::WIDTH;
+    let time = compact::clock(0.0, 40.0, rest);
+    assert_eq!(time.width, rest);
+    assert_eq!(time.time_x, (rest - 40.0) / 2.0, "the time alone, centred");
+    let both = compact::clock(80.0, 40.0, rest);
+    let content = 80.0 + island::compact::JOINED_GAP + 40.0;
+    assert_eq!(both.width, content + 2.0 * island::compact::TEXT_MARGIN);
+    assert_eq!(both.date_x, island::compact::TEXT_MARGIN);
+    assert_eq!(both.time_x, both.date_x + 80.0 + island::compact::JOINED_GAP);
 }
 
 #[test]

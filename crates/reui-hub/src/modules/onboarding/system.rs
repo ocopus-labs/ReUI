@@ -23,10 +23,12 @@ pub fn quiet() -> bool {
     paused(&paths::config().join("settings.json"), reui_protocol::unix_ms()) || fullscreen()
 }
 
-/// "Pause ReUI" is on (the island's `paused_until`, Unix ms).
+/// "Pause ReUI" is on (the island's `paused_until`, Unix ms), or the island is hidden with
+/// its shortcut (`hidden`): either way a tip would show to no one.
 pub fn paused(settings: &Path, now: u64) -> bool {
     let Ok(text) = std::fs::read_to_string(settings) else { return false };
-    serde_json::from_str::<Value>(&text).ok().and_then(|v| v.get("paused_until")?.as_u64()).is_some_and(|until| until > now)
+    let Ok(v) = serde_json::from_str::<Value>(&text) else { return false };
+    v.get("hidden").and_then(Value::as_bool) == Some(true) || v.get("paused_until").and_then(Value::as_u64).is_some_and(|until| until > now)
 }
 
 fn fullscreen() -> bool {
@@ -243,6 +245,8 @@ mod tests {
         std::fs::write(&path, r#"{ "paused_until": 100 }"#).unwrap();
         assert!(paused(&path, 10));
         assert!(!paused(&path, 100));
+        std::fs::write(&path, r#"{ "hidden": true }"#).unwrap();
+        assert!(paused(&path, 100), "hidden with its shortcut");
         _ = std::fs::remove_dir_all(&dir);
     }
 }

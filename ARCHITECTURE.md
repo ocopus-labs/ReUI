@@ -46,6 +46,8 @@ modules/
                    arrivals, brightness keys (Raw Input), lock keys, Explorer restarts,
                    clock changes, module hotkeys
   hotkey.rs        hotkey settings ("Win+Alt+V") parsed into modifiers + virtual key
+  hide.rs          the island's hide shortcut (settings.json `hide_shortcut`, Win+Alt+I) and
+                   `toggle-hidden` (`reui-bridge hide`), relayed as HubMsg::ToggleHidden
   destinations.rs  the places the view switcher offers (module, glyph, name, open command),
                    from the running modules and Now Playing's card; the hub sends them as
                    HubMsg::Destinations when they change (pure, tested)
@@ -131,8 +133,10 @@ pill/              the island's behaviour
                    a new look rebuilds it (WM_LOOK), like a DPI change
   input.rs         clicks, wheel, drag, hover
   summon.rs        hotkey-summoned cards, keyboard capture, search
+  idle.rs          the idle pill: the time at rest (`idle_clock`), the date and time on a
+                   peek, a click opening the row of places
   switcher.rs      the view switcher: places, when it shows, its tabs placed and drawn,
-                   click / wheel / Ctrl+Tab to another place
+                   click / wheel / Ctrl+Tab to another place, a waiting decision's bubble beside it
   visibility.rs    size springs, show/hide, reveal, fullscreen, topmost
   timers.rs        tick, clocks, bars, scroll, lyric, level timers
   visuals.rs       level bars, logo
@@ -141,8 +145,9 @@ render/            drawing only (no behaviour state); where things go is reui_de
   fonts.rs  text.rs  images.rs  elements.rs
   compact.rs  minimal.rs  expanded.rs (strip + header + row layout)
   notch.rs         the Notch style's ears
+  idle.rs          the idle pill's faces: the time, the date and time, the row of places
   sheet.rs         test-only: the device-drawing contact sheet (target/devices-art/)
-  switcher.rs      the view switcher's tabs
+  switcher.rs      the view switcher's tabs and the waiting decision's dot
   rows/            timeline, controls, slider, lyrics, cards, search, tabs, note,
                    context (session strip), choices, block (scrolling text), gauges
                    (gauges with sparklines, facts: System stats)
@@ -155,7 +160,10 @@ features/          per-feature island logic
   visualizer.rs                     per-process audio loopback + FFT
   level.rs                          eased level values
   clock.rs                          how clocks read, and when they next change
-  switcher.rs                       when the view switcher shows, which tab is selected
+  idle.rs                           the idle pill's face (time, date and time, places), the wall
+                                    clock and when the minute turns
+  switcher.rs                       when the view switcher shows, which tab is selected,
+                                    which decision waits beside it
 ```
 
 **Rules:**
@@ -188,7 +196,7 @@ render/            drawing only: Renderer/Painter primitives, fonts, text (layou
   preview/         the hero card's island on the top of the screen: mod (stage, placement),
                    parts (shape and notch ears, tiles, rings, buttons, rows, placed by
                    reui_design::layout as the island places them), one file per moment: compact, music, clipboard (+ toast),
-                   levels, devices, timers, stats, agents
+                   levels, devices, timers, stats, agents; switcher (under the timer card)
 pages/             one file per page: build its rows from State, handle its controls;
                    welcome.rs is the three-step welcome (first run, Replay the tour)
 model/             settings files (read, change a key, atomic write, keep unknown keys,
@@ -210,7 +218,7 @@ stats.rs           idle cost: CPU and private memory of ReUI's processes
 
 | Path | What |
 |---|---|
-| `%APPDATA%\ReUI\settings.json` | island `visibility`, `show_on_desktop`, `hide_in_fullscreen`, `monitor`, `paused_until` while ReUI is paused, `view_switcher`, and the look: `style` (island / notch), `theme` (auto / dark / light), `accent` (reui / windows), `roundness` (0..1), `top_gap` (0..24), `padding` (compact / regular / roomy), `scale` (0.9..1.25) |
+| `%APPDATA%\ReUI\settings.json` | island `visibility`, `show_on_desktop`, `hide_in_fullscreen`, `monitor`, `paused_until` while ReUI is paused, `hidden` while it's hidden with its shortcut (written by the island), `hide_shortcut` (read by the hub), `view_switcher`, `idle_clock`, and the look: `style` (island / notch), `theme` (auto / dark / light), `accent` (reui / windows), `roundness` (0..1), `top_gap` (0..24), `padding` (compact / regular / roomy), `scale` (0.9..1.25) |
 | `%APPDATA%\ReUI\onboarding.json` | first run done (`welcomed`), tips shown, offers answered |
 | `%APPDATA%\ReUI\clipboard.db`, `clipboard.json` | clipboard history and settings |
 | `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json`, `timers.json`, `privacy.json`, `stats.json`, `coding.json` | music, OSD, Devices, Timers, privacy indicator, System stats and coding agent settings (`coding.json` is read by all three agent modules) |

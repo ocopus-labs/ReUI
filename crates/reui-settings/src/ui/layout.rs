@@ -387,7 +387,7 @@ mod tests {
 
     fn page() -> Vec<Block> {
         vec![
-            Block::Intro { eyebrow: None, title: "Clipboard".into(), body: Some("x".repeat(200)), icon: None, preview: Some(crate::ui::Preview { moment: crate::ui::Moment::Clipboard, look: reui_design::look::Look::default() }), row: Some(Row::new("clip:enabled", "Clipboard").part(Part::Toggle { on: true })) },
+            Block::Intro { eyebrow: None, title: "Clipboard".into(), body: Some("x".repeat(200)), icon: None, preview: Some(crate::ui::Preview { moment: crate::ui::Moment::Clipboard, look: reui_design::look::Look::default(), switcher: false }), row: Some(Row::new("clip:enabled", "Clipboard").part(Part::Toggle { on: true })) },
             group("History", vec![
                 Row::new("a", "One").detail("quiet").part(Part::Toggle { on: true }),
                 Row::new("b", "Two").icon(Icon::Mark).part(button("Open", Role::Secondary)).part(Part::Remove),
@@ -406,7 +406,7 @@ mod tests {
         let l = layout(&page(), 600.0, &Fixed);
         let Shape::Header { rect, stage: Some(stage), icon, title, body: Some(body), .. } = &l.shapes[0] else { panic!("header first") };
         assert_eq!(rect.t, s::page::TOP);
-        assert_eq!(stage.h(), crate::ui::stage::height(crate::ui::Preview { moment: crate::ui::Moment::Clipboard, look: reui_design::look::Look::default() }, 600.0));
+        assert_eq!(stage.h(), crate::ui::stage::height(crate::ui::Preview { moment: crate::ui::Moment::Clipboard, look: reui_design::look::Look::default(), switcher: false }, 600.0));
         assert_eq!(icon.t, stage.b + s::header::PADDING);
         assert_eq!(title.l, icon.r + s::header::ICON_GAP);
         assert_eq!(body.t, title.b + s::header::LINE_GAP);

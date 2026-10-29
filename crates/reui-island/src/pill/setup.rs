@@ -228,11 +228,45 @@ impl Pill {
             None
         };
         root.Children()?.InsertAtTop(&switcher)?;
+
+        // A decision waiting behind the open place: a bubble `waiting-gap` after the
+        // switcher's end, in with `p.wv` (and the switcher's own `p.v`), scaling up from its
+        // centre as the second activity's bubble does.
+        props.InsertScalar(h!("wv"), 0.0)?;
+        let waiting_geometry = reui_design::layout::switcher::Switcher::new(&look, 0).waiting();
+        let waiting_px = waiting_geometry.size * s;
+        let waiting_surface = renderer.surface((waiting_geometry.size, waiting_geometry.size))?;
+        let waiting = compositor.CreateSpriteVisual()?;
+        waiting.SetSize(Vector2::new(waiting_px, waiting_px))?;
+        waiting.SetBrush(&color_brush(&compositor, look.palette.background)?)?;
+        let waiting_clip = compositor.CreateRoundedRectangleGeometry()?;
+        waiting_clip.SetSize(Vector2::new(waiting_px, waiting_px))?;
+        let waiting_round = waiting_geometry.radius * s;
+        waiting_clip.SetCornerRadius(Vector2::new(waiting_round, waiting_round))?;
+        waiting.SetClip(&compositor.CreateGeometricClipWithGeometry(&waiting_clip)?)?;
+        waiting.SetCenterPoint(Vector3::new(waiting_px / 2.0, waiting_px / 2.0, 0.0))?;
+        let place = "Vector3(Round((W + p.sw) / 2 + Gw), Round(T + p.h + G - (1 - p.v) * R), 0)";
+        let place_scalars = [("W", win_w), ("T", top * s), ("G", island::switcher::GAP * s), ("Gw", island::switcher::WAITING_GAP * s), ("R", rise)];
+        waiting.StartAnimation(h!("Offset"), &expr(place, &place_scalars)?)?;
+        waiting.StartAnimation(h!("Opacity"), &expr("p.v * p.wv", &[])?)?;
+        waiting.StartAnimation(h!("Scale"), &expr("Vector3(0.6 + 0.4 * p.wv, 0.6 + 0.4 * p.wv, 1)", &[])?)?;
+        waiting.Children()?.InsertAtTop(&surface_sprite(&compositor, &waiting_surface, (waiting_geometry.size, waiting_geometry.size), s)?)?;
+        if look.palette.hairline.a > 0.0 {
+            let line = edge(&compositor, &waiting_clip, look.palette.hairline)?;
+            line.SetSize(Vector2::new(waiting_px, waiting_px))?;
+            waiting.Children()?.InsertAtTop(&line)?;
+        }
+        root.Children()?.InsertAtTop(&waiting)?;
+
         let tabs = Tabs {
             sprite: switcher,
             clip: switcher_clip,
             edge: switcher_edge,
             surface: switcher_surface,
+            waiting_surface,
+            waiting: None,
+            waiting_hover: false,
+            waiting_drawn: None,
             places: Vec::new(),
             enabled: true,
             selected: None,
@@ -333,6 +367,7 @@ impl Pill {
             drag_guard: DragGuard::default(),
             visibility,
             paused: false,
+            hidden_by_user: false,
             revealed: false,
             shown: true,
             clickthrough: true,
@@ -356,6 +391,7 @@ impl Pill {
             block_max: 0.0,
             choice_spans: None,
             tabs,
+            idle: Default::default(),
             to_hub,
             events,
         })

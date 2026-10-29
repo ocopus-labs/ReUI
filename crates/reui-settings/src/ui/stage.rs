@@ -125,9 +125,20 @@ pub fn shown(preview: Preview, width: f32) -> Moment {
     }
 }
 
-/// The stage's height: the gap, the island at its real size, and room under it.
+/// Whether the stage shows the view switcher under the card: a running timer's card is the
+/// Timers place, and the switcher is on. The other places' pages show what's particular
+/// to them (the panel, the gauges, the player), which a switcher under each would only
+/// crowd; one stage is enough to show how it looks in the user's look.
+pub fn switcher(preview: Preview, shown: Moment) -> bool {
+    preview.switcher && shown == Moment::Timer
+}
+
+/// The stage's height: the gap, the island at its real size (a switcher under it
+/// included), and room under it.
 pub fn height(preview: Preview, width: f32) -> f32 {
-    let (_, h) = size(shown(preview, width), &preview.look);
+    let moment = shown(preview, width);
+    let (_, h) = size(moment, &preview.look);
+    let h = h + if switcher(preview, moment) { reui_design::layout::switcher::ROOM } else { 0.0 };
     (top(&preview.look) + h * preview.look.size + stage_header::STAGE_ROOM).max(stage_header::STAGE_MIN).ceil()
 }
 
@@ -157,16 +168,16 @@ mod tests {
 
     #[test]
     fn padding_and_size_grow_the_stage() {
-        let regular = Preview { moment: Moment::Music, look: Look::default() };
-        let roomy = Preview { moment: Moment::Music, look: look(Appearance { padding: Padding::Roomy, ..Appearance::default() }) };
-        let big = Preview { moment: Moment::Music, look: look(Appearance { size: 1.25, ..Appearance::default() }) };
+        let regular = Preview { moment: Moment::Music, look: Look::default(), switcher: false };
+        let roomy = Preview { moment: Moment::Music, look: look(Appearance { padding: Padding::Roomy, ..Appearance::default() }), switcher: false };
+        let big = Preview { moment: Moment::Music, look: look(Appearance { size: 1.25, ..Appearance::default() }), switcher: false };
         assert!(height(roomy, 600.0) > height(regular, 600.0));
         assert!(height(big, 600.0) > height(regular, 600.0));
     }
 
     #[test]
     fn a_panel_too_wide_for_the_stage_shows_the_toast() {
-        let clipboard = |size: f32| Preview { moment: Moment::Clipboard, look: look(Appearance { size, ..Appearance::default() }) };
+        let clipboard = |size: f32| Preview { moment: Moment::Clipboard, look: look(Appearance { size, ..Appearance::default() }), switcher: false };
         assert_eq!(shown(clipboard(1.0), 640.0), Moment::Clipboard);
         assert_eq!(shown(clipboard(1.25), 640.0), Moment::Toast);
         assert!(height(clipboard(1.25), 640.0) < height(clipboard(1.0), 640.0));
@@ -178,7 +189,16 @@ mod tests {
         assert_eq!(top(&notch), 0.0);
         let floating = look(Appearance { top_gap: 20.0, size: 1.25, ..Appearance::default() });
         assert_eq!(top(&floating), 20.0, "the gap is in DIPs at any size");
-        let compact = Preview { moment: Moment::Meter, look: Look::default() };
+        let compact = Preview { moment: Moment::Meter, look: Look::default(), switcher: false };
         assert_eq!(height(compact, 600.0), stage_header::STAGE_MIN.max((island::TOP + island::HEIGHT + stage_header::STAGE_ROOM).ceil()));
+    }
+
+    #[test]
+    fn a_places_card_makes_room_for_the_switcher_while_it_is_on() {
+        let timer = |switcher| Preview { moment: Moment::Timer, look: Look::default(), switcher };
+        assert!(switcher(timer(true), Moment::Timer));
+        assert!(!switcher(timer(false), Moment::Timer));
+        assert!(!switcher(Preview { moment: Moment::Permission, ..timer(true) }, Moment::Permission), "a moment has none");
+        assert_eq!(height(timer(true), 600.0) - height(timer(false), 600.0), reui_design::layout::switcher::ROOM.ceil());
     }
 }
