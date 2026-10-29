@@ -6,6 +6,7 @@ pub mod agent;
 mod audio;
 pub mod clipboard;
 pub mod demo;
+pub mod destinations;
 pub mod devices;
 pub mod hotkey;
 pub mod media;

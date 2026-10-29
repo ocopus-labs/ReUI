@@ -15,7 +15,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-pub const PROTOCOL_VERSION: u32 = 18;
+pub const PROTOCOL_VERSION: u32 = 19;
 const MAX_FRAME: usize = 16 * 1024 * 1024;
 
 /// Per-user pipe name; the hub also restricts the pipe's ACL to the current user. A test
@@ -520,6 +520,25 @@ pub enum HubMsg {
     /// Bring this activity to the front and open it (e.g. a hotkey asked for it). Sent after
     /// the snapshot that contains it.
     Focus { id: ActivityId },
+    /// The places a surface may offer to switch between (a view switcher), in order. Sent
+    /// after `Welcome` and whenever the list changes, never per snapshot.
+    Destinations(Vec<Destination>),
+}
+
+/// A place the user can go to on purpose (clipboard history, the timer launcher), as
+/// opposed to a moment that comes to them. Surfaces offer these as tabs; how a tab looks
+/// is theirs.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct Destination {
+    /// The module whose cards belong to this place: an open card of this module is "in" it.
+    pub module: String,
+    /// A Segoe Fluent Icons code point, as [`Element::Glyph`] carries.
+    pub glyph: char,
+    /// Its accessible name ("Clipboard"), for assistive technology rather than a label.
+    pub name: String,
+    /// The [`ClientMsg::Command`] action that opens it (the tray's own path); the module
+    /// publishes its card and asks for focus.
+    pub open: String,
 }
 
 impl Element {
@@ -648,6 +667,9 @@ mod tests {
         write_frame(&mut a, &HubMsg::Welcome { version: PROTOCOL_VERSION }).await.unwrap();
         assert_eq!(read_frame::<_, HubMsg>(&mut b).await.unwrap(), snapshot);
         assert_eq!(read_frame::<_, HubMsg>(&mut b).await.unwrap(), HubMsg::Welcome { version: PROTOCOL_VERSION });
+        let places = HubMsg::Destinations(vec![Destination { module: "clipboard".into(), glyph: '\u{E77F}', name: "Clipboard".into(), open: "open".into() }]);
+        write_frame(&mut a, &places).await.unwrap();
+        assert_eq!(read_frame::<_, HubMsg>(&mut b).await.unwrap(), places);
     }
 
     #[test]
