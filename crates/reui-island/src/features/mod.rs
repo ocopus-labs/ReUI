@@ -5,6 +5,7 @@ pub mod choices;
 pub mod clipboard;
 pub mod clipboard_keys;
 pub mod clock;
+pub mod drop;
 pub mod idle;
 pub mod keys;
 pub mod level;

@@ -33,6 +33,9 @@ impl Pill {
             State::Expanded => (self.expanded_width, self.expanded_height),
             // The row of places: as wide as its tabs, the island's height (`idle.rs`).
             State::Places => (self.compact_width, core_h),
+            // Wider than the pill and as tall as a peek: taller would start the compact
+            // face's cross-fade into a card (`setup.rs`).
+            State::Drop => (self.compact_width + island::shelf::DROP_GROW, core_h + grow),
         }
     }
 
@@ -48,7 +51,7 @@ impl Pill {
             State::Idle => motion::spring::SETTLE,
             State::Compact => motion::spring::COLLAPSE,
             State::Peek => motion::spring::PEEK,
-            State::Expanded | State::Places => motion::spring::EXPAND,
+            State::Expanded | State::Places | State::Drop => motion::spring::EXPAND,
         };
         let height = Spring {
             damping_ratio: (preset.damping_ratio + motion::height::DAMPING_OFFSET).min(1.0),

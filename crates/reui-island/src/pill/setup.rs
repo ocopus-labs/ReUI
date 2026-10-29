@@ -392,6 +392,7 @@ impl Pill {
             choice_spans: None,
             tabs,
             idle: Default::default(),
+            drops: Default::default(),
             to_hub,
             events,
         })

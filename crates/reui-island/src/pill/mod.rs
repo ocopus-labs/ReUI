@@ -39,6 +39,7 @@ use crate::place::MonitorChoice;
 use crate::settings::Visibility;
 use crate::order;
 
+mod drop;
 mod idle;
 mod input;
 mod link;
@@ -72,6 +73,9 @@ pub enum State {
     Expanded,
     /// The idle pill clicked open into the row of places (`idle.rs`).
     Places,
+    /// A drag from elsewhere is over the island: the pill is the file shelf's drop target
+    /// (`drop.rs`).
+    Drop,
 }
 
 pub struct Pill {
@@ -221,6 +225,8 @@ pub struct Pill {
     tabs: switcher::Tabs,
     /// The idle pill: its clock setting and the row of places' hover.
     idle: idle::Idle,
+    /// The file shelf's drop target and drags out of cards.
+    drops: drop::Drops,
     to_hub: UnboundedSender<ClientMsg>,
     events: Receiver<Event>,
 }
@@ -232,7 +238,7 @@ impl Pill {
 
     /// Nothing is happening (no activities from the hub).
     pub fn idle(&self) -> bool {
-        self.raw.activities.is_empty()
+        self.raw.activities.is_empty() && !self.drops.showing
     }
 
     fn apply(&mut self, snapshot: Snapshot) -> Result<()> {
@@ -259,10 +265,14 @@ impl Pill {
             let asked = self.pinned.clone().filter(|_| self.hidden_by_user && !self.paused && self.summoned);
             raw.retain(|a| a.priority == reui_protocol::Priority::Decision || Some(&a.id) == asked.as_ref());
         }
-        let (activities, pin_alive) = order::arrange(raw, self.pinned.as_ref(), self.summoned, open.as_ref(), briefs_lead);
+        let (mut activities, pin_alive) = order::arrange(raw, self.pinned.as_ref(), self.summoned, open.as_ref(), briefs_lead);
         if !pin_alive {
             self.pinned = None;
             self.summoned = false;
+        }
+        // A drag over the island: the drop target leads, whatever else is going on.
+        if let Some(face) = self.drop_face() {
+            activities.insert(0, face);
         }
         Snapshot { activities }
     }
