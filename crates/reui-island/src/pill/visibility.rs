@@ -263,8 +263,9 @@ impl Pill {
         let c = &self.compositor;
         let result = (|| -> Result<()> {
             let (duration, ease) = if show {
-                // Decelerate with a slight overshoot: arrives, then settles.
-                (motion::show::IN, c.CreateCubicBezierEasingFunction(Vector2::new(0.34, 1.4), Vector2::new(0.64, 1.0))?)
+                // Decelerate with a slight overshoot: arrives, then settles. A control point
+                // at 1.4 swung ~10 % past and read as a wobble; 1.15 is one small settle.
+                (motion::show::IN, c.CreateCubicBezierEasingFunction(Vector2::new(0.3, 1.15), Vector2::new(0.6, 1.0))?)
             } else {
                 (motion::show::OUT, c.CreateCubicBezierEasingFunction(Vector2::new(0.4, 0.0), Vector2::new(1.0, 1.0))?)
             };

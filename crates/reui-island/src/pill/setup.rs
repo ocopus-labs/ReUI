@@ -132,12 +132,16 @@ impl Pill {
         let minimal_surface = renderer.surface(MINIMAL_SURFACE)?;
 
         // Compact content: centred, nudged down while peeking, gone early in an expansion.
+        // Its place on screen is rounded once (the window's centre), and its offset inside
+        // the pill is that minus the pill's own rounded offset. Rounding each separately
+        // made them disagree by a pixel from frame to frame as the width moved: the content
+        // shook while it should stand still.
         let compact = surface_sprite(&compositor, &compact_surface, COMPACT_SURFACE, s)?;
         compact.StartAnimation(
             h!("Offset"),
             &expr(
-                "Vector3(Round((p.w - Ws) / 2), Round(Min((p.h - Hc) / 2, D)), 0)",
-                &[("Ws", COMPACT_SURFACE.0 * s), ("Hc", core.1 * s), ("D", island::compact::PEEK_GROW / 2.0 * s)],
+                "Vector3(Round((W - Ws) / 2) - Round((W - p.w) / 2), Round(Min((p.h - Hc) / 2, D)), 0)",
+                &[("W", win_w), ("Ws", COMPACT_SURFACE.0 * s), ("Hc", core.1 * s), ("D", island::compact::PEEK_GROW / 2.0 * s)],
             )?,
         )?;
         compact.StartAnimation(h!("Opacity"), &expr(&compact_fade, &[])?)?;
@@ -160,7 +164,8 @@ impl Pill {
         let from = motion::crossfade::EXPANDED_SCALE_FROM;
         let expanded = surface_sprite(&compositor, &expanded_surface, expanded_dims, s)?;
         expanded.SetCenterPoint(Vector3::new(expanded_dims.0 / 2.0 * s, 0.0, 0.0))?;
-        expanded.StartAnimation(h!("Offset"), &expr("Vector3(Round((p.w - We) / 2), 0, 0)", &[("We", expanded_dims.0 * s)])?)?;
+        // Held still on screen while the pill grows around it, as the compact content is.
+        expanded.StartAnimation(h!("Offset"), &expr("Vector3(Round((W - We) / 2) - Round((W - p.w) / 2), 0, 0)", &[("W", win_w), ("We", expanded_dims.0 * s)])?)?;
         expanded.StartAnimation(h!("Opacity"), &expr(&format!("Clamp(({t} - {start}) / (1 - {start}), 0, 1)"), &[])?)?;
         let grow = format!("{from} + (1 - {from}) * {t}");
         expanded.StartAnimation(h!("Scale"), &expr(&format!("Vector3({grow}, {grow}, 1)"), &[])?)?;

@@ -65,6 +65,6 @@ mod tests {
         assert_eq!(color::label::PRIMARY.to_rgba8(), [0xEB, 0xEB, 0xF0, 0xFF]);
         assert!((color::fill::TRACK.a - 0.16).abs() < 1e-6);
         assert_eq!(motion::delay::COLLAPSE, 450);
-        assert_eq!(motion::spring::EXPAND, Spring { damping_ratio: 0.68, period_ms: 60.0 });
+        assert_eq!(motion::spring::EXPAND, Spring { damping_ratio: 0.8, period_ms: 60.0 });
     }
 }
