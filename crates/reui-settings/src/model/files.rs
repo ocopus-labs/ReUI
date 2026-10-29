@@ -83,6 +83,7 @@ impl File {
                 "show_on_desktop": true,
                 "view_switcher": true,
                 "hide_shortcut": "Win+Alt+I",
+                "idle_clock": false,
                 "monitor": "primary",
                 "check_updates": true,
                 "whats_new": true,

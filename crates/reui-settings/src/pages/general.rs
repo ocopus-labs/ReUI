@@ -45,10 +45,13 @@ pub fn build(state: &State) -> Vec<Block> {
     // Tabs under an open place's card (docs/PRD-view-switcher.md).
     let switcher = flag(state, File::Island, "view_switcher", "View switcher", "Tabs under an open card: Clipboard, Timers, Devices, System stats")
         .icon(icons::tile(icons::TABS, palette::ORANGE));
+    // The time in the resting pill, for people who hide the taskbar (a peek shows it anyway).
+    let clock = flag(state, File::Island, "idle_clock", "Clock in the resting island", "The time while nothing else is showing")
+        .icon(icons::tile(icons::CLOCK, palette::INDIGO));
     // Hides it until pressed again; the hub registers it (`modules/hide.rs`).
     let hide = super::shortcut::named(state, File::Island, "Hide the island", "Until you press it again; permission requests still show")
         .icon(icons::tile(icons::KEYBOARD, palette::GRAY));
-    blocks.push(group("Island", vec![visibility, desktop, monitor, fullscreen, switcher, hide]));
+    blocks.push(group("Island", vec![visibility, desktop, monitor, fullscreen, switcher, clock, hide]));
 
     let left = state.files.paused_until().and_then(|until| until.checked_sub(reui_protocol::unix_ms())).filter(|&ms| ms > 0);
     let pause = match left {

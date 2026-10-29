@@ -87,6 +87,19 @@ fn the_compact_pill_balances_its_sides() {
 }
 
 #[test]
+fn the_idle_clock_is_centred_and_never_narrower_than_the_resting_pill() {
+    let rest = island::idle::WIDTH;
+    let time = compact::clock(0.0, 40.0, rest);
+    assert_eq!(time.width, rest);
+    assert_eq!(time.time_x, (rest - 40.0) / 2.0, "the time alone, centred");
+    let both = compact::clock(80.0, 40.0, rest);
+    let content = 80.0 + island::compact::JOINED_GAP + 40.0;
+    assert_eq!(both.width, content + 2.0 * island::compact::TEXT_MARGIN);
+    assert_eq!(both.date_x, island::compact::TEXT_MARGIN);
+    assert_eq!(both.time_x, both.date_x + 80.0 + island::compact::JOINED_GAP);
+}
+
+#[test]
 fn the_meter_fills_from_its_round_end() {
     let l = Look::default();
     assert_eq!(compact::meter(&l, 0.0).fill, None);

@@ -31,6 +31,8 @@ impl Pill {
             State::Compact => (self.compact_width, core_h),
             State::Peek => (self.compact_width + grow, core_h + grow),
             State::Expanded => (self.expanded_width, self.expanded_height),
+            // The row of places: as wide as its tabs, the island's height (`idle.rs`).
+            State::Places => (self.compact_width, core_h),
         }
     }
 
@@ -46,7 +48,7 @@ impl Pill {
             State::Idle => motion::spring::SETTLE,
             State::Compact => motion::spring::COLLAPSE,
             State::Peek => motion::spring::PEEK,
-            State::Expanded => motion::spring::EXPAND,
+            State::Expanded | State::Places => motion::spring::EXPAND,
         };
         let height = Spring {
             damping_ratio: (preset.damping_ratio + motion::height::DAMPING_OFFSET).min(1.0),
@@ -158,6 +160,7 @@ impl Pill {
         self.visibility = settings.visibility;
         self.show_on_desktop = settings.show_on_desktop;
         self.set_switcher_enabled(settings.view_switcher);
+        self.set_idle_clock(settings.idle_clock);
         if self.hide_in_fullscreen != settings.hide_in_fullscreen {
             self.hide_in_fullscreen = settings.hide_in_fullscreen;
             self.update_fullscreen(unsafe { GetForegroundWindow() });

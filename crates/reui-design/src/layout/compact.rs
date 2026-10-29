@@ -84,6 +84,27 @@ pub fn beside(mark: f32, margin: f32, glyph: f32) -> Joined {
     Joined { width: x + glyph + island::compact::TEXT_MARGIN, text_x: x, text_w: glyph }
 }
 
+/// The resting island's clock: the date, then the time, `joined-gap` apart and centred, as
+/// a label sits beside its mark. A peek on the idle pill shows both; the resting pill (with
+/// `idle_clock` on) only the time, so `date` is 0 there.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Clock {
+    pub width: f32,
+    /// The date's left edge (when there is one) and the time's, from the pill's left.
+    pub date_x: f32,
+    pub time_x: f32,
+}
+
+/// `date` and `time`: their measured widths; `rest`: the resting pill's width (the notch's
+/// is narrower), which the pill never goes under.
+pub fn clock(date: f32, time: f32, rest: f32) -> Clock {
+    let gap = if date > 0.0 { island::compact::JOINED_GAP } else { 0.0 };
+    let content = date + gap + time;
+    let width = (content + 2.0 * island::compact::TEXT_MARGIN).max(rest);
+    let date_x = (width - content) / 2.0;
+    Clock { width, date_x, time_x: date_x + date + gap }
+}
+
 /// A level (volume, brightness) as the whole pill: the pill is the track, an accent fill
 /// grows from the left, inset so its round ends are concentric with the pill's.
 #[derive(Clone, Copy, Debug, PartialEq)]

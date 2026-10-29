@@ -40,6 +40,10 @@ use crate::settings::Settings;
 
 /// Re-reads settings.json this long after the folder last changed. Outside the pill's
 /// timer ids (which start at 1).
+/// Debug builds: a test script's pointer position (see the window procedure).
+#[cfg(debug_assertions)]
+const WM_TEST_POINTER: u32 = WM_APP + 20;
+
 const TIMER_SETTINGS: usize = 100;
 const SETTINGS_SETTLE_MS: u32 = 150;
 /// Re-place the island (display, DPI, work area) once things settle after a resume, a
@@ -320,6 +324,15 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             LRESULT(1)
         }
         WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
+        // Debug builds only: a pointer position (screen pixels, lparam as for WM_MOUSEMOVE)
+        // posted by a test script, so hover and peek can be checked without moving the
+        // user's real mouse. Release builds never read it.
+        #[cfg(debug_assertions)]
+        WM_TEST_POINTER => {
+            let (x, y) = client_point(lparam);
+            with_pill(|pill| pill.on_mouse_move(POINT { x: x as i32, y: y as i32 }));
+            LRESULT(0)
+        }
         clipboard_keys::WM_KEYS => {
             with_pill(|pill| pill.on_keys());
             LRESULT(0)

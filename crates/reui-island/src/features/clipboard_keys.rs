@@ -35,6 +35,14 @@ thread_local! {
     static MASK: Cell<bool> = const { Cell::new(false) };
     /// The view switcher shows, so Ctrl+Tab is ours.
     static VIEWS: Cell<bool> = const { Cell::new(false) };
+    /// Only Esc is ours (the idle pill's row of places): typing goes on to the app.
+    static ESCAPE_ONLY: Cell<bool> = const { Cell::new(false) };
+}
+
+/// Whether only Esc is read (the idle pill's row of places, which has nothing to type
+/// into): every other key goes on to the app in front.
+pub fn escape_only(on: bool) {
+    ESCAPE_ONLY.set(on);
 }
 
 pub fn captured() -> bool {
@@ -132,6 +140,9 @@ fn handle(msg: u32, info: &KBDLLHOOKSTRUCT) -> bool {
     let mods = Mods { shift: pressed(VK_SHIFT), ctrl: pressed(VK_CONTROL), alt: pressed(VK_MENU) || info.flags.0 & LLKHF_ALTDOWN.0 != 0 };
     let dead = Cell::new(false);
     let key = map_key(code as u16, mods, || typed(info, mods, &dead)).filter(|k| !matches!(k, Key::View(_)) || VIEWS.get());
+    if ESCAPE_ONLY.get() && key != Some(Key::Escape) {
+        return false;
+    }
     if key.is_none() && !dead.get() {
         return false;
     }

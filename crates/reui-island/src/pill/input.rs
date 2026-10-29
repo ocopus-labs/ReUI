@@ -41,7 +41,7 @@ impl Pill {
     pub fn on_mouse_down(&mut self, pt: POINT, button: u8) {
         let (x, y) = (pt.x as f32, pt.y as f32);
         let within = |(l, t, r, b): (f32, f32, f32, f32)| x >= l && x < r && y >= t && y < b;
-        let interactive = self.shown && self.state != State::Idle;
+        let interactive = self.shown;
         let on_switcher = self.switcher_zone().is_some_and(within);
         let on_island = interactive && (within(self.shape_rect()) || self.bubble_rect().is_some_and(within) || on_switcher);
         self.drag_guard.press(button, on_island || self.menu_open);
@@ -51,6 +51,10 @@ impl Pill {
         // A press on the switcher is going to another place, not away.
         if !within(self.shape_rect()) && !on_switcher {
             self.dismiss_summoned();
+            // Elsewhere, the idle pill's row of places folds away.
+            if self.state == State::Places {
+                self.set_state(State::Idle);
+            }
         }
     }
 
@@ -80,7 +84,8 @@ impl Pill {
             self.refresh_visibility();
             unsafe { SetTimer(Some(self.hwnd), TIMER_REVEAL, motion::delay::REVEAL_HOLD, None) };
         }
-        let interactive = self.shown && self.state != State::Idle && !dragging;
+        // The idle pill too: it peeks with the date and time, and opens into the places.
+        let interactive = self.shown && !dragging;
         let (x, y) = (pt.x as f32, pt.y as f32);
         let within = |(l, t, r, b): (f32, f32, f32, f32)| x >= l && x < r && y >= t && y < b;
         let on_bubble = interactive && self.bubble_rect().is_some_and(within);
@@ -96,6 +101,7 @@ impl Pill {
             self.set_clickthrough(false);
         }
         self.hover_switcher(pt);
+        self.hover_places(pt);
         self.update_thumb(pt);
         self.update_hover_card(pt, inside);
         if inside == self.inside {
@@ -119,13 +125,17 @@ impl Pill {
                 let delay = if self.summoned { motion::delay::PANEL_IDLE } else { motion::delay::COLLAPSE };
                 _ = SetTimer(Some(self.hwnd), TIMER_COLLAPSE, delay, None);
             },
+            // Like a card opened with a click: it folds a moment after the pointer leaves.
+            State::Places => unsafe {
+                _ = SetTimer(Some(self.hwnd), TIMER_COLLAPSE, motion::delay::COLLAPSE, None);
+            },
             State::Peek if was_hovered => self.set_state(State::Compact),
             _ => {}
         }
     }
 
     pub(super) fn on_hover_intent(&mut self) {
-        if !self.inside || !self.shown || self.state == State::Idle || self.drag_guard.blocks() {
+        if !self.inside || !self.shown || self.drag_guard.blocks() {
             return;
         }
         self.hovered = true;
@@ -135,8 +145,9 @@ impl Pill {
         }
         unsafe { _ = KillTimer(Some(self.hwnd), TIMER_COLLAPSE) };
         self.set_clickthrough(false);
-        // Resting on the bubble makes it clickable without growing the pill.
-        if self.state == State::Compact && !self.on_bubble {
+        // Resting on the bubble makes it clickable without growing the pill. The idle pill
+        // peeks too, with the date and time.
+        if matches!(self.state, State::Compact | State::Idle) && !self.on_bubble {
             self.set_state(State::Peek);
         }
     }
@@ -144,7 +155,7 @@ impl Pill {
     /// `x`, `y` are client pixels. Shift+click on a card is its Shift+Enter action; Alt+click
     /// on a moment's button is its second meaning (`ACTION_ALT`: Deny → deny and say why).
     pub fn on_click(&mut self, x: f32, y: f32, shift: bool, alt: bool) {
-        if self.click_switcher(x, y) {
+        if self.click_switcher(x, y) || self.click_idle(x, y) {
             return;
         }
         // A click on the minimal bubble swaps that activity into the pill.

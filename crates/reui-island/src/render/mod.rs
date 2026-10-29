@@ -47,6 +47,7 @@ mod compact;
 mod elements;
 mod expanded;
 mod fonts;
+mod idle;
 mod images;
 mod minimal;
 mod notch;
@@ -59,6 +60,7 @@ mod text;
 pub use reui_design::layout::compact::{BARS, BAR_LEVELS as BAR_LEVELS_LIVE, MAX_WIDTH as COMPACT_MAX_WIDTH, MINIMAL_SURFACE, SURFACE as COMPACT_SURFACE};
 pub use reui_design::layout::expanded_surface;
 pub use reui_design::layout::switcher::SURFACE as SWITCHER_SURFACE;
+pub use self::idle::IdleContent;
 pub use self::notch::EAR_SURFACE;
 
 /// Resting height of every bar while not live (flat).

@@ -135,6 +135,22 @@ While you're in a place, a decision (a permission request, an agent's question o
 - **Only decisions.** An alert (done, failed) says something happened; it keeps until you leave, as before. Decisions are what can't go on without you.
 - **Quiet.** No sound, no auto-switching, no pulsing: it arrives with its own small spring (`p.wv`, critically damped, scaling up from its centre like the second activity's bubble) in the same pass that draws the snapshot it came in, and leaves on the short reduced spring. It goes when the decision is answered or the switcher goes.
 
+### 5.8 The idle island: a way in (Rohit, Oct 30)
+
+The switcher only exists once you're in a place, and the resting island did nothing: hover only grew it, a click went nowhere. So with nothing happening the empty pill becomes the way in, without becoming the Home page §5.1 rejects:
+
+| | Shows | Why |
+|---|---|---|
+| At rest | The quiet empty pill (unchanged). With Settings → General → **Clock in the resting island** (`idle_clock`, off by default), the time in `label.secondary` | People who hide the taskbar lose the clock; the island is where they look. Off by default: the resting island stays as calm as it was |
+| Hover (peek, after `hover-intent`) | The date and time, "Fri 30 Oct  14:32": the date quiet, the time primary, `joined-gap` apart, the pill as wide as both | The one fact worth having at a glance when nothing else is going on. The user's 12/24-hour format and language for the names (`GetTimeFormatEx`, `GetDateFormatEx`) |
+| Click | The pill opens into the **row of places**: the same destinations and glyphs as the switcher (`HubMsg::Destinations`), as the switcher draws them, the pill as wide as the row at the island's height. One place is still a row | The switcher's tabs, offered where you'd look first. No labels: the glyphs are the ones the switcher teaches, and an 8 pt label under each at this height is filler |
+| Click a tab | Opens that place exactly as a switcher tab does (its module's open command); the first snapshot with its card folds the row and the card opens summoned | One path for every way in |
+| Esc, a press elsewhere, leaving (`delay.collapse`) | The row folds back to the resting pill | As any card opened with a click. Esc comes from the keyboard hook in an Esc-only mode, so typing still reaches the app in front; the island never takes focus |
+
+- **Not a Home page.** It holds no content of its own (no "Nothing playing", no tiles that summarise other places), only the doors, and only while there's nothing to repeat. The moment an activity arrives the pill is that activity's again; the hover clock never shows over one.
+- **Costs nothing at rest.** The clock is drawn once and redrawn just after each minute turns, only while it's on screen (at rest with `idle_clock`, or peeking); without it, a resting island has no timer at all. Motion is the pill's own springs (peek, `expand` for the row: critically damped).
+- Geometry: `layout::compact::clock` (the date and time, centred, never narrower than the resting pill) and `layout::switcher` (the row); logic: `features::idle` (which face, when the minute turns; tested); drawing: `render/idle.rs`; behaviour: `pill/idle.rs`.
+
 ## 6. Protocol (v19)
 
 - `Destination { module, glyph, name, open }`: a place a surface can offer. `glyph` is a Segoe Fluent Icons code point (as `Element::Glyph` carries), `name` its accessible name ("Clipboard"), `open` the command to send to `module` to open it.
@@ -165,6 +181,8 @@ While you're in a place, a decision (a permission request, an agent's question o
 
 `%APPDATA%\ReUI\settings.json` `view_switcher` (bool, default true), Settings → General → Island: "View switcher". The island watches the file, as for its other settings.
 
+`idle_clock` (bool, default false), Settings → General → Island: "Clock in the resting island" (§5.8).
+
 ## 10. Accessibility
 
 - Contrast: unselected glyphs `label.secondary` on the island's material (about 6:1 on black), selected `label.primary` on `fill.secondary`. Light uses the light palette.
@@ -179,6 +197,7 @@ While you're in a place, a decision (a permission request, an agent's question o
 | M0 | Protocol (`Destination`, `HubMsg::Destinations`, v19); the hub's list from running modules and Now Playing's card (pure, tested); Now Playing's `show`; tokens and `reui_design::layout::switcher` (pure, tested) | Tests | Done |
 | M1 | The island draws it under a place's card, with its motion; click, wheel and Ctrl+Tab open places through their modules; hover and click-through rules; Settings → General toggle | A sandbox `--demo` hub: Clipboard → Timers → System stats by tab, screenshots in dark, light and Notch | Done: a sandbox `--demo` hub, Stats → Clipboard → Timers by click, Devices by wheel, Now Playing by click; dark, Light + Notch, roundness 0. Ctrl+Tab is unit-tested only (no input was injected). Building it showed that a card summoned over an open one never replaced it (`order.rs`); fixed |
 | M2 | A waiting decision shows beside the switcher while you're in a place (its accent dot in a bubble after the switcher's end; click to go to it, §5.7); a Settings preview shows the switcher | Permission arriving during a summoned place is visible within one frame | Done: the bubble is drawn in the render pass of the snapshot that brings the decision (`features::switcher::waiting`, tested; geometry `layout::switcher::Waiting`, tested). Alerts don't show: they keep. Settings draws the switcher under the timer card (Timers and Appearance: a running timer is the Timers place) while the toggle is on; General's stage is the compact pill, where the switcher never shows |
+| M2b | The idle island as a way in (§5.8): the time at rest (`idle_clock`), the date and time on a peek, a click opening the row of places | Places open from the idle pill; no timer at rest without the clock | Done: a sandbox hub with no activities, dark and Notch + Light; hover and clicks posted to the sandbox island's own window (a debug-only pointer message), no input injected |
 | M3 | A coding agents sessions view (own PRD) as a destination | | Planned |
 | M4 | UI Automation for the island; the switcher as a tab list | Narrator reads "Clipboard, tab, selected, 1 of 4" | Planned |
 

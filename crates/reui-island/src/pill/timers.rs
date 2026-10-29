@@ -94,7 +94,7 @@ impl Pill {
                 self.revealed = false;
                 self.refresh_visibility();
             }
-            TIMER_COLLAPSE if !self.hovered && self.state == State::Expanded => self.set_state(State::Compact),
+            TIMER_COLLAPSE if !self.hovered && matches!(self.state, State::Expanded | State::Places) => self.set_state(State::Compact),
             TIMER_SEARCH => self.flush_search(),
             TIMER_AWAIT => {
                 // The results never came back to match; act on what's showing.
@@ -146,7 +146,7 @@ impl Pill {
         let front = self.front().and_then(|a| clock::next_change(a, compact, false, open, now));
         let second = self.snapshot.activities.get(1).and_then(|a| clock::next_change(a, false, self.minimal, false, now));
         unsafe {
-            match front.into_iter().chain(second).min().filter(|_| self.shown) {
+            match front.into_iter().chain(second).chain(self.idle_clock_due()).min().filter(|_| self.shown) {
                 // A little after the change, so the redraw lands on the new reading.
                 Some(ms) => _ = SetTimer(Some(self.hwnd), TIMER_CLOCK, (ms as u32).saturating_add(15), None),
                 None => _ = KillTimer(Some(self.hwnd), TIMER_CLOCK),
@@ -158,6 +158,7 @@ impl Pill {
     /// open card, so the pill's width is right when it folds back; a width change (9:59
     /// after 10:00) re-springs the pill only when compact is what's showing.
     fn tick_clock(&mut self) {
+        self.draw_idle();
         let default_accent = self.look.accent;
         let accent = |a: &Activity| a.accent.map(render::rgb).unwrap_or(default_accent);
         if let Some(a) = self.snapshot.activities.first().filter(|a| clock::in_compact(a)) {

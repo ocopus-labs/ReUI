@@ -28,6 +28,7 @@ pub const VIEW: char = '\u{E890}';
 /// ViewAll: the view switcher.
 pub const TABS: char = '\u{E8A9}';
 pub const KEYBOARD: char = '\u{E765}';
+pub const CLOCK: char = '\u{E823}';
 pub const MIC: char = '\u{E720}';
 pub const BATTERY_LOW: char = '\u{E851}';
 pub const BATTERY: char = '\u{E859}';

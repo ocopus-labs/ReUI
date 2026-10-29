@@ -391,6 +391,7 @@ impl Pill {
             block_max: 0.0,
             choice_spans: None,
             tabs,
+            idle: Default::default(),
             to_hub,
             events,
         })

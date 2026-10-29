@@ -36,7 +36,7 @@ Following Apple's Live Activity model, from the Figma kit:
 
 | Presentation | When | Anatomy |
 | --- | --- | --- |
-| **Idle** | No activities | Black capsule, `island.idle.width` × `island.height` |
+| **Idle** | No activities | Black capsule, `island.idle.width` × `island.height`, empty; with `idle_clock` on (Settings → General), the time in `label.secondary`, centred. **A peek** shows the date (secondary) and the time (primary) `joined-gap` apart, centred, the pill as wide as both plus `text-margin` each side (`layout::compact::clock`). **A click** opens it into the row of places: the view switcher's destinations as its tabs (circles one `island.switcher.inset` in, glyphs only, the hovered one on `fill.quaternary`), the pill as wide as the row at the island's height. No labels: the glyphs are the switcher's, which the user learns there, and a label under a 16 glyph at this height would be 8 pt filler. The hover clock never shows while something is happening |
 | **Compact** | One activity in front | `leading` · `center-gap` · `trailing`. Both sides are the **same width** (the wider side, margin included). Round content (art, ring) is inset `side-margin` so it sits concentric in the capsule's end; text and bare glyphs keep `text-margin` clear of the curve. Text is capped at `max-side`. Apple reserves 126 in the middle for the camera; Windows has no cutout, so the gap is only 48. **A text label** (copied, Caps Lock on, a device, "Allow?") instead sits `joined-gap` after its mark and the pill is only as wide as the two (never narrower than the resting pill); **a bare glyph** (the privacy indicator's microphone, an agent's check) does the same, and the pill is just the two (a glyph has no length to fill the resting width, so a floor would only move the empty space to the end). Rings, clocks, bars, levels and art stay at the far end, where they read as the activity's state; a level fills the whole pill (see `Level` below) |
 | **Peek** | Pointer over compact | Compact grown by `island.compact.peek-grow` |
 | **Minimal** | A second activity exists | Detached circle `island.minimal.size`, `gap` to the right of the pill, showing the second activity's `minimal` element |
@@ -81,6 +81,7 @@ Layout templates fall out of the content, so modules don't pick them:
 | Decision answered | Folds back to compact (unless hovered) |
 | Pointer rests on the pill for `motion.delay.hover-intent` | Becomes clickable and peeks. Until then it's click-through, so quick moves and clicks reach what's underneath (browser tabs) |
 | Click on compact | Expand |
+| Click on the idle pill | Opens the row of places; a tab opens its place as a switcher tab does (the module's own open command), Esc (the keyboard hook passes every other key on), a press elsewhere or leaving folds it back. Never takes focus |
 | Pointer leaves expanded | Collapse after `motion.delay.collapse` |
 | Fullscreen app in front (game, video, browser video, presentation) | Hide entirely (`hide_in_fullscreen`, on by default) |
 | Something dragged over it (a tab, a file, a selection) | Nothing: no peek, no clicks, until the button is up and the pointer rests |

@@ -29,6 +29,8 @@ Release builds of the hub have no console window; debug builds (`cargo build`) k
 
 **Run test instances sandboxed:** `REUI_CONFIG_DIR=<dir>` gives the hub, island and Settings their own files, named pipe and single-instance lock, so they run beside an installed ReUI without touching its data.
 
+To drive a sandboxed island without touching the real mouse or keyboard, post to its own window (class `ReUI.Island`, found by its process): `WM_LBUTTONDOWN` / `WM_LBUTTONUP` at client pixels click it, and in debug builds `WM_APP + 20` with screen pixels in `lparam` (as `WM_MOUSEMOVE` packs them) is the pointer resting there, for hover and peek. Module commands go through the pipe (`reui-bridge stats`, `reui-bridge hide`).
+
 ## The hub's flags
 
 The hub starts the island plus every module. `--no-agents`, `--no-media`, `--no-clipboard`, `--no-osd`, `--no-devices`, `--no-timers` skip one; `--no-link-previews` keeps clipboard links offline; `--no-updates` never looks for updates or mentions them. `--no-island` runs the hub alone so you can start `reui-island.exe` yourself (under a debugger, say). `--no-onboarding` skips the first run and one-time tips; `--first-run` replays the demo and welcome. The full list is the doc comment at the top of `crates/reui-hub/src/main.rs`.

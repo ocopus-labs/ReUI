@@ -39,6 +39,7 @@ use crate::place::MonitorChoice;
 use crate::settings::Visibility;
 use crate::order;
 
+mod idle;
 mod input;
 mod link;
 mod setup;
@@ -69,6 +70,8 @@ pub enum State {
     Compact,
     Peek,
     Expanded,
+    /// The idle pill clicked open into the row of places (`idle.rs`).
+    Places,
 }
 
 pub struct Pill {
@@ -216,6 +219,8 @@ pub struct Pill {
     choice_spans: Option<(Vec<(f32, f32)>, f32)>,
     /// The view switcher under an open place's card.
     tabs: switcher::Tabs,
+    /// The idle pill: its clock setting and the row of places' hover.
+    idle: idle::Idle,
     to_hub: UnboundedSender<ClientMsg>,
     events: Receiver<Event>,
 }
@@ -330,6 +335,8 @@ impl Pill {
         self.set_minimal(has_second);
 
         match front {
+            // The pointer on the idle pill (a peek, the row of places) keeps what it shows.
+            None if matches!(self.state, State::Peek | State::Places) => {}
             None => self.set_state(State::Idle),
             Some((id, priority, expandable)) => {
                 let is_new = previous.as_ref().map(|(old, _)| old) != Some(&id);
@@ -341,8 +348,9 @@ impl Pill {
                     if !self.hovered {
                         unsafe { SetTimer(Some(self.hwnd), TIMER_COLLAPSE, motion::delay::DECISION_HOLD, None) };
                     }
-                } else if (is_new && was_decision && !self.hovered) || self.state == State::Idle {
-                    // An answered decision folds away; the first activity wakes an idle pill.
+                } else if (is_new && was_decision && !self.hovered) || matches!(self.state, State::Idle | State::Places) {
+                    // An answered decision folds away; the first activity wakes an idle pill
+                    // (and folds its row of places: a place opening from it arrives here).
                     self.set_state(State::Compact);
                 } else if self.state == State::Expanded && !expandable {
                     // The card was taken away (a module folding its own card): back to compact.
@@ -350,6 +358,8 @@ impl Pill {
                 }
             }
         }
+        // Nothing happening: the idle pill's own face over the empty compact one.
+        self.draw_idle();
         // Content may have changed size within the same state.
         self.retarget();
         self.update_tick();
@@ -425,11 +435,17 @@ impl Pill {
     }
 
     fn set_state(&mut self, state: State) {
+        // With nothing happening, folding back is folding back to the resting pill.
+        let state = if state == State::Compact && self.idle() { State::Idle } else { state };
         if self.state == state {
             return;
         }
         let closing = self.state == State::Expanded;
+        if self.state == State::Places {
+            self.left_places();
+        }
         self.state = state;
+        self.draw_idle();
         if state != State::Expanded {
             unsafe { _ = KillTimer(Some(self.hwnd), TIMER_COLLAPSE) };
             self.summoned = false;
