@@ -10,11 +10,20 @@ use windows::Win32::Devices::DeviceAndDriverInstallation::{
     CM_Get_DevNode_PropertyW, CM_Get_DevNode_Status, CM_Get_Device_ID_ListW, CM_Get_Device_ID_List_SizeW, CM_Get_Parent, CM_Locate_DevNodeW, CM_DEVNODE_STATUS_FLAGS, CM_GETIDLIST_FILTER_ENUMERATOR,
     CM_GETIDLIST_FILTER_PRESENT, CM_LOCATE_DEVNODE_NORMAL, CM_PROB, CR_SUCCESS,
 };
-use windows::Win32::Devices::Properties::{DEVPKEY_Device_ContainerId, DEVPROPTYPE, DEVPROP_TYPE_BYTE, DEVPROP_TYPE_GUID};
+use windows::Win32::Devices::Properties::{DEVPKEY_Device_ContainerId, DEVPKEY_Device_HardwareIds, DEVPROPTYPE, DEVPROP_TYPE_BYTE, DEVPROP_TYPE_GUID, DEVPROP_TYPE_STRING_LIST, DEVPROP_TYPE_UINT16};
 use windows::Win32::Foundation::DEVPROPKEY;
+
+use super::catalog::DeviceIds;
 
 /// The battery level Windows reads from hands-free (HFP) and LE battery services.
 const DEVPKEY_BLUETOOTH_BATTERY: DEVPROPKEY = DEVPROPKEY { fmtid: windows::core::GUID::from_u128(0x104ea319_6ee2_4701_bd47_8ddbf425bbe5), pid: 2 };
+/// The Device ID profile's record (`bthguid.h`: `DEVPKEY_Bluetooth_DeviceVIDSource` 6 (BYTE),
+/// `DeviceVID` 7 and `DevicePID` 8 (UINT16)); defined here rather than pulling in the WDK
+/// bindings for three keys.
+const BLUETOOTH_DEVICE: u128 = 0x2bd67d8b_8beb_48d5_87e0_6cda3428040a;
+const DEVPKEY_BLUETOOTH_VID_SOURCE: DEVPROPKEY = DEVPROPKEY { fmtid: windows::core::GUID::from_u128(BLUETOOTH_DEVICE), pid: 6 };
+const DEVPKEY_BLUETOOTH_VID: DEVPROPKEY = DEVPROPKEY { fmtid: windows::core::GUID::from_u128(BLUETOOTH_DEVICE), pid: 7 };
+const DEVPKEY_BLUETOOTH_PID: DEVPROPKEY = DEVPROPKEY { fmtid: windows::core::GUID::from_u128(BLUETOOTH_DEVICE), pid: 8 };
 
 /// Enumerators whose nodes are a paired device's services: Classic profiles (`BTHENUM`),
 /// hands-free audio (`BTHHFENUM`, where headsets report their battery), the LE device and
@@ -58,7 +67,7 @@ pub fn multi_sz(buf: &[u16]) -> Vec<String> {
 }
 
 /// Instance ids of the present devices under an enumerator.
-fn device_ids(enumerator: &str) -> Vec<String> {
+fn instance_ids(enumerator: &str) -> Vec<String> {
     let filter = HSTRING::from(enumerator);
     let flags = CM_GETIDLIST_FILTER_ENUMERATOR | CM_GETIDLIST_FILTER_PRESENT;
     for _ in 0..3 {
@@ -100,7 +109,7 @@ pub fn batteries(containers: &[u128]) -> HashMap<u128, u8> {
         return levels;
     }
     for enumerator in BLUETOOTH_ENUMERATORS {
-        for id in device_ids(enumerator) {
+        for id in instance_ids(enumerator) {
             let Some(devinst) = locate(&id) else { continue };
             let Some(container) = property(devinst, &DEVPKEY_Device_ContainerId).as_ref().and_then(guid) else { continue };
             if !containers.contains(&container) {
@@ -115,6 +124,51 @@ pub fn batteries(containers: &[u128]) -> HashMap<u128, u8> {
         }
     }
     levels
+}
+
+/// The Device ID record by container: the devnode properties where Windows stored them (on
+/// the device's own `BTHENUM\Dev_…` / `BTHLE\Dev_…` node), else the `VID&…_PID&…` in a
+/// service node's hardware ids. Containers without one ("100 wireless" on the PC this was
+/// written on) are absent.
+pub fn device_ids(containers: &[u128]) -> HashMap<u128, DeviceIds> {
+    let mut found: HashMap<u128, DeviceIds> = HashMap::new();
+    let mut from_properties: Vec<u128> = Vec::new();
+    if containers.is_empty() {
+        return found;
+    }
+    for enumerator in BLUETOOTH_ENUMERATORS {
+        for id in instance_ids(enumerator) {
+            let Some(devinst) = locate(&id) else { continue };
+            let Some(container) = property(devinst, &DEVPKEY_Device_ContainerId).as_ref().and_then(guid) else { continue };
+            if !containers.contains(&container) || from_properties.contains(&container) {
+                continue;
+            }
+            // The properties are authoritative; a hardware id only fills in until one is seen.
+            if let Some(ids) = ids_from_properties(devinst) {
+                found.insert(container, ids);
+                from_properties.push(container);
+            } else if let Some(ids) = hardware_ids(devinst).iter().find_map(|h| DeviceIds::from_hardware_id(h)) {
+                found.entry(container).or_insert(ids);
+            }
+        }
+    }
+    found
+}
+
+fn ids_from_properties(devinst: u32) -> Option<DeviceIds> {
+    let byte = |key| property(devinst, key).filter(|(kind, b)| *kind == DEVPROP_TYPE_BYTE && b.len() == 1).map(|(_, b)| b[0]);
+    let word = |key| property(devinst, key).filter(|(kind, b)| *kind == DEVPROP_TYPE_UINT16 && b.len() == 2).map(|(_, b)| u16::from_le_bytes([b[0], b[1]]));
+    DeviceIds::from_properties(byte(&DEVPKEY_BLUETOOTH_VID_SOURCE)?, word(&DEVPKEY_BLUETOOTH_VID)?, word(&DEVPKEY_BLUETOOTH_PID)?)
+}
+
+fn hardware_ids(devinst: u32) -> Vec<String> {
+    match property(devinst, &DEVPKEY_Device_HardwareIds) {
+        Some((kind, bytes)) if kind == DEVPROP_TYPE_STRING_LIST => {
+            let wide: Vec<u16> = bytes.chunks_exact(2).map(|c| u16::from_le_bytes([c[0], c[1]])).collect();
+            multi_sz(&wide)
+        }
+        _ => Vec::new(),
+    }
 }
 
 #[cfg(test)]
@@ -141,7 +195,7 @@ mod tests {
     fn devices_pnp_battery_reads() {
         let mut containers = Vec::new();
         for e in BLUETOOTH_ENUMERATORS {
-            for id in device_ids(e) {
+            for id in instance_ids(e) {
                 if let Some(c) = locate(&id).and_then(|d| property(d, &DEVPKEY_Device_ContainerId)).as_ref().and_then(guid) {
                     containers.push(c);
                 }
@@ -149,5 +203,41 @@ mod tests {
         }
         let levels = batteries(&containers);
         println!("{} containers, levels: {:?}", containers.len(), levels.values().collect::<Vec<_>>());
+    }
+
+    /// What each paired device resolves to: its Device ID record, class and the catalog's
+    /// answer (read only; prints the devices' names, to this terminal only). Run with
+    /// `--ignored --nocapture`.
+    #[test]
+    #[ignore = "reads the machine's paired Bluetooth devices"]
+    fn devices_pnp_ids_resolve() {
+        use super::super::bluetooth::{BtEvent, Watchers};
+        use super::super::catalog;
+        use super::super::registry::Registry;
+        let (tx, mut rx) = tokio::sync::mpsc::unbounded_channel();
+        let w = Watchers::start(tx).expect("watchers");
+        std::thread::sleep(std::time::Duration::from_secs(3));
+        drop(w);
+        let mut registry = Registry::default();
+        while let Ok(e) = rx.try_recv() {
+            if matches!(e, BtEvent::Seen(_)) {
+                registry.apply(e);
+            }
+        }
+        let containers: Vec<u128> = registry.all().filter_map(|d| d.container).collect();
+        let ids = device_ids(&containers);
+        for d in registry.all() {
+            let ids = d.container.and_then(|c| ids.get(&c).copied());
+            let lookup = ids.map(catalog::lookup);
+            let identity = catalog::resolve(&catalog::Known { ids, name: &d.name, kind: d.kind, ..Default::default() });
+            println!(
+                "{:?}: ids {ids:?} → {lookup:?}; resolves to model {:?}, family {:?}, kind {}, by {:?}",
+                d.name,
+                identity.name(),
+                identity.family.map(|f| f.id()),
+                identity.kind.id(),
+                identity.by
+            );
+        }
     }
 }

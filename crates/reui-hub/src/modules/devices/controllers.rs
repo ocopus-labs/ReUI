@@ -1,6 +1,7 @@
 //! Game controllers through `Windows.Gaming.Input`: added / removed events, and the battery
 //! from `TryGetBatteryReport` (Xbox controllers report coarse steps, D-7), polled by the
-//! module every 60 s while one is connected. Wired controllers have no battery report.
+//! module every 60 s while one is connected. Wired controllers have no battery report. The
+//! USB vendor and product ids name the model through the catalog.
 
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
@@ -11,6 +12,7 @@ use windows::Foundation::EventHandler;
 use windows::Gaming::Input::RawGameController;
 use windows::System::Power::BatteryStatus;
 
+use super::catalog::{DeviceIds, VidSource};
 use super::registry::hash;
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -20,6 +22,8 @@ pub struct Reading {
     pub name: String,
     pub level: Option<u8>,
     pub charging: bool,
+    /// Its USB-IF vendor and product ids (what the catalog keys controllers by).
+    pub ids: Option<DeviceIds>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -98,7 +102,11 @@ fn read(pad: &RawGameController) -> Reading {
     let status = report.as_ref().and_then(|r| r.Status().ok());
     let value = |r: windows::core::Result<windows::Foundation::IReference<i32>>| r.ok().and_then(|v| v.Value().ok());
     let level = report.as_ref().filter(|_| status != Some(BatteryStatus::NotPresent)).and_then(|r| level(value(r.RemainingCapacityInMilliwattHours()), value(r.FullChargeCapacityInMilliwattHours())));
-    Reading { key: key_of(pad), name: pad.DisplayName().map(|n| n.to_string()).unwrap_or_default(), level, charging: status == Some(BatteryStatus::Charging) }
+    let ids = match (pad.HardwareVendorId(), pad.HardwareProductId()) {
+        (Ok(vid), Ok(pid)) if vid != 0 => Some(DeviceIds { source: VidSource::Usb, vid, pid }),
+        _ => None,
+    };
+    Reading { key: key_of(pad), name: pad.DisplayName().map(|n| n.to_string()).unwrap_or_default(), level, charging: status == Some(BatteryStatus::Charging), ids }
 }
 
 #[cfg(test)]

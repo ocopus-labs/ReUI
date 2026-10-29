@@ -88,7 +88,8 @@ Windows tells you nothing when your earbuds connect or your mouse is about to di
 | Bluetooth battery | The PnP property Windows shows in Settings, `{104EA319-6EE2-4701-BD47-8DDBF425BBE5} 2`, read via `CM_Get_DevNode_PropertyW` on the device's service nodes (HFP for Classic, BTHLE for LE) by `ContainerId`; minimum if several. Re-read 3 s after connect, then every 60 s **only while a battery device is connected**, and when the overview opens | One cfgmgr call per minute while connected |
 | AirPods L/R/case | `BluetoothLEAdvertisementWatcher` filtered on Apple manufacturer data (0x004C, type 0x07); nibbles for pods and case, primary-pod flip, charging flags; match by model + RSSI | Short bursts only |
 | Controllers | `Windows.Gaming.Input` `GamepadAdded`/`Removed` + `TryGetBatteryReport` (coarse 10/40/70/100), polled 60 s while connected | Same as above |
-| Device kind | Class of Device (Classic) / Appearance (LE) → glyph | — |
+| Device kind | Class of Device (Classic) / Appearance (LE) → glyph; the exact model's kind when known (§6.1) | — |
+| Exact model | Device ID record (`DEVPKEY_Bluetooth_DeviceVIDSource/VID/PID`, or `VID&…_PID&…` in hardware ids), read once per container; `RawGameController.HardwareVendorId/ProductId`; the Apple ad's product id; looked up in the bundled catalog (§6.1) | One cfgmgr walk when a container is first seen |
 | Laptop power | `GUID_ACDC_POWER_SOURCE`, `GUID_BATTERY_PERCENTAGE_REMAINING` (the OSD window already receives power settings) + `AggregateBattery.ReportUpdated` for rate and capacity; `GetSystemPowerStatus` `BatteryFlag 128` = no battery | Free |
 | Slow charger | `PowerManager.PowerSupplyStatusChanged` → `Inadequate` (respect Windows' own "charging slowly" toggle, *D7*) | Free |
 | Drives | `RegisterDeviceNotification` `GUID_DEVINTERFACE_VOLUME` (not broadcasts: our windows are tool/message-only) → `GetVolumePathNamesForVolumeName`, `GetDriveTypeW == DRIVE_REMOVABLE`, label and space via `GetVolumeInformationW`/`GetDiskFreeSpaceExW` | Free |
@@ -100,11 +101,23 @@ Windows tells you nothing when your earbuds connect or your mouse is about to di
   - `mod.rs` (module loop, anti-spam state);
   - `bluetooth.rs` (watcher, battery reads, kinds);
   - `airpods.rs` (advertisement parsing; pure and unit-tested);
+  - `catalog/` (exact models, §6.1);
   - `power.rs`;
   - `drives.rs` (arrival, info, eject);
   - `view.rs`;
   - `settings.rs`.
 - **Shared with the OSD:** the hidden power/Raw Input window (`osd/os.rs`) moves to a small shared `modules/system_events.rs` that both subscribe to, rather than a second window.
+
+### 6.1 Exact models
+
+Phase 1 of [research-device-personalization.md](research-device-personalization.md): what a device exactly is, from what Windows and the device already say, offline.
+
+- **Lookup order** (`catalog/resolve.rs`, pure): the user's choice (a hook; Settings doesn't offer it yet) → the Device ID record → an accepted Apple ad → a non-generic Windows container icon (a hook for phase 3) → the name (brand families only: "AirPods Pro", "Galaxy Buds", "Beats", "DualSense"…) → the class (CoD / Appearance). Each step speaks only when sure.
+- **Never mis-name:** white-label buds report their chip maker's vendor id (Bluetrum, Airoha, Realtek, Actions, Jieli, Qualcomm/CSR…, `catalog/vendors.rs`), so those ids are refused and the name and class decide. An exact model name only ever comes from ids or an Apple ad, never from the device's name.
+- **What a device gets:** `kind` always (one glyph each: earbuds, headphones (headsets too), speaker, gamepad, mouse, keyboard, pen, watch, phone, bluetooth), `family` when known (one outline each: `airpods`, `airpods-pro`, `airpods-max`, `beats-earbuds`, `beats-headphones`, `galaxy-buds`, `xbox-controller`, `dualsense`, `dualshock`, `switch-pro`, and the generic `earbuds`, `headphones`, `headset`, `speaker`, `gamepad`, `mouse`, `keyboard`, `pen`, `watch`, `phone`), the exact model's name when known, and the colour from the Apple ad (or the model's only colour).
+- **On the card:** the user's Bluetooth name stays the hero; the model is the detail line when it adds something ("Rohit's AirPods" → "AirPods Pro (2nd generation) · 82%"; nothing extra under "AirPods Pro (2nd generation)"). The model also sets the kind (a renamed AirPods Max is headphones).
+- **Apple ads:** the product id is the same in the Device ID record and the ad, so a known product id makes the ad matcher accept only that exact model. The ad's colour byte and lid bit are decoded (`airpods.rs`).
+- **Catalog:** Rust tables, every row with its source. Apple and Beats ids from AppleDB (MIT) cross-checked with The Apple Wiki (which cites Apple's CoreTypes plists), names from AppleDB and Apple Support; controllers from SDL's `controller_list.h` (zlib); chip vendors from the Bluetooth SIG company ids and `usb.ids`. Nothing from GPL/AGPL projects. Adding a device is a PR; there are no lookups online.
 
 ## 7. Edge cases
 
@@ -115,7 +128,7 @@ Windows tells you nothing when your earbuds connect or your mouse is about to di
 | D-3 | Device reports battery only while connected for a while (HFP) | Re-read at 3 s, 10 s, then every minute |
 | D-4 | Dual-mode device (AirPods, many headsets) | One device by ContainerId |
 | D-5 | LE device without a battery service removed (BlueGauge 0.3.1 crash) | Handle missing nodes gracefully |
-| D-6 | AirPods 4 (no 0x07 ads) / spoofed ads | Fall back to the PnP battery; accept ads only from the connected model, RSSI-near |
+| D-6 | AirPods 4 / spoofed ads | AirPods 4 and 4 (ANC) do send 0x07 ads (community decoders read them; their product ids 0x2019 / 0x201B are in the catalog), so they're read like any AirPods. Fall back to the PnP battery when no ad arrives; accept ads only from the connected model (the exact product id when the Device ID record names it, else the family its name says), RSSI-near |
 | D-7 | Controller coarse levels | Show the step (10/40/70/100), low alert at the 10 step |
 | D-8 | Charging rate fluctuates / tapers near 100 % | Smooth over 2 min; hide the time-to-full when unstable or above 95 % |
 | D-9 | UPS (`PoHot`) | "On UPS power" moment, quiet |

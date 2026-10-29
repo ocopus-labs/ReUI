@@ -5,6 +5,8 @@
 //! device is connected:
 //! - Bluetooth connects: two `DeviceWatcher`s (`bluetooth.rs`, WinRT thread pool), grouped
 //!   by container (`registry.rs`) and filtered by the anti-spam gate (`spam.rs`);
+//! - what each device exactly is: its Device ID record, read once per container from the
+//!   devnodes (`pnp.rs`, blocking pool), and the bundled catalog (`catalog/`, no network);
 //! - Bluetooth batteries: cfgmgr reads (`pnp.rs`) on the blocking pool, 3 s and 10 s after a
 //!   connect, then every 60 s while a battery device is connected, and when the overview
 //!   opens; AirPods buds and case from short advertisement scans (`airpods.rs`);
@@ -36,6 +38,7 @@ use windows::Gaming::Input::RawGameController;
 
 mod airpods;
 mod bluetooth;
+mod catalog;
 mod controllers;
 mod drives;
 mod eject;
@@ -53,7 +56,7 @@ mod settings;
 mod spam;
 mod view;
 
-use self::airpods::{Family, Scan, Sighting};
+use self::airpods::{Expect, Scan, Sighting};
 use self::bluetooth::{BtEvent, Watchers};
 use self::controllers::{Controllers, PadEvent, Reading};
 use self::drives::Drive;
@@ -99,6 +102,8 @@ enum Internal {
     Started(Adapters),
     Settings(Settings),
     Batteries(HashMap<u128, u8>),
+    /// Device ID records read for these containers.
+    Ids(Vec<u128>, HashMap<u128, catalog::DeviceIds>),
     Pads(Vec<Reading>),
     Drives(Vec<Drive>),
     Ejected(char, Result<(), Refused>),
@@ -108,6 +113,8 @@ enum Internal {
 struct Pad {
     reading: Reading,
     low: LowBattery,
+    /// What it is, from its USB ids and name.
+    identity: catalog::Identity,
 }
 
 /// The current connect card: its activity key and the devices it stands for.
@@ -128,7 +135,7 @@ struct DriveCard {
 struct Burst {
     _scan: Scan,
     device: u64,
-    family: Family,
+    expect: Expect,
     until: Instant,
 }
 
@@ -149,6 +156,8 @@ struct State {
     connect: Option<ConnectCard>,
     battery_reads: Vec<Instant>,
     battery_poll: Option<Instant>,
+    /// A Device ID read is running (one at a time; containers seen meanwhile wait for it).
+    reading_ids: bool,
     burst: Option<Burst>,
 
     // Controllers.
@@ -193,6 +202,7 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
         connect: None,
         battery_reads: Vec::new(),
         battery_poll: None,
+        reading_ids: false,
         burst: None,
         pads: HashMap::new(),
         pad_poll: None,
@@ -312,6 +322,7 @@ impl State {
             }
             Internal::Settings(settings) => self.apply_settings(ctx, settings),
             Internal::Batteries(levels) => self.on_batteries(ctx, levels),
+            Internal::Ids(read, found) => self.on_ids(ctx, &read, &found),
             Internal::Pads(readings) => {
                 for r in readings {
                     self.on_pad_reading(ctx, r);
@@ -417,9 +428,9 @@ impl State {
         self.poll_pads();
         self.rescan_drives(Duration::ZERO);
         self.reload_settings();
-        let apple = self.registry.connected().find(|d| d.apple_audio()).map(|d| (d.key, airpods::family_of_name(&d.name)));
-        if let Some((key, family)) = apple {
-            self.start_scan(key, family);
+        let apple = self.registry.connected().find(|d| d.apple_audio()).map(|d| (d.key, d.expect()));
+        if let Some((key, expect)) = apple {
+            self.start_scan(key, expect);
         }
         let view = self.overview();
         self.show(ctx, OVERVIEW, Priority::Passive, view, OVERVIEW_UNOPENED);
@@ -430,8 +441,8 @@ impl State {
         let devices: Vec<view::DeviceInfo> = self
             .registry
             .connected()
-            .map(|d| view::DeviceInfo { name: d.name.clone(), kind: d.kind, level: d.level(), pods: d.pods })
-            .chain(self.pads.values().map(|p| view::DeviceInfo { name: p.reading.name.clone(), kind: kinds::Kind::Gamepad, level: p.reading.level, pods: None }))
+            .map(view::DeviceInfo::of)
+            .chain(self.pads.values().map(|p| view::DeviceInfo { name: p.reading.name.clone(), kind: p.identity.kind, model: p.identity.name(), level: p.reading.level, pods: None }))
             .collect();
         let laptop = match (self.has_battery, self.percent) {
             (Some(true), Some(level)) => Some(view::Laptop { level: level.min(100) as u8, charging: self.source == Some(PowerSource::Ac) }),
