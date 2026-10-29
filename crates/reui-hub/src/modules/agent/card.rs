@@ -113,7 +113,12 @@ pub(super) fn card(moment: &Moment, context: Context, position: (usize, usize), 
                 }
             }
             rows.push(Row::Buttons(buttons));
-            let hero = shown.map_or_else(|| "Question".to_string(), |q| secrets::mask(&q.text));
+            // A secret's hero is its short header ("Password"), never what it asks.
+            let hero = match (shown, q) {
+                (Some(q), _) => secrets::mask(&q.text),
+                (None, Some(q)) if !q.header.is_empty() => secrets::mask(&q.header),
+                _ => "Question".to_string(),
+            };
             ("Question", Element::Empty, "Question".to_string(), Headline::Text(hero), detail, rows)
         }
         Kind::Plan => {
@@ -287,7 +292,7 @@ mod tests {
         assert_eq!(buttons(&view), [("5:terminal".into(), "Answer in terminal".into())]);
         m.act("next");
         let (_, view) = card(&m, context(), (0, 1), "Codex");
-        assert_eq!((view.headline, view.detail), (Headline::Text("Question".into()), None));
+        assert_eq!((view.headline, view.detail), (Headline::Text("Token".into()), None));
         assert_eq!(view.rows.len(), 1, "only the terminal");
         assert!(!format!("{:?}", view.rows).contains("hunter2"));
     }
