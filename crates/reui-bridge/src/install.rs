@@ -10,38 +10,50 @@ use std::path::{Path, PathBuf};
 
 use serde_json::{json, Map, Value};
 
-/// (event, matcher, timeout seconds, async). Only permission requests block the agent.
-type Event = (&'static str, Option<&'static str>, Option<u64>, bool);
+/// (event, matcher, timeout seconds, async, what the bridge is asked to do besides
+/// forwarding). Only what needs you blocks the agent: permission requests, and Claude's
+/// tools that ask you something (`ask`: the bridge waits for the answer).
+type Event = (&'static str, Option<&'static str>, Option<u64>, bool, Option<&'static str>);
 
-const CLAUDE_EVENTS: [Event; 13] = [
-    ("SessionStart", None, None, true),
-    ("UserPromptSubmit", None, None, true),
-    ("PreToolUse", Some("*"), None, true),
-    ("PostToolUse", Some("*"), None, true),
-    ("PermissionRequest", Some("*"), Some(120), false),
-    ("Notification", None, None, true),
-    ("PreCompact", None, None, true),
-    ("PostCompact", None, None, true),
-    ("SubagentStart", None, None, true),
-    ("SubagentStop", None, None, true),
-    ("Stop", None, None, true),
-    ("StopFailure", None, None, true),
-    ("SessionEnd", None, None, true),
+/// The bridge's argument for the blocking `PreToolUse` entry: wait for an answer.
+pub const ASK: &str = "ask";
+/// Claude's tools answered from that entry (agent moments PRD §6).
+pub const ASK_MATCHER: &str = "AskUserQuestion|ExitPlanMode";
+
+const CLAUDE_EVENTS: [Event; 15] = [
+    ("SessionStart", None, None, true, None),
+    ("UserPromptSubmit", None, None, true, None),
+    ("PreToolUse", Some("*"), None, true, None),
+    // Beside the async `*` one, which also fires for these tools; the hub makes them one.
+    ("PreToolUse", Some(ASK_MATCHER), Some(300), false, Some(ASK)),
+    ("PostToolUse", Some("*"), None, true, None),
+    ("PermissionRequest", Some("*"), Some(120), false, None),
+    // MCP forms: the hub answers "no decision" at once until the island can show them
+    // (agent moments M4), so Claude's own dialog comes without waiting.
+    ("Elicitation", Some("*"), Some(300), false, None),
+    ("Notification", None, None, true, None),
+    ("PreCompact", None, None, true, None),
+    ("PostCompact", None, None, true, None),
+    ("SubagentStart", None, None, true, None),
+    ("SubagentStop", None, None, true, None),
+    ("Stop", None, None, true, None),
+    ("StopFailure", None, None, true, None),
+    ("SessionEnd", None, None, true, None),
 ];
 
 /// Codex 0.15x: the same shape, without Claude-only events.
 const CODEX_EVENTS: [Event; 11] = [
-    ("SessionStart", None, None, true),
-    ("UserPromptSubmit", None, None, true),
-    ("PreToolUse", Some("*"), None, true),
-    ("PostToolUse", Some("*"), None, true),
-    ("PermissionRequest", Some("*"), Some(120), false),
-    ("PreCompact", None, None, true),
-    ("PostCompact", None, None, true),
-    ("SubagentStart", None, None, true),
-    ("SubagentStop", None, None, true),
-    ("Stop", None, None, true),
-    ("SessionEnd", None, None, true),
+    ("SessionStart", None, None, true, None),
+    ("UserPromptSubmit", None, None, true, None),
+    ("PreToolUse", Some("*"), None, true, None),
+    ("PostToolUse", Some("*"), None, true, None),
+    ("PermissionRequest", Some("*"), Some(120), false, None),
+    ("PreCompact", None, None, true, None),
+    ("PostCompact", None, None, true, None),
+    ("SubagentStart", None, None, true, None),
+    ("SubagentStop", None, None, true, None),
+    ("Stop", None, None, true, None),
+    ("SessionEnd", None, None, true, None),
 ];
 
 const OPENCODE_PLUGIN: &str = include_str!("opencode-plugin.js");
@@ -149,7 +161,7 @@ fn update(path: &Path, agent: Agent, exe: &str, install: bool) -> Result<Option<
     };
     let settings = root.as_object_mut().ok_or_else(|| format!("{} isn't a JSON object; not touching it", path.display()))?;
     match agent {
-        Agent::Claude => merge_hooks(settings, &CLAUDE_EVENTS, |_| json!({ "type": "command", "command": exe, "args": ["claude"] }), install)?,
+        Agent::Claude => merge_hooks(settings, &CLAUDE_EVENTS, |extra| claude_handler(exe, extra), install)?,
         // Codex hooks are a command line (no `args`); quote the path only if it needs it.
         Agent::Codex => merge_hooks(settings, &CODEX_EVENTS, |_| json!({ "type": "command", "command": command_line(exe, "codex") }), install)?,
         Agent::OpenCode => unreachable!("OpenCode uses a plugin file"),
@@ -175,6 +187,12 @@ fn write_atomic(path: &Path, text: &str) -> Result<(), String> {
     std::fs::rename(&temp, path).map_err(|e| format!("can't replace {}: {e}", path.display()))
 }
 
+/// Claude Code runs the bridge with `args` (no shell, so any path works).
+fn claude_handler(exe: &str, extra: Option<&str>) -> Value {
+    let args: Vec<&str> = std::iter::once("claude").chain(extra).collect();
+    json!({ "type": "command", "command": exe, "args": args })
+}
+
 fn command_line(exe: &str, arg: &str) -> String {
     if exe.contains(' ') {
         format!("\"{exe}\" {arg}")
@@ -197,7 +215,7 @@ fn is_ours(handler: &Value) -> bool {
     })
 }
 
-fn merge_hooks(settings: &mut Map<String, Value>, events: &[Event], handler: impl Fn(&str) -> Value, install: bool) -> Result<(), String> {
+fn merge_hooks(settings: &mut Map<String, Value>, events: &[Event], handler: impl Fn(Option<&str>) -> Value, install: bool) -> Result<(), String> {
     let hooks = settings.entry("hooks").or_insert_with(|| json!({}));
     let hooks = hooks.as_object_mut().ok_or("\"hooks\" isn't an object; not touching it")?;
 
@@ -215,8 +233,8 @@ fn merge_hooks(settings: &mut Map<String, Value>, events: &[Event], handler: imp
     hooks.retain(|_, groups| groups.as_array().is_none_or(|g| !g.is_empty()));
 
     if install {
-        for &(event, matcher, timeout, background) in events {
-            let mut handler = handler(event);
+        for &(event, matcher, timeout, background, extra) in events {
+            let mut handler = handler(extra);
             if let Some(timeout) = timeout {
                 handler["timeout"] = json!(timeout);
             }
@@ -246,7 +264,7 @@ mod tests {
     const EXE: &str = "D:/ReUI/target/release/reui-bridge.exe";
 
     fn claude(settings: &mut Map<String, Value>, install: bool) {
-        merge_hooks(settings, &CLAUDE_EVENTS, |_| json!({ "type": "command", "command": EXE, "args": ["claude"] }), install).unwrap();
+        merge_hooks(settings, &CLAUDE_EVENTS, |extra| claude_handler(EXE, extra), install).unwrap();
     }
 
     fn codex(settings: &mut Map<String, Value>, install: bool) {
@@ -265,18 +283,23 @@ mod tests {
 
         claude(&mut settings, true);
         let hooks = settings["hooks"].as_object().unwrap();
-        assert_eq!(hooks.len(), CLAUDE_EVENTS.len());
+        assert_eq!(hooks.len(), CLAUDE_EVENTS.len() - 1, "PreToolUse has two entries");
         // The user's own hook survives next to ours.
-        assert_eq!(hooks["PreToolUse"].as_array().unwrap().len(), 2);
+        assert_eq!(hooks["PreToolUse"].as_array().unwrap().len(), 3);
         assert_eq!(hooks["PreToolUse"][0]["hooks"][0]["command"], "my-linter");
         let permission = &hooks["PermissionRequest"][0]["hooks"][0];
         assert_eq!(permission["timeout"], 120);
         assert!(permission.get("async").is_none(), "permission requests must block");
         assert_eq!(hooks["Stop"][0]["hooks"][0]["async"], true);
+        // Every tool, async; Claude's questions and plans also through a blocking entry
+        // that tells the bridge to wait.
+        assert_eq!(hooks["PreToolUse"][1], json!({ "matcher": "*", "hooks": [{ "type": "command", "command": EXE, "args": ["claude"], "async": true }] }));
+        assert_eq!(hooks["PreToolUse"][2], json!({ "matcher": "AskUserQuestion|ExitPlanMode", "hooks": [{ "type": "command", "command": EXE, "args": ["claude", "ask"], "timeout": 300 }] }));
+        assert_eq!(hooks["Elicitation"][0], json!({ "matcher": "*", "hooks": [{ "type": "command", "command": EXE, "args": ["claude"], "timeout": 300 }] }));
 
         // Re-installing doesn't duplicate.
         claude(&mut settings, true);
-        assert_eq!(settings["hooks"]["PreToolUse"].as_array().unwrap().len(), 2);
+        assert_eq!(settings["hooks"]["PreToolUse"].as_array().unwrap().len(), 3);
 
         claude(&mut settings, false);
         assert_eq!(Value::Object(settings), original);
