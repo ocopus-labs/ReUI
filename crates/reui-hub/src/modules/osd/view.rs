@@ -12,7 +12,7 @@
 
 use std::time::Duration;
 
-use reui_protocol::{Art, Button, ButtonContent, ButtonRole, CardSize, CompactView, Element, ExpandedView, Headline, Menu, MenuOption, Row, Tone};
+use reui_protocol::{Art, Button, ButtonContent, ButtonRole, CardSize, Channel, CompactView, Element, ExpandedView, Headline, Menu, MenuOption, Row, Tone};
 use tokio::time::Instant;
 
 use crate::modules::audio::{DeviceKind, Output};
@@ -27,6 +27,10 @@ pub const GLYPH_HEADPHONES: char = '\u{E7F6}';
 pub const GLYPH_DISPLAY_AUDIO: char = '\u{E7F3}';
 pub const GLYPH_SPEAKER_BOX: char = '\u{E7F5}';
 const GLYPH_OUTPUT: char = '\u{E7F3}';
+/// The mixer's button: Segoe Fluent's equalizer.
+pub const GLYPH_MIXER: char = '\u{E9E9}';
+/// The volume card's mixer button flips the mixer.
+pub const ACTION_MIXER: &str = "mixer";
 pub const GLYPH_BRIGHTNESS_LOW: char = '\u{EC8A}';
 pub const GLYPH_BRIGHTNESS_HIGH: char = '\u{E706}';
 pub const GLYPH_CAPS_LOCK: char = '\u{E84B}';
@@ -109,10 +113,14 @@ pub struct VolumeHud {
     pub outputs: Vec<Output>,
     pub can_switch: bool,
     pub show_percentage: bool,
+    /// Each app's level under the slider, when the mixer is showing (`Some`, maybe still
+    /// empty while the sessions are read).
+    pub mixer: Option<Vec<Channel>>,
 }
 
 /// Compact: glyph · level bar. Minimal: a level ring. Open: "Volume" over the device, the
-/// slider with mute and the output menu.
+/// slider with mute and the output menu, the mixer's button at the header's end and, while
+/// it's on, each app's level under the slider.
 pub fn volume_view(v: &VolumeHud) -> View {
     let level = v.level.clamp(0.0, 1.0);
     let glyph = Element::Art(Art::Glyph(hud_glyph(level, v.muted, v.kind)));
@@ -133,6 +141,12 @@ pub fn volume_view(v: &VolumeHud) -> View {
         (true, true) => Some(percent(level)),
         (true, false) => None,
     };
+    let mixer_on = v.mixer.is_some();
+    let mixer_button = Button { action: ACTION_MIXER.into(), content: ButtonContent::Glyph(GLYPH_MIXER), role: if mixer_on { ButtonRole::Accent } else { ButtonRole::Secondary } };
+    let mut rows = vec![slider];
+    if let Some(channels) = v.mixer.clone().filter(|c| !c.is_empty()) {
+        rows.push(Row::Mixer(channels));
+    }
     View {
         accent: None,
         compact: CompactView { leading: glyph.clone(), trailing: Element::Level { value: level, dim: v.muted } },
@@ -142,8 +156,8 @@ pub fn volume_view(v: &VolumeHud) -> View {
             eyebrow: None,
             headline: Headline::Text("Volume".into()),
             detail,
-            trailing: Element::Empty,
-            rows: vec![slider],
+            trailing: Element::Button(mixer_button),
+            rows,
             context: None, size: CardSize::Regular,
             tint: false,
             pager: None,
@@ -415,7 +429,7 @@ mod tests {
 
     fn hud() -> VolumeHud {
         let output = |id: &str, default| Output { id: id.into(), name: format!("Speaker {id}"), default };
-        VolumeHud { level: 0.42, muted: false, device: "Speakers".into(), kind: DeviceKind::Speakers, outputs: vec![output("a", true), output("b", false)], can_switch: true, show_percentage: false }
+        VolumeHud { level: 0.42, muted: false, device: "Speakers".into(), kind: DeviceKind::Speakers, outputs: vec![output("a", true), output("b", false)], can_switch: true, show_percentage: false, mixer: None }
     }
 
     #[test]
@@ -439,6 +453,20 @@ mod tests {
         let Row::Slider { trailing, .. } = &e.rows[0] else { panic!() };
         assert_eq!(trailing.as_ref().unwrap().options[0].action, "output:settings");
     }
+
+    #[test]
+    fn osd_the_mixer_sits_under_the_slider() {
+        let closed = volume_view(&hud()).expanded.unwrap();
+        assert_eq!(closed.rows.len(), 1);
+        assert!(matches!(&closed.trailing, Element::Button(b) if b.action == ACTION_MIXER && b.role == ButtonRole::Secondary));
+        let channel = Channel { label: "Spotify".into(), icon: None, value: 0.5, muted: false, action: "app:1:".into(), mute: "app-mute:1".into() };
+        let open = volume_view(&VolumeHud { mixer: Some(vec![channel.clone()]), ..hud() }).expanded.unwrap();
+        assert_eq!(open.rows[1], Row::Mixer(vec![channel]));
+        assert!(matches!(&open.trailing, Element::Button(b) if b.role == ButtonRole::Accent));
+        // Nothing playing: the button says it's on, no empty row, no note.
+        assert_eq!(volume_view(&VolumeHud { mixer: Some(Vec::new()), ..hud() }).expanded.unwrap().rows.len(), 1);
+    }
+
 
     #[test]
     fn osd_device_and_state_views() {

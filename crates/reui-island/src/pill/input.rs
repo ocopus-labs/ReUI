@@ -226,7 +226,8 @@ impl Pill {
             let hit = render::hit_at(&self.hits, cx, cy).map(|h| (h.pager, h.slider.is_some(), h.action.clone(), h.block));
             match hit {
                 Some((true, ..)) => return self.wheel_pager(delta as i32),
-                Some((_, true, action, _)) => return self.wheel_slider(delta as i32, action),
+                // A slider in a list that scrolls (the mixer) gives the wheel to the list.
+                Some((_, true, action, false)) => return self.wheel_slider(delta as i32, action),
                 Some((.., true)) => return self.wheel_block(delta as i32),
                 _ => {}
             }
@@ -295,6 +296,7 @@ impl Pill {
     fn slider_value(&self, action: &str) -> Option<f32> {
         self.front_view()?.rows.iter().find_map(|r| match r {
             Row::Slider { value, action: a, .. } if a == action => Some(*value),
+            Row::Mixer(channels) => channels.iter().find(|c| c.action == action).map(|c| c.value),
             _ => None,
         })
     }

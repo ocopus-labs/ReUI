@@ -15,7 +15,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-pub const PROTOCOL_VERSION: u32 = 21;
+pub const PROTOCOL_VERSION: u32 = 22;
 const MAX_FRAME: usize = 16 * 1024 * 1024;
 
 /// Per-user pipe name; the hub also restricts the pipe's ACL to the current user. A test
@@ -331,6 +331,27 @@ pub enum Row {
     /// A few short facts on one line, each a quiet label over its value ("GPU" over
     /// "41% · 2.1 GB"): what's worth a glance but not a gauge.
     Facts(Vec<Fact>),
+    /// Each app's own level (the volume card's mixer), one line per app: its icon, its
+    /// name and a bar. Pressing the icon sends the channel's `mute`; dragging or the wheel
+    /// over the bar sends `<action><0..1 value>` like a [`Row::Slider`]. A list longer than
+    /// the card has room for scrolls inside it, and the wheel then scrolls the list.
+    Mixer(Vec<Channel>),
+}
+
+/// One app in a [`Row::Mixer`].
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct Channel {
+    /// The app's name ("Spotify").
+    pub label: String,
+    /// The app's icon; until it arrives (or without one) a quiet placeholder shows.
+    pub icon: Option<ImageId>,
+    /// 0..=1, kept while muted.
+    pub value: f32,
+    pub muted: bool,
+    /// The level's prefix (`app:1234:`).
+    pub action: String,
+    /// Sent when the icon is pressed: mute or unmute.
+    pub mute: String,
 }
 
 /// The most samples a [`Gauge`]'s `history` holds: one a second, the last minute.
@@ -613,6 +634,7 @@ impl Activity {
                     preview.into_iter().chain(i.icon)
                 })
                 .collect::<Vec<_>>(),
+            Row::Mixer(channels) => channels.iter().filter_map(|c| c.icon).collect(),
             _ => Vec::new(),
         });
         elements.chain(cards)
@@ -705,12 +727,13 @@ mod tests {
                         Row::Block { text: "+ added\n- removed".into(), kind: BlockKind::Diff },
                         Row::Gauges(vec![Gauge { label: "CPU".into(), value: "32".into(), unit: "%".into(), detail: None, fraction: 0.32, glyph: '\u{E950}', tone: Tone::Warning, history: vec![0.1, 0.32] }]),
                         Row::Facts(vec![Fact { label: "Disk".into(), value: "3%".into(), tone: Tone::Primary }]),
+                        Row::Mixer(vec![Channel { label: "Spotify".into(), icon: Some(ImageId(3)), value: 0.5, muted: true, action: "app:7:".into(), mute: "unmute:7".into() }]),
                     ],
                 }),
             }],
         });
         let HubMsg::Snapshot(shown) = &snapshot else { unreachable!() };
-        assert_eq!(shown.activities[0].images().collect::<Vec<_>>(), vec![ImageId(7)], "the strip's mark is an image to send");
+        assert_eq!(shown.activities[0].images().collect::<Vec<_>>(), vec![ImageId(7), ImageId(3)], "the strip's mark and a mixer icon are images to send");
         write_frame(&mut a, &snapshot).await.unwrap();
         write_frame(&mut a, &HubMsg::Welcome { version: PROTOCOL_VERSION }).await.unwrap();
         assert_eq!(read_frame::<_, HubMsg>(&mut b).await.unwrap(), snapshot);

@@ -14,15 +14,19 @@
 //! to ≈30 Hz and a HUD lingers 1.5 s after the last change (2.5 s after the user touched
 //! it), staying while its card is open. Our own changes never raise a HUD.
 //!
+//! The volume card's mixer (each app's level) watches the apps' audio sessions only while
+//! the card is open with it on: `apps.rs` (the watcher and the card's levels), `mixer.rs`
+//! (which apps, in what order; pure).
+//!
 //! Files: `volume.rs` and `brightness_hud.rs` (each HUD's state), `view.rs` (the HUDs as
 //! views), `brightness.rs` (the brightness worker), `flyout.rs` (Windows' own flyout) and
 //! `settings.rs`.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
 
-use reui_protocol::{Priority, ACTION_COLLAPSED, ACTION_EXPANDED};
+use reui_protocol::{ImageId, Priority, ACTION_COLLAPSED, ACTION_EXPANDED};
 use tokio::sync::mpsc;
 use tokio::time::{sleep_until, Instant};
 use windows::core::{HSTRING, PCWSTR};
@@ -30,9 +34,11 @@ use windows::Win32::System::Com::{CoInitializeEx, COINIT_MULTITHREADED};
 use windows::Win32::UI::Shell::ShellExecuteW;
 use windows::Win32::UI::WindowsAndMessaging::SW_SHOWNORMAL;
 
+mod apps;
 mod brightness;
 mod brightness_hud;
 mod flyout;
+mod mixer;
 mod settings;
 mod view;
 mod volume;
@@ -83,6 +89,8 @@ enum Internal {
     Watch { watch: Option<audio::Watch>, capture: bool },
     Os(Option<Subscription>),
     Flyout(Option<Hide>),
+    Sessions { sessions: Option<audio::Sessions>, generation: u64 },
+    App { exe: String, name: String, png: Option<Vec<u8>> },
 }
 
 struct Osd {
@@ -120,6 +128,16 @@ struct Osd {
     states: HashMap<&'static str, Instant>,
     mic_muted: Option<bool>,
     flyout_missing_logged: bool,
+
+    // The mixer.
+    mixer: mixer::Mixer,
+    sessions: Option<audio::Sessions>,
+    sessions_tx: mpsc::UnboundedSender<Vec<audio::AppSession>>,
+    /// Bumped whenever the watcher is started or stopped, so a late start is let go.
+    mixer_generation: u64,
+    app_names: HashMap<String, String>,
+    app_icons: HashMap<String, Option<ImageId>>,
+    app_loading: HashSet<String>,
 }
 
 async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
@@ -132,6 +150,7 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
     let (os_tx, mut os_rx) = mpsc::unbounded_channel();
     let (report_tx, mut reports) = mpsc::unbounded_channel();
     let (internal_tx, mut internal) = mpsc::unbounded_channel();
+    let (sessions_tx, mut sessions_rx) = mpsc::unbounded_channel();
     let worker = brightness::Worker::start(report_tx);
     if let Some(w) = &worker {
         w.probe();
@@ -164,6 +183,13 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
         states: HashMap::new(),
         mic_muted: None,
         flyout_missing_logged: false,
+        mixer: mixer::Mixer::default(),
+        sessions: None,
+        sessions_tx,
+        mixer_generation: 0,
+        app_names: HashMap::new(),
+        app_icons: HashMap::new(),
+        app_loading: HashSet::new(),
     };
     osd.start_watch();
     osd.read_audio();
@@ -182,6 +208,7 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
             Some(event) = os_rx.recv() => osd.on_os(ctx, event),
             Some(report) = reports.recv() => osd.on_report(ctx, report),
             Some(message) = internal.recv() => osd.on_internal(ctx, message),
+            Some(apps) = sessions_rx.recv() => osd.on_apps(ctx, apps),
             _ = sleep_until(deadline.unwrap_or_else(Instant::now)), if deadline.is_some() => osd.tick(ctx),
             input = ctx.next() => match input {
                 Some(ModuleInput::Action(action)) => osd.act(ctx, action),
@@ -191,8 +218,8 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
         }
     }
     // Unregistering joins the watcher threads; keep that off the hub thread.
-    let (watch, os, worker) = (osd.watch.take(), osd.os.take(), osd.worker.take());
-    tokio::task::spawn_blocking(move || drop((watch, os, worker)));
+    let (watch, os, worker, sessions) = (osd.watch.take(), osd.os.take(), osd.worker.take(), osd.sessions.take());
+    tokio::task::spawn_blocking(move || drop((watch, os, worker, sessions)));
     Ok(())
 }
 
@@ -314,6 +341,8 @@ impl Osd {
                 tokio::task::spawn_blocking(|| eprintln!("osd: Windows' flyout host not found on build {}; both flyouts will show", flyout::windows_build()));
             }
             Internal::Flyout(_) => {}
+            Internal::Sessions { sessions, generation } => self.on_sessions(sessions, generation),
+            Internal::App { exe, name, png } => self.on_app(ctx, exe, name, png),
         }
     }
 
@@ -332,6 +361,7 @@ impl Osd {
         if due.retract {
             self.device_until = None;
             ctx.retract(VOLUME);
+            self.sync_mixer(false);
         } else if due.publish {
             self.publish_volume(ctx);
         }
@@ -391,10 +421,18 @@ impl Osd {
                 self.reload_settings();
                 if action.key == VOLUME {
                     self.read_outputs();
+                    self.sync_mixer(false);
                 }
             }
-            ACTION_COLLAPSED => hud.collapsed(now),
+            ACTION_COLLAPSED => {
+                hud.collapsed(now);
+                if action.key == VOLUME {
+                    self.sync_mixer(false);
+                }
+            }
             "mute" => self.toggle_mute(ctx),
+            view::ACTION_MIXER => self.toggle_mixer(ctx),
+            _ if self.mixer_action(ctx, a) => {}
             "output:settings" => {
                 self.volume.interacted(now);
                 tokio::task::spawn_blocking(player::open_sound_settings);
@@ -447,6 +485,9 @@ impl Osd {
             if self.settings.mic_mute {
                 self.read_audio();
             }
+        }
+        if old.mixer != self.settings.mixer || old.volume != self.settings.volume {
+            self.sync_mixer(false);
         }
         self.refresh_volume(ctx);
         self.refresh_brightness(ctx);

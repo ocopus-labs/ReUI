@@ -43,6 +43,12 @@ impl Osd {
                 self.device = Some(DefaultOutput { id, name, kind });
                 self.read_audio();
                 self.read_outputs();
+                // The mixer lists the default output's apps.
+                if self.sessions.is_some() {
+                    self.mixer.clear();
+                    self.sync_mixer(true);
+                }
+
                 // A Bluetooth audio device that just connected has the Devices card (S8).
                 if self.settings.volume && !handoff::audio_connect_claimed() {
                     self.device_until = Some(now + LINGER);
@@ -92,6 +98,7 @@ impl Osd {
                 outputs: self.outputs.clone(),
                 can_switch: self.can_switch,
                 show_percentage: self.settings.show_percentage,
+                mixer: self.channels(),
             })
         };
         ctx.publish(VOLUME, Priority::Brief, view);

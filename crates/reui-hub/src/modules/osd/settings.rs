@@ -25,6 +25,9 @@ pub struct Settings {
     pub battery_saver: bool,
     /// The default microphone's mute.
     pub mic_mute: bool,
+    /// Every app's own level in the open volume card (the mixer). Its button in the card
+    /// flips this too, so the card opens the way it was left.
+    pub mixer: bool,
     /// Level change per wheel notch, 0..=1.
     pub scroll_step: f32,
 }
@@ -40,6 +43,7 @@ impl Default for Settings {
             lock_keys: false,
             battery_saver: false,
             mic_mute: false,
+            mixer: false,
             scroll_step: 0.02,
         }
     }
@@ -87,6 +91,7 @@ impl Settings {
             lock_keys: flag("lock_keys", d.lock_keys),
             battery_saver: flag("battery_saver", d.battery_saver),
             mic_mute: flag("mic_mute", d.mic_mute),
+            mixer: flag("mixer", d.mixer),
             scroll_step: step,
         })
     }
@@ -105,6 +110,7 @@ impl Settings {
             "lock_keys": self.lock_keys,
             "battery_saver": self.battery_saver,
             "mic_mute": self.mic_mute,
+            "mixer": self.mixer,
             // Rounded so 0.02 doesn't come back as 0.019999999552965164.
             "scroll_step": (f64::from(self.scroll_step) * 1000.0).round() / 1000.0,
         }) else {
@@ -127,6 +133,7 @@ impl Settings {
             "percentage" => self.show_percentage = on,
             "lock-keys" => self.lock_keys = on,
             "battery-saver" => self.battery_saver = on,
+            "mixer" => self.mixer = on,
             _ => return false,
         }
         true
@@ -173,7 +180,8 @@ mod tests {
     fn osd_defaults_round_trip() {
         let d = Settings::default();
         assert!(d.volume && d.brightness);
-        assert!(!d.show_percentage && !d.replace_windows_flyout && !d.show_automatic_brightness && !d.lock_keys && !d.battery_saver && !d.mic_mute);
+        assert!(!d.show_percentage && !d.replace_windows_flyout && !d.show_automatic_brightness && !d.lock_keys && !d.battery_saver && !d.mic_mute && !d.mixer);
+
         assert_eq!(d.scroll_step, 0.02);
         assert_eq!(Settings::parse(&d.to_json()), Some(d));
     }
@@ -197,6 +205,7 @@ mod tests {
         assert!(s.apply("percentage:on") && s.show_percentage);
         assert!(s.apply("lock-keys:on") && s.lock_keys);
         assert!(s.apply("battery-saver:on") && s.battery_saver);
+        assert!(s.apply("mixer:on") && s.mixer);
         assert!(!s.apply("flyout:maybe") && !s.apply("volume:0.4") && !s.apply("mute"));
     }
 

@@ -7,6 +7,7 @@ mod context;
 mod controls;
 mod gauges;
 mod lyrics;
+mod mixer;
 mod note;
 mod search;
 mod slider;

@@ -114,6 +114,7 @@ impl File {
                 "lock_keys": false,
                 "battery_saver": false,
                 "mic_mute": false,
+                "mixer": false,
                 "scroll_step": 0.02,
             }),
             File::Devices => json!({ "enabled": true, "connect_cards": true, "low_battery": true, "charging": true, "drives": true, "airpods": true, "phones": true, "slow_charger": false }),
