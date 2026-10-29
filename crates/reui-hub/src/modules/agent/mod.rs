@@ -34,7 +34,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use reui_protocol::{Art, Element, Rgb, ACTION_SEARCH, ACTION_SUBMIT};
+use reui_protocol::{Art, Element, Rgb, ACTION_COLLAPSED, ACTION_EXPANDED, ACTION_SEARCH, ACTION_SUBMIT};
 use tokio::sync::oneshot;
 use tokio::time::{sleep_until, Instant};
 
@@ -297,6 +297,13 @@ async fn run(profile: &'static Profile, mut ctx: ModuleContext) {
 /// An action on the moments card: the pager, typing in its field, or a moment's own
 /// (`<id>:allow`, `alt:<id>:deny`); `submit` is Enter in the field of the one in front.
 fn on_moment_action(ctx: &ModuleContext, me: &Agentry, action: &str, sessions: &mut HashMap<String, Session>, moments: &mut Moments) {
+    if action == ACTION_EXPANDED || action == ACTION_COLLAPSED {
+        return;
+    }
+    // What was typed stays out of the log.
+    if !action.starts_with(ACTION_SEARCH) {
+        println!("{}: moment action {action}", me.profile.name);
+    }
     let (id, outcome) = if action == PAGE_PREV || action == PAGE_NEXT {
         if moments.queue.page(if action == PAGE_NEXT { 1 } else { -1 }) {
             publish_moments(ctx, me, moments, sessions);
