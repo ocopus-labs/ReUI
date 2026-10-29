@@ -448,6 +448,11 @@ impl App {
         self.invalidate();
     }
 
+    /// Windows' app mode or accent changed: the look is read afresh as the page rebuilds.
+    pub fn on_colors(&mut self) {
+        self.rebuild();
+    }
+
     pub fn on_updates(&mut self) {
         if let Phase::Ready(path) = self.state.updates.phase() {
             if self.state.paths.sandbox {

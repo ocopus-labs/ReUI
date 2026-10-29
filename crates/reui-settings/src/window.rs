@@ -357,7 +357,15 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             if crate::wallpaper::changed(wparam) {
                 crate::wallpaper::load(hwnd);
             }
+            if colors_changed(lparam) {
+                with_app(|app| app.on_colors());
+            }
             DefWindowProcW(hwnd, msg, wparam, lparam)
+        }
+        // The Windows accent (Appearance > Accent: Windows).
+        WM_DWMCOLORIZATIONCOLORCHANGED => {
+            with_app(|app| app.on_colors());
+            LRESULT(0)
         }
         crate::wallpaper::WM_WALLPAPER => {
             with_app(|app| app.on_wallpaper());
@@ -382,4 +390,10 @@ unsafe fn logo(instance: HMODULE, w: SYSTEM_METRICS_INDEX, h: SYSTEM_METRICS_IND
         Ok(icon) => HICON(icon.0),
         Err(_) => LoadIconW(None, IDI_APPLICATION).unwrap_or_default(),
     }
+}
+
+/// Windows' light or dark app mode changed ("ImmersiveColorSet"): the previews follow it
+/// under Theme: Auto.
+fn colors_changed(lparam: LPARAM) -> bool {
+    lparam.0 != 0 && unsafe { PCWSTR(lparam.0 as *const u16).to_string() }.is_ok_and(|t| t == "ImmersiveColorSet")
 }
