@@ -76,7 +76,8 @@ modules/
   devices/         Bluetooth connects and batteries (watchers, containers, PnP battery,
                    AirPods ads), anti-spam gate, low battery, controllers, laptop power
                    and time to full, drives and Eject, phones, overview, OSD hand-off,
-                   settings
+                   settings; art.rs looks up ReUI's device drawings by kind or family
+                   (design/assets/devices/, sent as Art::Logo)
   timers/          countdowns, focus sessions, stopwatch: launcher field parser, state
                    machines (fake-clock tests), timer-state.json, finish sound, Do Not
                    Disturb (WNF read, IQuietHoursSettings, checked), views, settings
@@ -131,6 +132,7 @@ render/            drawing only (no behaviour state); where things go is reui_de
   fonts.rs  text.rs  images.rs  elements.rs
   compact.rs  minimal.rs  expanded.rs (strip + header + row layout)
   notch.rs         the Notch style's ears
+  sheet.rs         test-only: the device-drawing contact sheet (target/devices-art/)
   rows/            timeline, controls, slider, lyrics, cards, search, tabs, note,
                    context (session strip), choices, block (scrolling text)
 features/          per-feature island logic

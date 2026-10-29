@@ -158,13 +158,15 @@ Elements a module can put in a region (`reui_protocol::Element`). Sizes depend o
 | `Glyph { tone }` | `icon.compact` | `icon.tile` | `icon.trailing` |
 | `Art::Gradient` / `Art::Image` | 24 circle | 56, `radius.concentric` | 32 circle |
 | `Art::Glyph` | Accent-tinted circle, `icon.tile-compact` glyph | Accent-tinted 56 tile, `icon.tile` glyph | 32 circle |
-| `Art::Logo` | An agent's brand SVG (`design/assets/agents/`: Claude, OpenAI for Codex, OpenCode) drawn bare, no tile or background, at `opacity.logo-bare` of its spot; keeps its own colours (Claude's orange), or takes the primary label colour if it has none | Same in the 56 spot | Same in the 32 spot |
+| `Art::Logo` | A single-colour SVG mark drawn bare, no tile or background, at `opacity.logo-bare` of its spot (rounded to whole DIPs, placed on whole pixels): an agent's brand mark (`design/assets/agents/`: Claude, OpenAI for Codex, OpenCode), which keeps its own colours (Claude's orange) or takes the primary label colour, or a device drawing (see *Device art*) in the primary label colour | Same in the 56 spot | Same in the 32 spot |
 | `Ring(progress)` | 24, stroke 3 | 56, stroke 6 | 56, stroke 6 |
 | `Bars { live }` | Live visuals moving at `motion.bars.fps` while live and shown (in the pill, the open card and the minimal bubble, each in its own activity's accent); resting levels otherwise, flat when not live | Same | Same |
 | `Dot` | 8, accent | same | same |
 | `Level { value, dim }` | As the compact trailing side, the **whole pill is the meter** (`island.compact.meter-width`): the pill is the track, an accent fill at `opacity.meter-fill` grows from the left, inset `meter-inset` so its round ends stay concentric with the pill's; the leading glyph sits bare in the fill's left end and the percentage (tabular) at the right end. `dim` (muted) dims the fill and quiets the number. In the bubble: a ring | Accent bar on a track | Same |
 
 Images are sent once per surface (`HubMsg::Image`) ahead of the first snapshot that uses them, decoded with WIC, downscaled to 256 px on the short side and drawn cover-fitted (centre crop) into the shape. Until they arrive, a `fill.tertiary` placeholder of the same shape shows.
+
+**Device art.** ReUI's own line drawings of devices (`design/assets/devices/`, rules and how to add one in its `README.md`), one per kind: earbuds, headphones, speaker, gamepad, mouse, keyboard, pen, watch, phone, and the Bluetooth rune for an unknown device. Sent as `Art::Logo`, so the island inks them in the theme's primary label colour and the dark and light looks need no extra drawings. Each comes twice: `<id>.svg` on a 48 grid with a 3 stroke for the open card's 56 spot (a bare mark there is 48 DIP), and `<id>-small.svg` on a 21 grid with a 1.5 stroke and no inner detail for the compact 24 spot (21 DIP), so one unit is one pixel at 100 % and two at 200 %. Strokes only (`currentColor`), round caps and joins, Fluent's weight and corner rounding, straight strokes on the pixel grid. `cargo test -p reui-island device_art_sheet -- --ignored` draws all of them as the island does into `target/devices-art/` (pill and card, dark and light, 100 % and 200 %, and magnified beside the Fluent glyphs).
 
 Tones: `Primary`, `Secondary` (label colours), `Accent` (the activity's accent), `Positive` / `Warning` / `Negative` (system green / orange / red).
 
