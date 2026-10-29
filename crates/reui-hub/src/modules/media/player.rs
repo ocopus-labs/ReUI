@@ -28,8 +28,9 @@ pub fn exe_name(pid: u32) -> Option<String> {
     }
 }
 
-/// Visible top-level app windows (not tool or owned windows) with their process ids.
-fn app_windows() -> Vec<(HWND, u32)> {
+/// Visible top-level app windows (not tool or owned windows) with their process ids, in
+/// z-order (front first). Also how the agent module finds a session's terminal.
+pub fn app_windows() -> Vec<(HWND, u32)> {
     unsafe extern "system" fn each(hwnd: HWND, found: LPARAM) -> BOOL {
         let found = unsafe { &mut *(found.0 as *mut Vec<(HWND, u32)>) };
         unsafe {
@@ -93,7 +94,7 @@ pub fn open(aumid: &str, pid: Option<u32>) {
 
 /// Windows lets only the foreground process hand the foreground on; borrowing the
 /// foreground thread's input state is the usual way round that for a background helper.
-fn focus(hwnd: HWND) {
+pub fn focus(hwnd: HWND) {
     unsafe {
         if IsIconic(hwnd).as_bool() {
             _ = ShowWindow(hwnd, SW_RESTORE);

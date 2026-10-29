@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use reui_protocol::{CardSize, CompactView, Context, Element, ExpandedView, Headline, Priority, Row, Tone};
+use reui_protocol::{Button, ButtonContent, ButtonRole, CardSize, CompactView, Context, Element, ExpandedView, Headline, Priority, Row, Tone};
 
 use super::card::{card, GLYPH_DONE};
 use super::settings::{Settings, ShowSessions};
@@ -90,6 +90,20 @@ fn moment(me: &Agentry, session: &Session, leading: Element, eyebrow: &str, head
     }
 }
 
+/// The action that brings a session's terminal forward (a failed turn's button, a moment's
+/// "Answer in terminal").
+pub(super) const ACTION_TERMINAL: &str = "terminal";
+
+/// A failed turn's one action, Open terminal, when the bridge said where the agent runs: a
+/// lone button on a moment, which the island sets beside the text (PRD agent moments §5.8,
+/// Silent Mode).
+fn failed_rows(session: &Session) -> Vec<Row> {
+    match session.origin {
+        Some(_) => vec![Row::Buttons(vec![Button { action: ACTION_TERMINAL.into(), content: ButtonContent::Text("Open terminal".into()), role: ButtonRole::Secondary }])],
+        None => Vec::new(),
+    }
+}
+
 /// Publishes the session's activity, or takes it away when its phase isn't shown.
 pub(super) fn publish_session(ctx: &ModuleContext, me: &Agentry, id: &str, session: &Session) {
     let Some(phase) = &session.phase else { return };
@@ -107,7 +121,7 @@ pub(super) fn publish_session(ctx: &ModuleContext, me: &Agentry, id: &str, sessi
         Phase::Failed { reason } => (
             Priority::Alert,
             Element::Glyph { glyph: GLYPH_FAILED, tone: Tone::Negative },
-            moment(me, session, Element::Glyph { glyph: GLYPH_FAILED, tone: Tone::Negative }, "Stopped", Headline::Text(reason.clone().unwrap_or_else(|| "The turn failed".into())), None, Vec::new()),
+            moment(me, session, Element::Glyph { glyph: GLYPH_FAILED, tone: Tone::Negative }, "Stopped", Headline::Text(reason.clone().unwrap_or_else(|| "The turn failed".into())), None, failed_rows(session)),
         ),
         _ => {
             let (priority, trailing, status) = present(phase, session);

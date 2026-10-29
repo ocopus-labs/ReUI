@@ -17,6 +17,7 @@ use serde_json::Value;
 use tokio::time::Instant;
 
 use super::describe::short_tool_name;
+use super::terminal::Origin;
 use super::moments::Moment;
 use super::view::publish_moments;
 use super::{read_usage, set_phase, Agentry, Moments, Phase, Session, PROMPT_CHARS};
@@ -58,8 +59,12 @@ pub(super) async fn on_hook(ctx: &ModuleContext, me: &Agentry, call: HookCall, s
         usage: None,
         retract_at: None,
         last_event: Instant::now(),
+        origin: None,
     });
     session.last_event = Instant::now();
+    if let Some(origin) = Origin::of(&event) {
+        session.origin = Some(origin);
+    }
     if let Some(path) = event.get("transcript_path").and_then(Value::as_str) {
         session.transcript = Some(PathBuf::from(path));
     }

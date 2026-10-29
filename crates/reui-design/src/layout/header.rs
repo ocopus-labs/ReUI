@@ -87,6 +87,12 @@ pub fn inline_width(n: usize) -> f32 {
     n * component::button::INLINE + (n - 1.0) * component::button::INLINE_GAP
 }
 
+/// A lone text capsule beside a moment's text (a failed turn's Open terminal): its width
+/// for a label `label` wide. It's `component::button::INLINE` tall, at the right inset.
+pub fn inline_text_width(label: f32) -> f32 {
+    label + 2.0 * component::button::INLINE_TEXT_PADDING
+}
+
 /// Inline glyph button `i`'s left edge in a card `width` wide holding `n` of them.
 pub fn inline_x(look: &Look, width: f32, n: usize, i: usize) -> f32 {
     let mut x = width - look.inset() - inline_width(n);

@@ -63,18 +63,32 @@ impl Renderer {
                 top += h + island::expanded::CONTEXT_GAP;
             }
 
-            // A lone row of glyph buttons belongs beside the hero, not under it.
-            let inline: Option<&[Button]> = match view.rows.as_slice() {
-                [Row::Buttons(b)] if b.iter().all(|b| matches!(b.content, ButtonContent::Glyph(_))) => Some(b),
-                _ => None,
-            };
-            let rows: &[Row] = if inline.is_some() { &[] } else { &view.rows };
-
             let (leading, trailing) = (shown_level(&view.leading, with.level), shown_level(&view.trailing, with.level));
             let (lw, lh) = self.measure(&leading, Slot::Leading)?;
-            let (tw, th) = match inline {
-                Some(b) => (header::inline_width(b.len()), component::button::INLINE),
-                None => self.measure(&trailing, Slot::Trailing)?,
+
+            // A lone row of glyph buttons belongs beside the hero, not under it. So does a
+            // moment's lone text button (iOS's Silent Mode: "Unmute" beside the text), when
+            // the hero fits beside it; otherwise it's a full-width capsule under the text.
+            let mut inline: Option<&[Button]> = match view.rows.as_slice() {
+                [Row::Buttons(b)] if b.iter().all(|b| matches!(b.content, ButtonContent::Glyph(_))) => Some(b),
+                [Row::Buttons(b)] if view.context.is_some() && b.len() == 1 && matches!(b[0].content, ButtonContent::Text(_)) => Some(b),
+                _ => None,
+            };
+            let mut inline_text = match inline {
+                Some([Button { content: ButtonContent::Text(t), .. }]) => Some(header::inline_text_width(self.text_width(t, &self.fonts.button)?)),
+                _ => None,
+            };
+            if let (Some(width), Headline::Text(hero)) = (inline_text, &view.headline) {
+                if self.text_width(hero, &self.fonts.headline)? > header::columns(&self.look, w, lw, width).1 {
+                    (inline, inline_text) = (None, None);
+                }
+            }
+            let rows: &[Row] = if inline.is_some() { &[] } else { &view.rows };
+
+            let (tw, th) = match (inline, inline_text) {
+                (_, Some(width)) => (width, component::button::INLINE),
+                (Some(b), None) => (header::inline_width(b.len()), component::button::INLINE),
+                (None, None) => self.measure(&trailing, Slot::Trailing)?,
             };
             let (text_left, text_w) = header::columns(&self.look, w, lw, tw);
 
@@ -115,6 +129,10 @@ impl Renderer {
                 _ => None,
             };
             match inline {
+                Some([button]) if inline_text.is_some() => {
+                    let size = component::button::INLINE;
+                    self.button(rt, button, w - inset - tw, mid - size / 2.0, tw, size, accent, &mut hits)?;
+                }
                 Some(buttons) => {
                     let size = component::button::INLINE;
                     for (i, button) in buttons.iter().enumerate() {

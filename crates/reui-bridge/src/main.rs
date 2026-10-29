@@ -9,6 +9,8 @@
 //! without waiting, and the hub makes the pair one moment. Contract with the agent:
 //! stdout is either empty or exactly one decision JSON object, and the exit code is always 0,
 //! so a missing hub, a timeout or any error means "no decision" and the agent carries on.
+//! Each event goes with the bridge's parent process chain (`reui_parents`, `parents.rs`),
+//! so the island's "Open terminal" can find the window the agent runs in.
 //!
 //! `reui-bridge install claude [--scope user|project|local] [--project DIR]` and
 //! `reui-bridge uninstall claude [...]` add or remove the hook entries.
@@ -23,6 +25,7 @@
 //! Exits 1 if ReUI isn't running.
 
 mod install;
+mod parents;
 
 use std::io::{Read, Write};
 use std::time::Duration;
@@ -89,7 +92,14 @@ fn hook(agent: &str, ask: bool) {
     if std::io::stdin().take(MAX_PAYLOAD).read_to_string(&mut payload).is_err() {
         return;
     }
-    let wait = serde_json::from_str::<serde_json::Value>(&payload).ok().and_then(|event| reply_wait(&event, ask));
+    let mut event = serde_json::from_str::<serde_json::Value>(&payload).ok();
+    let wait = event.as_ref().and_then(|event| reply_wait(event, ask));
+    // Where the agent runs, for the island's "Open terminal" (`parents.rs`).
+    if let Some(serde_json::Value::Object(fields)) = event.as_mut() {
+        fields.insert("reui_parents".into(), parents::own().into());
+        fields.insert("reui_console".into(), parents::console().into());
+        payload = serde_json::Value::Object(std::mem::take(fields)).to_string();
+    }
 
     let Ok(runtime) = tokio::runtime::Builder::new_current_thread().enable_all().build() else { return };
     let output = runtime.block_on(forward(agent, payload, wait));

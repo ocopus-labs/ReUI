@@ -53,6 +53,7 @@ mod queue;
 mod schema;
 mod settings;
 mod status;
+mod terminal;
 mod usage;
 mod view;
 
@@ -62,6 +63,7 @@ use self::moments::{Kind, Outcome};
 use self::queue::Queue;
 use self::settings::Settings;
 use self::status::Throttle;
+use self::terminal::Origin;
 use self::usage::Ledger;
 use self::view::{publish_moments, publish_session, publish_test, TEST_KEY};
 use super::Module;
@@ -178,6 +180,8 @@ struct Session {
     usage: Option<Usage>,
     retract_at: Option<Instant>,
     last_event: Instant,
+    /// Where its terminal is (the bridge's last parent chain), for "Open terminal".
+    origin: Option<Origin>,
 }
 
 /// Fresh tokens (cache reads left out where the agent reports them).
@@ -266,6 +270,16 @@ async fn run(profile: &'static Profile, mut ctx: ModuleContext) {
                 Some(ModuleInput::Action(action)) if action.key.starts_with(view::MOMENT_PREFIX) => {
                     on_moment_action(&ctx, &me, &action.action, &mut sessions, &mut moments);
                 }
+                // A failed turn's Open terminal: there, and the alert goes.
+                Some(ModuleInput::Action(action)) if action.action == view::ACTION_TERMINAL => {
+                    let id = action.key.strip_prefix("session-").unwrap_or_default();
+                    if let Some(session) = sessions.get_mut(id) {
+                        open_terminal(session);
+                        session.phase = None;
+                        session.retract_at = None;
+                        ctx.retract(&action.key);
+                    }
+                }
                 Some(ModuleInput::Action(_)) => {}
                 None => break,
             },
@@ -329,6 +343,12 @@ fn on_moment_action(ctx: &ModuleContext, me: &Agentry, action: &str, sessions: &
         let Some((id, verb)) = Queue::parse(action) else { return };
         let Some(m) = moments.queue.get_mut(id) else { return };
         let outcome = m.act(&verb);
+        // Answer in terminal: the agent's own prompt comes, so bring its window forward.
+        if verb.trim_start_matches("alt:") == view::ACTION_TERMINAL && outcome != Outcome::Nothing {
+            if let Some(session) = sessions.get(&m.session) {
+                open_terminal(session);
+            }
+        }
         // Open link: the browser first, then the accept (Claude won't open it itself).
         if let (Kind::Link { url, .. }, Outcome::Reply(Some(_))) = (&m.kind, &outcome) {
             if verb == "open" {
@@ -381,6 +401,14 @@ async fn read_usage(me: &Agentry, session_id: &str, transcript: Option<PathBuf>)
     .await
     .ok()
     .flatten()
+}
+
+/// Brings the window the session's agent runs in forward, when the bridge told us where.
+/// The island allowed it with the click (`AllowSetForegroundWindow`).
+fn open_terminal(session: &Session) {
+    if let Some(origin) = session.origin.clone() {
+        tokio::task::spawn_blocking(move || terminal::open(&origin));
+    }
 }
 
 /// Moves a session on after its moment is settled.
