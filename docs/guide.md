@@ -9,13 +9,13 @@ ReUI puts a dynamic island at the top of your screen: a small black pill that sh
 | Rest the pointer on the pill | After a short pause it becomes clickable and peeks. Until then clicks go through to what's underneath (browser tabs stay usable) |
 | Click the pill | Opens the card |
 | Rest the pointer on the pill while nothing is happening | Shows the date and time |
-| Click the pill while nothing is happening | Opens a row of glyphs: Clipboard, Timers, Devices, System stats (and Now Playing while something plays). Click one to go there; Esc or moving away closes the row |
+| Click the pill while nothing is happening | Opens a row of glyphs: Clipboard, Shelf, Timers, Devices, System stats (and Now Playing while something plays). Click one to go there; Esc or moving away closes the row |
 | Move the pointer away | The card folds back |
 | Scroll the wheel over the island | Steps through everything that's going on; over a row of cards it scrolls the row |
 | Click the small bubble beside the pill | Brings that activity into the pill |
-| Right-click the pill or the tray icon | Settings, Pause ReUI for 1 hour, Hide the island (Show the island while hidden), Clipboard history, Devices, System stats, Quit |
+| Right-click the pill or the tray icon | Settings, Pause ReUI for 1 hour, Hide the island (Show the island while hidden), Clipboard history, Devices, System stats, Shelf, Timer, Quit |
 | Push the pointer against the top edge | Shows a hidden island (Settings → General → Show the island: When active / When needed) |
-| Click a glyph under an open card | Goes to that view: Clipboard, Timers, Devices, System stats, and Now Playing while something plays. The wheel over the glyphs steps through them; Ctrl+Tab / Ctrl+Shift+Tab does too while the card has the keyboard (clipboard history, the timer field). Off in Settings → General → View switcher |
+| Click a glyph under an open card | Goes to that view: Clipboard, Shelf, Timers, Devices, System stats, and Now Playing while something plays. The wheel over the glyphs steps through them; Ctrl+Tab / Ctrl+Shift+Tab does too while the card has the keyboard (clipboard history, the timer field). Off in Settings → General → View switcher |
 | Click the dot beside the glyphs | A permission request or question arrived while you were in a view: the dot (in its colour) says it's waiting, and a click brings it forward |
 
 The island hides while a game, video or presentation fills the screen (Settings → General → Hide in full screen), and can sit on your main display, the display the pointer is on, or one display you choose (Settings → General → Display). In "When active" and "When needed" it still shows in full whenever the desktop is in front (you clicked the wallpaper or pressed Win+D), and keeps out of the way inside apps (Settings → General → Always show on the desktop). If you hide the taskbar, Settings → General → Clock in the resting island puts the time in the island while nothing else is showing.
@@ -67,6 +67,26 @@ Everything you copy (text with its formatting, images, files) is kept on this PC
 | **Ctrl+Alt+1 … Ctrl+Alt+9** | Pastes a recent item without opening anything |
 
 If the app you paste into runs as administrator, the item is put on the clipboard and the island says "Press Ctrl+V".
+
+## Shelf
+
+Drag files, folders, an image from a web page, a link or some text to the top of the screen: near the island it grows into a target that says **Drop to hold**. Let go, and the pill shows the shelf's mark and how many things it holds. Later, drag the thing back out of the island into any app that takes drops: a mail, a chat, an upload page, an Explorer folder.
+
+| Do this | It does |
+| --- | --- |
+| Drag something onto the island | Holds it. Files stay where they are: the shelf only remembers where. An image or text with no file of its own is saved in ReUI's folder |
+| Drag the shelf's pill into an app | Drops every file it holds at once (collect files from several folders, then attach them in one go) |
+| Click the pill, or Shelf in the view switcher or the idle pill's row | Opens the shelf: one card per drop, newest first |
+| Drag a card into an app | Drops that file (or link, or text) there. It's always a copy or a shortcut: the original is never moved |
+| Click a card, or Enter | Opens it (a text card is copied) |
+| Ctrl+Enter | Shows the files in Explorer |
+| Delete, or the bin on a card | Lets go of it; your file stays where it is |
+| Right-click a card | Open, Show in folder, Copy path, Remove |
+| The bin at the top of the shelf, or Tray → Shelf → Clear shelf | Lets go of everything |
+
+A file that was moved or deleted since says **Missing**. Settings → Shelf → **Keep held things**: until you remove them (the default), until ReUI restarts, a day or a week. Copies ReUI made itself never take more than 512 MB; the oldest go first.
+
+Windows doesn't allow drag and drop between an app run as administrator and one that isn't, so a drop from (or into) an elevated app does nothing.
 
 ## Volume and brightness
 
@@ -126,4 +146,4 @@ ReUI checks GitHub for a new version once a day (Settings → About → Check au
 - **Replay the tour:** Settings → About → Replay the tour.
 - **Report a bug:** Settings → About → Report a bug opens a GitHub issue with only ReUI's version and the Windows build filled in.
 - **Logs:** `%LOCALAPPDATA%\ReUI` (Settings → About → Logs).
-- **Your data:** settings and clipboard history in `%APPDATA%\ReUI`, caches and logs in `%LOCALAPPDATA%\ReUI` (Settings → Privacy & data).
+- **Your data:** settings and clipboard history in `%APPDATA%\ReUI`, caches, logs and what the shelf holds in `%LOCALAPPDATA%\ReUI` (Settings → Privacy & data).

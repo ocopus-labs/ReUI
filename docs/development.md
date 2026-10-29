@@ -33,7 +33,7 @@ To drive a sandboxed island without touching the real mouse or keyboard, post to
 
 ## The hub's flags
 
-The hub starts the island plus every module. `--no-agents`, `--no-media`, `--no-clipboard`, `--no-osd`, `--no-devices`, `--no-timers` skip one; `--no-link-previews` keeps clipboard links offline; `--no-updates` never looks for updates or mentions them. `--no-island` runs the hub alone so you can start `reui-island.exe` yourself (under a debugger, say). `--no-onboarding` skips the first run and one-time tips; `--first-run` replays the demo and welcome. The full list is the doc comment at the top of `crates/reui-hub/src/main.rs`.
+The hub starts the island plus every module. `--no-agents`, `--no-media`, `--no-clipboard`, `--no-osd`, `--no-devices`, `--no-timers`, `--no-privacy`, `--no-stats`, `--no-shelf` skip one; `--no-link-previews` keeps clipboard links offline; `--no-updates` never looks for updates or mentions them. `--no-island` runs the hub alone so you can start `reui-island.exe` yourself (under a debugger, say). `--no-onboarding` skips the first run and one-time tips; `--first-run` replays the demo and welcome. The full list is the doc comment at the top of `crates/reui-hub/src/main.rs`.
 
 `--demo` enables a module that shows now-playing, a 5-minute timer and, 25 s after each one is settled, the next agent moment: a permission with a scrolling script, a three-step question (one step multi-select) and a plan to approve. They take over the pill, answer nothing real, and time out and fail open (20 s for the permission, 60 s for the others). Hover to peek, click to expand, right-click the pill to quit ReUI.
 
@@ -56,6 +56,8 @@ Setup options: `--no-autostart` (don't start with Windows), `--no-launch`, `--qu
 | `%APPDATA%\ReUI\clipboard.json` | `hotkey`, `retention_days`, `ignored_apps`, `link_previews` |
 | `%LOCALAPPDATA%\ReUI` | Caches and logs |
 | `%LOCALAPPDATA%\ReUI\update.json` | What the last update check found |
+| `%APPDATA%\ReUI\shelf.json` | File shelf: `keep` (`removed` \| `restart` \| `day` \| `week`), `saved_cap_mb` |
+| `%LOCALAPPDATA%\ReUI\shelf\` | What the file shelf holds (`held.json`) and the copies it made (`files\<card>\`) |
 | `%LOCALAPPDATA%\ReUI\agents.json` | Each coding agent's last event (at most one write per 10 s) |
 | `%LOCALAPPDATA%\ReUI\bin\reui-bridge.exe` | The bridge the hooks run; the hub keeps it in step with itself when it starts |
 
@@ -112,6 +114,10 @@ The hub's `privacy` module shows which app is using the microphone, the camera o
 The hub's `island` module (`modules/hide.rs`) registers the island's hide shortcut (`hide_shortcut` in `settings.json`, Win+Alt+I by default; Win+Alt+H is Windows' voice typing) and relays a press as `HubMsg::ToggleHidden`; the island keeps the state (`hidden` in `settings.json`). `reui-bridge hide` sends the same request through the pipe, which is how scripts test it without pressing keys.
 
 The hub's `stats` module shows CPU, GPU, memory, disk and network in a card: **Win+Alt+S**, Tray → System stats, or `reui-bridge stats`. Stats have no OS events, so they're polled, but only while the card is open: opening it starts a sampler thread that reads once a second (like Task Manager), and the island's "collapsed" ends it. With the card closed the module costs nothing (measured). CPU matches Windows 11's Task Manager (`GetSystemTimes`, i.e. `% Processor Time`); GPU is the busiest engine with its processes summed, from PDH's English counter names. Settings: `%APPDATA%\ReUI\stats.json` (`shortcut`, `gpu`, `disk`, `network`, `power`). `--no-stats` turns it off. The full spec and the costs are in [docs/PRD-system-stats.md](docs/PRD-system-stats.md).
+
+## File shelf internals
+
+The island is the drop target and the drag source; the hub's `shelf` module holds the list. A drag from elsewhere near the island (`DragGuard` says a button that went down elsewhere is held, within `island.shelf.reach` of the shape) makes the window hit-testable for it, which is the only way OLE's `DoDragDrop` finds a `WS_EX_TRANSPARENT` layered window; away from it the island is click-through again at once. `dragdrop/target.rs` answers Copy, else Link, never Move, reads the formats once on the drop (`CF_HDROP`, `FileGroupDescriptorW`/`FileContents`, `UniformResourceLocatorW`, `PNG`, `CF_UNICODETEXT`) and sends `ClientMsg::Drop` to the destination with `drops`. Out: `SHDoDragDrop` of the shell's data object (`SHCreateDataObject` over absolute IDLists, so files from several folders go together, with `CF_HDROP`), or text and URL formats; marked `ReUI.Drag` so the island never takes its own drag back. Debug builds: `WM_APP + 21` posted to the island (wparam 1 over, 0 leave, 2 let go of `REUI_TEST_DROP`'s `;`-separated paths) shows the target and checks island → hub → shelf without a real drag. Real drags need a person: drag a file from Explorer to the island and back into another folder (it must copy, never move). `--no-shelf` turns it off. Spec: [docs/PRD-file-shelf.md](PRD-file-shelf.md).
 
 ## Adding a module
 

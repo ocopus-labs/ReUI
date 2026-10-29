@@ -56,6 +56,7 @@ A place is a view the user opens on purpose, that has something of its own to sh
 | Tab | Module | Available | Opens with (existing path) | Glyph |
 |---|---|---|---|---|
 | Clipboard | `clipboard` | While the module runs | `open` | Paste `E77F` |
+| Shelf | `shelf` | While the module runs | `open`; the one place that takes drops (`Destination::drops`, docs/PRD-file-shelf.md) | Package `E7B8` |
 | Timers | `timers` | While the module runs | `launcher` (a running timer's card counts as Timers too) | Timer `E916` |
 | Devices | `devices` | While the module runs | `overview` | Devices `E772` |
 | System stats | `stats` | While the module runs | `open` | Diagnostic `E9D9` |

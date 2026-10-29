@@ -71,7 +71,7 @@ v1 ships the first three; the rest are candidates that fit the same module model
 | Devices | Bluetooth headphones connect with battery level, USB drives, charging | WinRT device watchers |
 | Mic, camera and screen-share indicators | Show which app is using them | Capability access manager registry/consent store |
 | Timers and focus | Timer, stopwatch, pomodoro as live activities | Internal |
-| Downloads and file shelf | Drop files onto the island to hold them, finished-download alerts | Drag-drop, folder watchers |
+| Downloads and file shelf | Drop files onto the island to hold them (built: docs/PRD-file-shelf.md), finished-download alerts | Drag-drop, folder watchers |
 | System stats | CPU, GPU, RAM, network in the expanded view | PDH counters, sampled only while visible |
 | Calls | Teams/Discord/Zoom call state and mute | Per-app integration, spike needed |
 

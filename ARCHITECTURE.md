@@ -32,7 +32,7 @@ reui-settings.exe  the Settings window, opened from the tray; single instance
 
 ```
 main.rs            flags (--no-agents, --no-media, --no-clipboard, --no-osd, --no-devices, --no-timers,
-                   --no-privacy, --no-stats, …), module list
+                   --no-privacy, --no-stats, --no-shelf, …), module list
 hub.rs             activities, ordering, ModuleContext (publish, retract, focus, image store)
 ipc.rs             the pipe: snapshots + images to surfaces, actions/commands/hooks back
 island.rs          launches and supervises reui-island
@@ -48,7 +48,8 @@ modules/
   hotkey.rs        hotkey settings ("Win+Alt+V") parsed into modifiers + virtual key
   hide.rs          the island's hide shortcut (settings.json `hide_shortcut`, Win+Alt+I) and
                    `toggle-hidden` (`reui-bridge hide`), relayed as HubMsg::ToggleHidden
-  destinations.rs  the places the view switcher offers (module, glyph, name, open command),
+  destinations.rs  the places the view switcher offers (module, glyph, name, open command,
+                   and which one takes drops: the shelf),
                    from the running modules and Now Playing's card; the hub sends them as
                    HubMsg::Destinations when they change (pure, tested)
   demo/            --demo: music, a timer, and agent moments (moments.rs: a permission
@@ -94,6 +95,13 @@ modules/
                    reui-privacy thread, RegNotifyChangeKeyValue + process waits), tracker (screen
                    settle, short uses linger, Briefs; fake-clock tests), views, mute via the
                    shared audio module, settings (privacy.json)
+  shelf/           the file shelf (docs/PRD-file-shelf.md): what's dropped on the island,
+                   held by reference (files) or saved in %LOCALAPPDATA%\ReUI\shelf (content with
+                   no file, files from temporary folders): store (held.json, expiry, the cap
+                   on ReUI's own copies; pure, tested), intake (what a drop becomes; tested),
+                   card (the pill's count and the card, the clipboard's faces, what each card
+                   carries out; pure, tested), os (open, show in folder, the clipboard,
+                   missing files, pictures and icons), settings (shelf.json)
   stats/           system stats card (CPU, GPU, memory, disk, network, battery draw), sampled
                    only while open: card (open/closed, deadlines; pure, tested), sampler (its
                    own thread, 1 Hz), os (GetSystemTimes, GlobalMemoryStatusEx, GetIfTable2),
@@ -125,6 +133,11 @@ place.rs           which display (monitor setting) and the window rect at its DP
 fullscreen.rs      when to hide: D3D, presentation, busy, a window covering the display
 desktop.rs         whether the desktop (not an app) is in front, for "Always show on the desktop"
 drag_guard.rs      no hover intent while a drag from elsewhere passes over
+dragdrop/          OLE drag and drop for the file shelf: target.rs (the island's IDropTarget:
+                   effect, the shell's drag image, the drop read once; tested by calling it),
+                   data.rs (reading a drag's formats; building what a card carries out:
+                   the shell's data object for files, text and URL formats; tested), mod.rs
+                   (RegisterDragDrop, SHDoDragDrop)
 images.rs          encoded images from the hub
 pill/              the island's behaviour
   mod.rs           state machine, snapshot apply, render orchestration
@@ -135,6 +148,9 @@ pill/              the island's behaviour
   summon.rs        hotkey-summoned cards, keyboard capture, search
   idle.rs          the idle pill: the time at rest (`idle_clock`), the date and time on a
                    peek, a click opening the row of places
+  drop.rs          the file shelf: hit-testable only for a drag near the island, the drop
+                   target's face (State::Drop), a drop sent to the place that takes drops,
+                   a press on a card or the shelf's pill becoming a drag out
   switcher.rs      the view switcher: places, when it shows, its tabs placed and drawn,
                    click / wheel / Ctrl+Tab to another place, a waiting decision's bubble beside it
   visibility.rs    size springs, show/hide, reveal, fullscreen, topmost
@@ -164,6 +180,9 @@ features/          per-feature island logic
                                     clock and when the minute turns
   switcher.rs                       when the view switcher shows, which tab is selected,
                                     which decision waits beside it
+  drop.rs                           the file shelf's rules: how near a drag counts, the
+                                    effect (never Move), what a drop's formats become,
+                                    what the pill drags out
 ```
 
 **Rules:**
@@ -221,9 +240,10 @@ stats.rs           idle cost: CPU and private memory of ReUI's processes
 | `%APPDATA%\ReUI\settings.json` | island `visibility`, `show_on_desktop`, `hide_in_fullscreen`, `monitor`, `paused_until` while ReUI is paused, `hidden` while it's hidden with its shortcut (written by the island), `hide_shortcut` (read by the hub), `view_switcher`, `idle_clock`, and the look: `style` (island / notch), `theme` (auto / dark / light), `accent` (reui / windows), `roundness` (0..1), `top_gap` (0..24), `padding` (compact / regular / roomy), `scale` (0.9..1.25) |
 | `%APPDATA%\ReUI\onboarding.json` | first run done (`welcomed`), tips shown, offers answered |
 | `%APPDATA%\ReUI\clipboard.db`, `clipboard.json` | clipboard history and settings |
-| `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json`, `timers.json`, `privacy.json`, `stats.json`, `coding.json` | music, OSD, Devices, Timers, privacy indicator, System stats and coding agent settings (`coding.json` is read by all three agent modules) |
+| `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json`, `timers.json`, `privacy.json`, `stats.json`, `shelf.json`, `coding.json` | music, OSD, Devices, Timers, privacy indicator, System stats, file shelf and coding agent settings (`coding.json` is read by all three agent modules) |
 | `%APPDATA%\ReUI\timer-state.json` | running and paused timers, a focus session, the stopwatch, and whether ReUI turned Do Not Disturb on |
 | `%LOCALAPPDATA%\ReUI\lyrics\` | lyrics cache |
+| `%LOCALAPPDATA%\ReUI\shelf\held.json`, `shelf\files\<card>\` | what the file shelf holds (paths, links, text), and the copies it made itself (dropped images, files from temporary folders), deleted with their card |
 | `%LOCALAPPDATA%\ReUI\hub.log` | panics |
 | `%LOCALAPPDATA%\ReUI\bin\reui-bridge.exe` | the installed hook bridge |
 | `%LOCALAPPDATA%\ReUI\agents.json` | each coding agent's last hook event (hub's agent module, ≤ 1 write / 10 s per agent; Settings' status line) |
