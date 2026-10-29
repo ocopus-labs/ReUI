@@ -18,6 +18,7 @@ const CMD_QUIT: usize = 104;
 const CMD_NEW_TIMER: usize = 105;
 const CMD_FOCUS: usize = 106;
 const CMD_STOPWATCH: usize = 107;
+const CMD_UPDATE: usize = 108;
 /// Timer presets: this plus the preset's index.
 const CMD_PRESET: usize = 200;
 const CMD_ITEM: usize = 400;
@@ -94,6 +95,10 @@ pub fn menu(hwnd: HWND, paused: bool) -> Option<Command> {
         _ = AppendMenuW(menu, MF_STRING, CMD_SETTINGS, w!("Settings"));
         let pause = if paused { w!("Resume ReUI") } else { w!("Pause ReUI for 1 hour") };
         _ = AppendMenuW(menu, MF_STRING, CMD_PAUSE, pause);
+        if let Some(version) = known_update() {
+            let label: Vec<u16> = format!("Install update ({version})").encode_utf16().chain([0]).collect();
+            _ = AppendMenuW(menu, MF_STRING, CMD_UPDATE, PCWSTR(label.as_ptr()));
+        }
         _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
         _ = AppendMenuW(menu, MF_STRING, CMD_CLIPBOARD, w!("Clipboard history"));
         _ = AppendMenuW(menu, MF_STRING, CMD_DEVICES, w!("Devices"));
@@ -129,6 +134,7 @@ pub fn menu(hwnd: HWND, paused: bool) -> Option<Command> {
             CMD_NEW_TIMER => Some(Command::Module("timers", "launcher".into())),
             CMD_FOCUS => Some(Command::Module("timers", "start:focus".into())),
             CMD_STOPWATCH => Some(Command::Module("timers", "start:stopwatch".into())),
+            CMD_UPDATE => Some(Command::Module("updates", "install".into())),
             n if (CMD_PRESET..CMD_PRESET + presets.len()).contains(&n) => Some(Command::Module("timers", format!("start:{}m", presets[n - CMD_PRESET]))),
             CMD_QUIT => Some(Command::Quit),
             _ => None,
@@ -176,4 +182,48 @@ fn timer_presets() -> Vec<u32> {
         (!list.is_empty()).then_some(list)
     });
     parsed.unwrap_or_else(|| vec![1, 5, 10, 25])
+}
+
+/// The newer version the last update check found, if it can be installed from here: the
+/// hub's updates module installs it (the same flow as the card's Install). Read when the
+/// menu opens, so it costs nothing in between.
+fn known_update() -> Option<String> {
+    let var = |name: &str| std::env::var_os(name).filter(|v| !v.is_empty()).map(std::path::PathBuf::from);
+    let local = match var("REUI_CONFIG_DIR") {
+        Some(root) => root.join("local"),
+        None => var("LOCALAPPDATA")?.join("ReUI"),
+    };
+    let update = std::fs::read_to_string(local.join("update.json")).unwrap_or_default();
+    let settings = crate::settings::Settings::dir().and_then(|dir| std::fs::read_to_string(dir.join("settings.json")).ok()).unwrap_or_default();
+    update_entry(&update, &settings, env!("CARGO_PKG_VERSION"))
+}
+
+/// `update.json`'s `available` when it's newer than `current`, has an installer, and
+/// "Check automatically" (`check_updates`, default on) hasn't been turned off.
+fn update_entry(update_json: &str, settings_json: &str, current: &str) -> Option<String> {
+    let settings: serde_json::Value = serde_json::from_str(settings_json).unwrap_or_default();
+    if settings.get("check_updates").and_then(serde_json::Value::as_bool) == Some(false) {
+        return None;
+    }
+    let update: serde_json::Value = serde_json::from_str(update_json).ok()?;
+    let version = update.get("available")?.as_str()?;
+    update.get("setup_url")?.as_str()?;
+    reui_protocol::version::newer(version, current).then(|| version.to_string())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_update_entry_shows_for_a_newer_installable_version_while_checks_are_on() {
+        let found = r#"{ "available": "0.2.0", "setup_url": "https://example.com/ReUI-Setup-0.2.0.exe" }"#;
+        assert_eq!(update_entry(found, "", "0.1.0").as_deref(), Some("0.2.0"));
+        assert_eq!(update_entry(found, r#"{ "check_updates": true }"#, "0.1.0").as_deref(), Some("0.2.0"));
+        assert_eq!(update_entry(found, r#"{ "check_updates": false }"#, "0.1.0"), None);
+        assert_eq!(update_entry(found, "", "0.2.0"), None);
+        assert_eq!(update_entry(r#"{ "available": "0.2.0" }"#, "", "0.1.0"), None, "no installer");
+        assert_eq!(update_entry(r#"{ "available": null }"#, "", "0.1.0"), None);
+        assert_eq!(update_entry("", "", "0.1.0"), None);
+    }
 }
