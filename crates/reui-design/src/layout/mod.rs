@@ -16,12 +16,14 @@
 //! - [`rows`]: the full-width rows (buttons, bars and their times, the slider, search,
 //!   tabs, choices, text blocks, lyrics).
 //! - [`cards`]: the clipboard's scrolling row of cards and its tabs' scroll.
+//! - [`switcher`]: the view switcher's capsule of tabs under an open place's card.
 //! - Here: a card's width, corners and height, and the gaps between its rows.
 
 pub mod cards;
 pub mod compact;
 pub mod header;
 pub mod rows;
+pub mod switcher;
 
 use crate::look::Look;
 use crate::tokens::{component, island};
