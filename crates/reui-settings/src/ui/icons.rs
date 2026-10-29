@@ -50,6 +50,8 @@ pub const CANCEL: char = '\u{E711}';
 pub const STOPWATCH: char = '\u{E916}';
 pub const SPARKLE: char = '\u{E734}';
 pub const PALETTE: char = '\u{E790}';
+/// A pulse line: the system stats.
+pub const DIAGNOSTIC: char = '\u{E9D9}';
 
 pub fn tile(glyph: char, color: reui_design::Color) -> Icon {
     Icon::Glyph(glyph, color)
@@ -75,6 +77,9 @@ pub fn devices() -> Icon {
 }
 pub fn timers() -> Icon {
     tile(STOPWATCH, section::TIMERS)
+}
+pub fn stats() -> Icon {
+    tile(DIAGNOSTIC, section::STATS)
 }
 pub fn agents() -> Icon {
     tile(CODE, section::AGENTS)

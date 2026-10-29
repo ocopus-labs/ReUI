@@ -1,4 +1,4 @@
-//! Shortcut rows (the clipboard history's, the timers'): showing one, and what the recorder
+//! Shortcut rows (the clipboard history's, the timers', the stats card's): showing one, and what the recorder
 //! does with the chord it heard.
 
 use serde_json::Value;
@@ -10,7 +10,7 @@ use crate::state::State;
 use crate::ui::{Part, Row, Tone};
 
 /// The files with a shortcut, and what each is called in a clash.
-const OWNERS: [(File, &str); 2] = [(File::Clipboard, "Clipboard history"), (File::Timers, "Timers")];
+const OWNERS: [(File, &str); 3] = [(File::Clipboard, "Clipboard history"), (File::Timers, "Timers"), (File::Stats, "System stats")];
 
 /// A "Shortcut" row for `file`: its caps (or the recorder's prompt), and the recorder's
 /// last note in place of `detail`.
@@ -55,7 +55,7 @@ pub fn chord(state: &mut State, mods: u32, vk: u32) {
         return note(state, &text, Tone::Negative);
     }
     state.set(file, key_name, Value::String(key.label()));
-    // The hub registers the clipboard's shortcut when it starts; the timers' on reload.
+    // The hub registers the clipboard's shortcut when it starts; the others on reload.
     state.hotkey_note = (file == File::Clipboard && state.hub_running()).then(|| (file, "Takes effect when ReUI restarts".to_string(), Tone::Warning));
 }
 

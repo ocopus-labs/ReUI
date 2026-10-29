@@ -18,10 +18,11 @@ pub enum File {
     Timers,
     /// `coding.json`, read by the three coding agent modules.
     Coding,
+    Stats,
 }
 
 impl File {
-    pub const ALL: [File; 7] = [File::Island, File::Media, File::Clipboard, File::Osd, File::Devices, File::Timers, File::Coding];
+    pub const ALL: [File; 8] = [File::Island, File::Media, File::Clipboard, File::Osd, File::Devices, File::Timers, File::Coding, File::Stats];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -32,6 +33,7 @@ impl File {
             File::Devices => "devices.json",
             File::Timers => "timers.json",
             File::Coding => "coding.json",
+            File::Stats => "stats.json",
         }
     }
 
@@ -46,6 +48,7 @@ impl File {
             File::Devices => &["devices"],
             File::Timers => &["timers"],
             File::Coding => &["claude", "codex", "opencode"],
+            File::Stats => &["stats"],
         }
     }
 
@@ -59,6 +62,7 @@ impl File {
             File::Devices => "devices",
             File::Timers => "timers",
             File::Coding => "coding",
+            File::Stats => "stats",
         }
     }
 
@@ -119,6 +123,7 @@ impl File {
                 "focus_dnd": false,
             }),
             File::Coding => json!({ "show_sessions": "needed", "show_finished": false }),
+            File::Stats => json!({ "enabled": true, "shortcut": "Win+Alt+S", "gpu": true, "disk": true, "network": true, "power": true }),
         }
     }
 
@@ -126,7 +131,7 @@ impl File {
     pub fn shortcut_key(self) -> Option<&'static str> {
         match self {
             File::Clipboard => Some("hotkey"),
-            File::Timers => Some("shortcut"),
+            File::Timers | File::Stats => Some("shortcut"),
             _ => None,
         }
     }
