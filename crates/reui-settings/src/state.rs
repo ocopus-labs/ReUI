@@ -33,8 +33,10 @@ pub struct State {
     /// The shortcuts in the files when the window opened: the running hub holds those, so
     /// they never count as taken.
     pub held_hotkeys: Vec<(File, String)>,
-    /// The ignored-apps field.
+    /// The ignored-apps field (and the calendar's link field).
     pub field: String,
+    /// Why the last link added to the calendar wasn't.
+    pub calendar_note: Option<String>,
     /// The running apps the open menu lists.
     pub menu_apps: Vec<String>,
     /// A destructive button waiting for its confirming press.
@@ -68,6 +70,7 @@ impl State {
             recording: None,
             hotkey_note: None,
             field: String::new(),
+            calendar_note: None,
             menu_apps: Vec::new(),
             armed: None,
             stats: Stats::default(),

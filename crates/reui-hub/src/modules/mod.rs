@@ -3,6 +3,7 @@
 //! never constructed, so its adapters never run.
 
 pub mod agent;
+pub mod calendar;
 mod audio;
 pub mod clipboard;
 pub mod demo;

@@ -1,5 +1,6 @@
 //! The expanded view's full-width rows, one drawer per row type.
 
+mod agenda;
 mod block;
 mod cards;
 mod choices;

@@ -97,6 +97,11 @@ features = [
     "Win32_NetworkManagement_IpHelper",
     "Win32_NetworkManagement_Ndis",
     "Win32_System_Performance",
+    # Calendar: Windows' appointment store, DPAPI for secret links and cached feeds,
+    # connectivity hints (iphlpapi's types live in WinSock)
+    "ApplicationModel_Appointments",
+    "Win32_Security_Cryptography",
+    "Win32_Networking_WinSock",
 ]
 
 [build-dependencies]

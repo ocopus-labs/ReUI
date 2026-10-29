@@ -6,6 +6,7 @@
 mod about;
 mod agents;
 mod appearance;
+mod calendar;
 mod clipboard;
 mod devices;
 mod general;
@@ -39,6 +40,7 @@ pub enum Page {
     Osd,
     Devices,
     Timers,
+    Calendar,
     Indicators,
     Stats,
     Agents,
@@ -52,7 +54,7 @@ pub enum Page {
 
 impl Page {
     /// The Settings window's pages, in the nav.
-    pub const ALL: [Page; 12] = [Page::General, Page::Appearance, Page::NowPlaying, Page::Clipboard, Page::Osd, Page::Devices, Page::Timers, Page::Indicators, Page::Stats, Page::Agents, Page::Privacy, Page::About];
+    pub const ALL: [Page; 13] = [Page::General, Page::Appearance, Page::NowPlaying, Page::Clipboard, Page::Osd, Page::Devices, Page::Timers, Page::Calendar, Page::Indicators, Page::Stats, Page::Agents, Page::Privacy, Page::About];
     /// The welcome's steps, in its nav.
     pub const WELCOME: [Page; 3] = [Page::WelcomeFeatures, Page::WelcomeShortcut, Page::WelcomeStartup];
 
@@ -65,6 +67,7 @@ impl Page {
             Page::Osd => "Volume & brightness",
             Page::Devices => "Devices",
             Page::Timers => "Timers",
+            Page::Calendar => "Calendar",
             Page::Indicators => "Mic & camera",
             Page::Stats => "System stats",
             Page::Agents => "Coding agents",
@@ -97,7 +100,7 @@ impl Page {
     /// The sidebar's sections: General; the island's features; privacy and About.
     pub fn section(self) -> usize {
         match self {
-            Page::NowPlaying | Page::Clipboard | Page::Osd | Page::Devices | Page::Timers | Page::Indicators | Page::Stats | Page::Agents => 1,
+            Page::NowPlaying | Page::Clipboard | Page::Osd | Page::Devices | Page::Timers | Page::Calendar | Page::Indicators | Page::Stats | Page::Agents => 1,
             Page::Privacy | Page::About => 2,
             _ => 0,
         }
@@ -113,6 +116,7 @@ impl Page {
             Page::Osd => icons::osd(),
             Page::Devices => icons::devices(),
             Page::Timers => icons::timers(),
+            Page::Calendar => icons::calendar(),
             Page::Indicators => icons::indicators(),
             Page::Stats => icons::stats(),
             Page::Agents => icons::agents(),
@@ -177,6 +181,7 @@ pub fn build(page: Page, state: &State) -> Vec<Block> {
         Page::Osd => osd::build(state),
         Page::Devices => devices::build(state),
         Page::Timers => timers::build(state),
+        Page::Calendar => calendar::build(state),
         Page::Indicators => indicators::build(state),
         Page::Stats => stats::build(state),
         Page::Agents => agents::build(state),
@@ -218,6 +223,7 @@ pub fn act(page: Page, state: &mut State, target: &Target, act: Act) -> Effect {
         Page::Osd => osd::act(state, target, act),
         Page::Devices => devices::act(state, target, act),
         Page::Timers => timers::act(state, target, act),
+        Page::Calendar => calendar::act(state, target, act),
         Page::Indicators => Effect::None,
         Page::Stats => stats::act(state, target, act),
         Page::Agents => agents::act(state, target, act),
@@ -234,6 +240,7 @@ pub fn menu(page: Page, state: &mut State, target: &Target) -> Option<(Vec<Strin
         Page::Clipboard => clipboard::menu(state, target),
         Page::General => general::menu(state, target),
         Page::Timers => timers::menu(state, target),
+        Page::Calendar => calendar::menu(state, target),
         _ => None,
     }
 }
@@ -346,7 +353,8 @@ pub mod tests {
         assert_eq!(Page::from_arg("about"), Some(Page::About));
         assert_eq!(Page::from_arg("zzz"), None);
         assert_eq!(Page::from_arg("what"), None, "welcome steps aren't Settings pages");
-        assert_eq!((Page::WelcomeShortcut.index(), Page::About.index()), (1, 11));
+        assert_eq!((Page::WelcomeShortcut.index(), Page::About.index()), (1, 12));
+        assert_eq!(Page::from_arg("calendar"), Some(Page::Calendar));
         assert_eq!(Page::from_arg("appearance"), Some(Page::Appearance));
         assert_eq!(Page::from_arg("timers"), Some(Page::Timers));
         assert_eq!(Page::from_arg("mic"), Some(Page::Indicators));

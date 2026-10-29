@@ -21,10 +21,12 @@ pub enum File {
     /// `coding.json`, read by the three coding agent modules.
     Coding,
     Stats,
+    /// `calendar.json`: its links are DPAPI-sealed (`model::calendar`).
+    Calendar,
 }
 
 impl File {
-    pub const ALL: [File; 9] = [File::Island, File::Media, File::Clipboard, File::Osd, File::Devices, File::Timers, File::Privacy, File::Coding, File::Stats];
+    pub const ALL: [File; 10] = [File::Island, File::Media, File::Clipboard, File::Osd, File::Devices, File::Timers, File::Privacy, File::Coding, File::Stats, File::Calendar];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -37,6 +39,7 @@ impl File {
             File::Privacy => "privacy.json",
             File::Coding => "coding.json",
             File::Stats => "stats.json",
+            File::Calendar => "calendar.json",
         }
     }
 
@@ -53,6 +56,7 @@ impl File {
             File::Privacy => &["privacy"],
             File::Coding => &["claude", "codex", "opencode"],
             File::Stats => &["stats"],
+            File::Calendar => &["calendar"],
         }
     }
 
@@ -68,6 +72,7 @@ impl File {
             File::Privacy => "privacy",
             File::Coding => "coding",
             File::Stats => "stats",
+            File::Calendar => "calendar",
         }
     }
 
@@ -133,6 +138,7 @@ impl File {
             File::Privacy => json!({ "enabled": true, "microphone": true, "camera": true, "screen": true, "location": false }),
             File::Coding => json!({ "show_sessions": "needed", "show_finished": false }),
             File::Stats => json!({ "enabled": true, "shortcut": "Win+Alt+S", "gpu": true, "disk": true, "network": true, "power": true }),
+            File::Calendar => json!({ "enabled": true, "lead_min": 10, "windows": false, "sources": [] }),
         }
     }
 

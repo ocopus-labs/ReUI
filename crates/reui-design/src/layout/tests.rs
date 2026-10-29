@@ -207,3 +207,20 @@ fn a_question_said_in_full_takes_its_lines_from_what_scrolls() {
     assert!(code_less < code_full && code_less >= 3.0 * typography::BLOCK_CODE.line_height);
     assert!(rows::prose_block(1_000.0, 10_000.0).0 >= 3.0 * typography::BLOCK_PROSE.line_height);
 }
+
+#[test]
+fn an_agenda_lines_titles_up_and_keeps_the_where_to_its_share() {
+    let l = look(Appearance::default());
+    assert_eq!(rows::agenda_height(0), 0.0);
+    assert_eq!(rows::agenda_height(2), 2.0 * typography::FACT.line_height + component::agenda::LINE_GAP);
+    let w = Card::Regular.width();
+    let (title, title_w, detail, detail_w) = rows::agenda_line(&l, w, 40.0, 60.0);
+    assert_eq!(title, l.inset() + 40.0 + component::agenda::TIME_GAP);
+    assert!((detail + detail_w - (w - l.inset())).abs() < 0.01, "the where ends at the right inset");
+    assert!(title + title_w < detail, "the title stops before the where");
+    let (_, _, _, capped) = rows::agenda_line(&l, w, 40.0, 1000.0);
+    assert!(capped <= (w - 2.0 * l.inset() - 40.0 - component::agenda::TIME_GAP) * component::agenda::DETAIL_SHARE + 0.01);
+    let (_, alone, _, none) = rows::agenda_line(&l, w, 40.0, 0.0);
+    assert_eq!(none, 0.0);
+    assert!((title + alone - (w - l.inset())).abs() < 0.01, "no where: the title takes the line");
+}

@@ -21,6 +21,7 @@ const CMD_STOPWATCH: usize = 107;
 const CMD_UPDATE: usize = 108;
 const CMD_STATS: usize = 109;
 const CMD_HIDE: usize = 110;
+const CMD_CALENDAR: usize = 120;
 /// Timer presets: this plus the preset's index.
 const CMD_PRESET: usize = 200;
 const CMD_ITEM: usize = 400;
@@ -123,6 +124,7 @@ pub fn menu(hwnd: HWND, paused: bool, hidden: bool) -> Option<Command> {
         _ = AppendMenuW(menu, MF_STRING, CMD_CLIPBOARD, w!("Clipboard history"));
         _ = AppendMenuW(menu, MF_STRING, CMD_DEVICES, w!("Devices"));
         _ = AppendMenuW(menu, MF_STRING, CMD_STATS, w!("System stats"));
+        _ = AppendMenuW(menu, MF_STRING, CMD_CALENDAR, w!("Calendar"));
         let presets = timer_presets();
         if let Ok(timer) = CreatePopupMenu() {
             _ = AppendMenuW(timer, MF_STRING, CMD_NEW_TIMER, w!("New timer…"));
@@ -154,6 +156,7 @@ pub fn menu(hwnd: HWND, paused: bool, hidden: bool) -> Option<Command> {
             CMD_CLIPBOARD => Some(Command::Module("clipboard", "open".into())),
             CMD_DEVICES => Some(Command::Module("devices", "overview".into())),
             CMD_STATS => Some(Command::Module("stats", "open".into())),
+            CMD_CALENDAR => Some(Command::Module("calendar", "open".into())),
             CMD_NEW_TIMER => Some(Command::Module("timers", "launcher".into())),
             CMD_FOCUS => Some(Command::Module("timers", "start:focus".into())),
             CMD_STOPWATCH => Some(Command::Module("timers", "start:stopwatch".into())),

@@ -15,7 +15,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-pub const PROTOCOL_VERSION: u32 = 21;
+pub const PROTOCOL_VERSION: u32 = 22;
 const MAX_FRAME: usize = 16 * 1024 * 1024;
 
 /// Per-user pipe name; the hub also restricts the pipe's ACL to the current user. A test
@@ -331,6 +331,19 @@ pub enum Row {
     /// A few short facts on one line, each a quiet label over its value ("GPU" over
     /// "41% · 2.1 GB"): what's worth a glance but not a gauge.
     Facts(Vec<Fact>),
+    /// Things coming up, one per line: when, what, and a quieter where (a calendar's rest
+    /// of the day). Read-only: the card's own header holds the action.
+    Agenda(Vec<AgendaEntry>),
+}
+
+/// One line of a [`Row::Agenda`].
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub struct AgendaEntry {
+    /// When, as the user reads times ("14:30", "2:30 PM", "All day").
+    pub time: String,
+    pub title: String,
+    /// Where, or how ("Room 4", "Teams").
+    pub detail: Option<String>,
 }
 
 /// The most samples a [`Gauge`]'s `history` holds: one a second, the last minute.
