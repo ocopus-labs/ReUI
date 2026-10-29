@@ -20,6 +20,10 @@ pub enum Key {
     Nth(usize),
     /// Tab / Shift+Tab.
     Tab(i32),
+    /// Ctrl+Tab / Ctrl+Shift+Tab: the next or previous place (the view switcher). Read
+    /// only while the switcher shows (`clipboard_keys::offer_views`); otherwise the app in
+    /// front gets it.
+    View(i32),
     Undo,
 }
 
@@ -78,6 +82,7 @@ pub fn map_key(key: u16, mods: Mods, text: impl FnOnce() -> Option<char>) -> Opt
         },
         vk::DELETE if bare && !shift => Key::Item(ItemKey::Delete),
         vk::TAB if bare => Key::Tab(if shift { -1 } else { 1 }),
+        vk::TAB if ctrl && !alt => Key::View(if shift { -1 } else { 1 }),
         vk::KEY_P if ctrl_only => Key::Item(ItemKey::CtrlP),
         vk::KEY_Z if ctrl_only => Key::Undo,
         vk::KEY_1..=vk::KEY_9 if alt && !ctrl => Key::Nth((key - vk::KEY_1) as usize),
@@ -127,6 +132,9 @@ mod tests {
         assert_eq!(map_key(vk::KEY_Z, ctrl, a), Some(Key::Undo));
         assert_eq!(map_key(vk::TAB, none, a), Some(Key::Tab(1)));
         assert_eq!(map_key(vk::TAB, shift, a), Some(Key::Tab(-1)));
+        assert_eq!(map_key(vk::TAB, ctrl, a), Some(Key::View(1)));
+        assert_eq!(map_key(vk::TAB, Mods { ctrl: true, shift: true, alt: false }, a), Some(Key::View(-1)));
+        assert_eq!(map_key(vk::TAB, alt, a), None, "Alt+Tab is Windows'");
         assert_eq!(map_key(0x33, alt, a), Some(Key::Nth(2)));
         assert_eq!(map_key(vk::NUMPAD1, alt, a), Some(Key::Nth(0)));
         assert_eq!(map_key(0x46, alt, a), None, "Alt+F goes to the app");

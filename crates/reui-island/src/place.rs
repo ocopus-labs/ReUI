@@ -12,6 +12,8 @@ use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, MONITORINFOF_PRIMARY
 use reui_design::look::Look;
 use reui_design::tokens::island;
 
+use reui_design::layout::switcher;
+
 use crate::render::{expanded_surface, COMPACT_MAX_WIDTH};
 
 /// Posted to the island window to re-place it now (the `monitor` setting changed).
@@ -80,14 +82,15 @@ pub fn choose(choice: &MonitorChoice, screens: &[Screen], cursor: POINT) -> Opti
 
 /// The island's window on a display: wide enough for the expanded pill, or the widest
 /// compact pill plus its minimal bubble, whichever is wider; centred on the display, with
-/// its top at the work area's top (below a taskbar docked at the top). Sized for the
-/// look: its size, padding and gap from the top.
+/// its top at the work area's top (below a taskbar docked at the top), and tall enough for
+/// the tallest card with the view switcher under it. Sized for the look: its size, padding
+/// and gap from the top.
 pub fn window_rect(screen: &RECT, work: &RECT, dpi: f32, look: &Look) -> RECT {
     let scale = dpi * look.size;
     let surface = expanded_surface(look);
     let half = (surface.0 / 2.0).max(COMPACT_MAX_WIDTH / 2.0 + island::minimal::GAP + island::minimal::SIZE);
     let width = ((half + MARGIN) * 2.0 * scale).ceil() as i32;
-    let height = ((look.top() + surface.1 + MARGIN) * scale).ceil() as i32;
+    let height = ((look.top() + surface.1 + switcher::ROOM + MARGIN) * scale).ceil() as i32;
     let left = screen.left + (screen.right - screen.left - width) / 2;
     let top = work.top.max(screen.top);
     RECT { left, top, right: left + width, bottom: top + height }
@@ -174,6 +177,8 @@ mod tests {
         assert_eq!(one.left - monitor.left, monitor.right - one.right, "centred");
         assert!((two.right - two.left) >= 2 * (one.right - one.left) - 1);
         assert_eq!(one.top, 0);
+        let room = (look.top() + expanded_surface(&look).1 + switcher::ROOM) as i32;
+        assert!(one.bottom - one.top >= room, "the switcher fits under the tallest card");
         // A taskbar docked at the top: the island sits below it.
         let work = RECT { top: 48, ..monitor };
         assert_eq!(window_rect(&monitor, &work, 1.0, &look).top, 48);

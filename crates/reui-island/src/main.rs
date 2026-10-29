@@ -147,6 +147,7 @@ fn rebuild(hwnd: HWND, placement: &Placement) {
     let Some(mut old) = PILL.with(|cell| cell.try_borrow_mut().ok().and_then(|mut slot| slot.take())) else { return };
     eprintln!("island: rebuilding for scale {}", placement.scale);
     let (to_hub, events, snapshot) = old.take_link();
+    let places = old.places();
     let gpu = old.into_gpu();
     unsafe {
         for id in PILL_TIMERS {
@@ -160,7 +161,7 @@ fn rebuild(hwnd: HWND, placement: &Placement) {
     match Pill::new(hwnd, placement.scale, placement.window, placement.monitor, !animations_enabled(), settings.visibility, settings.appearance, look, to_hub, events, Some(gpu)) {
         Ok(mut pill) => {
             pill.apply_settings(settings);
-            pill.restore(snapshot);
+            pill.restore(snapshot, places);
             pill.recheck_fullscreen();
             PILL.with(|cell| *cell.borrow_mut() = Some(pill));
         }

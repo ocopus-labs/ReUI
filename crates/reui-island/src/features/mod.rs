@@ -8,4 +8,5 @@ pub mod clock;
 pub mod keys;
 pub mod level;
 pub mod music;
+pub mod switcher;
 pub mod visualizer;

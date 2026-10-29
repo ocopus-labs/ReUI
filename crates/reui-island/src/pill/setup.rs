@@ -24,9 +24,10 @@ use crate::features::visualizer::Visualizer;
 use crate::ipc::Event;
 use crate::drag_guard::DragGuard;
 use crate::place::MonitorChoice;
-use crate::render::{expanded_surface, Renderer, COMPACT_SURFACE, EAR_SURFACE, MINIMAL_SURFACE};
+use crate::render::{expanded_surface, Renderer, COMPACT_SURFACE, EAR_SURFACE, MINIMAL_SURFACE, SWITCHER_SURFACE};
 use crate::settings::Visibility;
 
+use super::switcher::Tabs;
 use super::{Gpu, Pill, State};
 use super::visuals::bar_visuals;
 
@@ -205,6 +206,42 @@ impl Pill {
         let minimal_bars = bar_visuals(&compositor, &bubble.Children()?, &minimal_brush, s)?;
         root.Children()?.InsertAtTop(&bubble)?;
 
+        // The view switcher: centred under the card, riding its height spring (`p.h`), in
+        // and out with `p.v` (dropping `rise` into place), as wide as its tabs (`p.sw`).
+        props.InsertScalar(h!("v"), 0.0)?;
+        props.InsertScalar(h!("sw"), 0.0)?;
+        let switcher_surface = renderer.surface(SWITCHER_SURFACE)?;
+        let switcher = compositor.CreateSpriteVisual()?;
+        switcher.SetBrush(&color_brush(&compositor, look.palette.background)?)?;
+        let switcher_clip = compositor.CreateRoundedRectangleGeometry()?;
+        switcher.SetClip(&compositor.CreateGeometricClipWithGeometry(&switcher_clip)?)?;
+        let rise = if reduced_motion { 0.0 } else { island::switcher::RISE * s };
+        let place = "Vector3(Round((W - p.sw) / 2), Round(T + p.h + G - (1 - p.v) * R), 0)";
+        switcher.StartAnimation(h!("Offset"), &expr(place, &[("W", win_w), ("T", top * s), ("G", island::switcher::GAP * s), ("R", rise)])?)?;
+        switcher.StartAnimation(h!("Opacity"), &expr("p.v", &[])?)?;
+        switcher.Children()?.InsertAtTop(&surface_sprite(&compositor, &switcher_surface, SWITCHER_SURFACE, s)?)?;
+        let switcher_edge = if look.palette.hairline.a > 0.0 {
+            let line = edge(&compositor, &switcher_clip, look.palette.hairline)?;
+            switcher.Children()?.InsertAtTop(&line)?;
+            Some(line)
+        } else {
+            None
+        };
+        root.Children()?.InsertAtTop(&switcher)?;
+        let tabs = Tabs {
+            sprite: switcher,
+            clip: switcher_clip,
+            edge: switcher_edge,
+            surface: switcher_surface,
+            places: Vec::new(),
+            enabled: true,
+            selected: None,
+            hover: None,
+            layout: reui_design::layout::switcher::Switcher::new(&look, 0),
+            drawn: None,
+            travel: 0,
+        };
+
         // The theme's hairline just inside the edge (light: it holds the white island's
         // shape on white windows; dark has none). Over the content, following the morphs.
         if look.palette.hairline.a > 0.0 {
@@ -318,6 +355,7 @@ impl Pill {
             block_scroll: 0.0,
             block_max: 0.0,
             choice_spans: None,
+            tabs,
             to_hub,
             events,
         })

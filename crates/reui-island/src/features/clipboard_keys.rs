@@ -33,6 +33,8 @@ thread_local! {
     /// Keys whose press we swallowed: their release is swallowed too.
     static DOWN: RefCell<[bool; 256]> = const { RefCell::new([false; 256]) };
     static MASK: Cell<bool> = const { Cell::new(false) };
+    /// The view switcher shows, so Ctrl+Tab is ours.
+    static VIEWS: Cell<bool> = const { Cell::new(false) };
 }
 
 pub fn captured() -> bool {
@@ -59,6 +61,12 @@ pub fn release() {
     QUEUE.with_borrow_mut(VecDeque::clear);
     DOWN.with_borrow_mut(|d| *d = [false; 256]);
     PAUSED.set(false);
+}
+
+/// Whether Ctrl+Tab steps through the view switcher's places; when it doesn't show, the
+/// key goes on to the app in front (a browser's tabs).
+pub fn offer_views(on: bool) {
+    VIEWS.set(on);
 }
 
 /// While a menu is up, keys belong to the menu.
@@ -123,7 +131,7 @@ fn handle(msg: u32, info: &KBDLLHOOKSTRUCT) -> bool {
     }
     let mods = Mods { shift: pressed(VK_SHIFT), ctrl: pressed(VK_CONTROL), alt: pressed(VK_MENU) || info.flags.0 & LLKHF_ALTDOWN.0 != 0 };
     let dead = Cell::new(false);
-    let key = map_key(code as u16, mods, || typed(info, mods, &dead));
+    let key = map_key(code as u16, mods, || typed(info, mods, &dead)).filter(|k| !matches!(k, Key::View(_)) || VIEWS.get());
     if key.is_none() && !dead.get() {
         return false;
     }

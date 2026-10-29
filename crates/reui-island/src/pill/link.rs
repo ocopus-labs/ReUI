@@ -4,7 +4,7 @@
 use std::collections::HashSet;
 use std::sync::mpsc::Receiver;
 
-use reui_protocol::{ClientMsg, Snapshot};
+use reui_protocol::{ClientMsg, Destination, Snapshot};
 use tokio::sync::mpsc::UnboundedSender;
 
 use crate::features::clipboard;
@@ -23,8 +23,10 @@ impl Pill {
     }
 
     /// Shows `snapshot` on a freshly built pill: its images are decoded again from the
-    /// encoded copies the link keeps.
-    pub fn restore(&mut self, snapshot: Snapshot) {
+    /// encoded copies the link keeps. `places` are the old pill's (the hub sends them only
+    /// when they change).
+    pub fn restore(&mut self, snapshot: Snapshot, places: Vec<Destination>) {
+        self.tabs.places = places;
         for id in clipboard::referenced(&snapshot) {
             if let Some(bytes) = images::get(id) {
                 if let Err(e) = self.renderer.add_image(id, &bytes) {
@@ -42,10 +44,12 @@ impl Pill {
     pub fn drain_hub(&mut self) {
         let mut latest = None;
         let mut focus = None;
+        let mut places = None;
         while let Ok(event) = self.events.try_recv() {
             match event {
                 Event::Connected => eprintln!("island: connected to hub"),
                 Event::Focus(id) => focus = Some(id),
+                Event::Destinations(list) => places = Some(list),
                 // Kept encoded; the pill decodes what a snapshot shows (below).
                 Event::Image(id, bytes) => images::put(id, bytes),
                 // Evict in stream order, exactly where the hub does, so images that arrived
@@ -67,6 +71,7 @@ impl Pill {
                     latest = Some(snapshot);
                 }
                 Event::Disconnected => {
+                    places = Some(Vec::new());
                     images::clear();
                     self.renderer.retain_images(&HashSet::new());
                     latest = Some(Snapshot::default());
@@ -77,6 +82,9 @@ impl Pill {
             if let Err(e) = self.apply(snapshot) {
                 eprintln!("island: render failed: {e}");
             }
+        }
+        if let Some(list) = places {
+            self.set_places(list);
         }
         if let Some(id) = focus {
             self.focus(id);
