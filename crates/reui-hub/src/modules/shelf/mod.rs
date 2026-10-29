@@ -73,7 +73,13 @@ async fn run(ctx: ModuleContext) {
     let root = store::folder();
     let (settings, shelf) = {
         let root = root.clone();
-        blocking(move || (Settings::load(), store::load(&root))).await.unwrap_or_default()
+        blocking(move || {
+            let shelf = store::load(&root);
+            store::sweep(&root, &shelf);
+            (Settings::load(), shelf)
+        })
+        .await
+        .unwrap_or_default()
     };
     let mut state = State { ctx, settings, shelf, root, opened: false, looks: Arc::default() };
     if state.settings.keep == Keep::Restart {

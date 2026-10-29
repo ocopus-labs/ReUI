@@ -143,12 +143,20 @@ impl Pill {
         }
     }
 
-    /// Debug builds: a drag coming over the pill's middle (`over`), or leaving, as Windows
-    /// would report it (`WM_TEST_DROP`).
+    /// Debug builds: a drag coming over the pill's middle (1), leaving (0), or letting go
+    /// of the files a test script put in `REUI_TEST_DROP` (2, `;`-separated), as Windows would
+    /// report them (`WM_TEST_DROP`).
     #[cfg(debug_assertions)]
-    pub fn test_drag_over(&mut self, over: bool) {
+    pub fn test_drag(&mut self, step: usize) {
         let (l, t, r, b) = self.shape_rect();
-        let event = if over { Event::Enter(POINT { x: ((l + r) / 2.0) as i32, y: ((t + b) / 2.0) as i32 }) } else { Event::Leave };
+        let event = match step {
+            1 => Event::Enter(POINT { x: ((l + r) / 2.0) as i32, y: ((t + b) / 2.0) as i32 }),
+            2 => {
+                let files = std::env::var("REUI_TEST_DROP").unwrap_or_default().split(';').filter(|p| !p.is_empty()).map(str::to_string).collect();
+                Event::Dropped(vec![reui_protocol::Dropped::Files(files)])
+            }
+            _ => Event::Leave,
+        };
         self.on_drop_event(event);
     }
 

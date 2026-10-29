@@ -162,6 +162,19 @@ pub fn forget(root: &Path, gone: &[Held]) {
     }
 }
 
+/// Deletes card folders under `files\` that no held card owns (a crash between writing a
+/// drop's copies and saving the list, a hand-edited list), so ReUI's folder never keeps
+/// what nobody can see.
+pub fn sweep(root: &Path, shelf: &Shelf) {
+    let Ok(dirs) = std::fs::read_dir(root.join("files")) else { return };
+    for dir in dirs.flatten() {
+        let owned = dir.file_name().to_str().and_then(|n| n.parse::<u64>().ok()).is_some_and(|id| shelf.get(id).is_some_and(|h| matches!(h.what, What::Files { owned: true, .. })));
+        if !owned {
+            _ = std::fs::remove_dir_all(dir.path());
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -238,6 +251,10 @@ mod tests {
         std::fs::write(dir.join("x.png"), b"x").unwrap();
         save(&root, &shelf);
         assert_eq!(load(&root), shelf);
+        let stray = files_dir(&root, 99);
+        std::fs::create_dir_all(&stray).unwrap();
+        sweep(&root, &shelf);
+        assert!(dir.exists() && !stray.exists(), "only what no card owns goes");
         let gone = shelf.clear();
         forget(&root, &gone);
         assert!(!dir.exists());

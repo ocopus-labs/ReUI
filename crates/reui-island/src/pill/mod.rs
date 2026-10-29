@@ -270,8 +270,10 @@ impl Pill {
             self.pinned = None;
             self.summoned = false;
         }
-        // A drag over the island: the drop target leads, whatever else is going on.
+        // A drag over the island: the drop target leads, whatever else is going on, and
+        // stands for the shelf (its own pill would only repeat it in the bubble).
         if let Some(face) = self.drop_face() {
+            activities.retain(|a| a.id.module != face.id.module);
             activities.insert(0, face);
         }
         Snapshot { activities }

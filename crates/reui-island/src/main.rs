@@ -45,7 +45,8 @@ use crate::settings::Settings;
 #[cfg(debug_assertions)]
 const WM_TEST_POINTER: u32 = WM_APP + 20;
 /// Debug builds: a test script's drag over the island (wparam 1: it comes over the pill's
-/// middle, 0: it leaves), so the drop target can be seen without a real drag.
+/// middle, 0: it leaves, 2: it's let go), so the drop target and the shelf's intake can be
+/// checked without a real drag (`Pill::test_drag`).
 #[cfg(debug_assertions)]
 const WM_TEST_DROP: u32 = WM_APP + 21;
 
@@ -347,7 +348,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         }
         #[cfg(debug_assertions)]
         WM_TEST_DROP => {
-            with_pill(|pill| pill.test_drag_over(wparam.0 == 1));
+            with_pill(|pill| pill.test_drag(wparam.0));
             LRESULT(0)
         }
         clipboard_keys::WM_KEYS => {
