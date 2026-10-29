@@ -78,7 +78,7 @@ impl Renderer {
                     D2D1_GRADIENT_STOP { position: 1.0, color: d2d(accent.with_alpha(0.0)) },
                 ];
                 let collection = rt.CreateGradientStopCollection(&stops, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP)?;
-                let props = D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES { startPoint: Vector2::new(0.0, top * s), endPoint: Vector2::new(0.0, zero * s) };
+                let props = D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES { startPoint: Vector2::new(0.0, gauges::spark_fill_top(&points, zero) * s), endPoint: Vector2::new(0.0, zero * s) };
                 let fill = rt.CreateLinearGradientBrush(&props, None, &collection)?;
                 rt.FillGeometry(&area, &fill, None);
 

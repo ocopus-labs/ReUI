@@ -84,6 +84,13 @@ pub fn spark_zero(top: f32) -> f32 {
     top + component::gauge::SPARK_HEIGHT - component::gauge::SPARK_TRACK / 2.0
 }
 
+/// Where the area under a sparkline starts fading (at `opacity.spark-fill`, to nothing at
+/// the zero line): the line's highest point, so a quiet minute keeps its soft fill (from
+/// the box's top, a low line would have almost none). `zero` when there are no points.
+pub fn spark_fill_top(points: &[(f32, f32)], zero: f32) -> f32 {
+    points.iter().map(|p| p.1).fold(zero, f32::min)
+}
+
 /// A line of facts: a label over its value.
 pub fn facts_height() -> f32 {
     typography::FACT_LABEL.line_height + component::fact::LINE_GAP + typography::FACT.line_height
@@ -171,6 +178,8 @@ mod tests {
         assert_eq!(points.len(), 60);
         assert!((points[0].0 - (l + dot)).abs() < 1e-3);
         assert!(spark_points(&[2.0, -1.0], 60, l, r, top).iter().all(|p| p.1 >= top && p.1 <= spark_zero(top)), "clamped");
+        assert_eq!(spark_fill_top(&three, spark_zero(top)), three[1].1, "the fill fades from the line's peak");
+        assert_eq!(spark_fill_top(&[], 30.0), 30.0);
     }
 
     #[test]
