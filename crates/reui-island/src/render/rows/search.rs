@@ -1,7 +1,7 @@
 //! The search field row: text, caret, and its trailing buttons.
 
 
-use reui_design::tokens::{color, component, icon, island, space};
+use reui_design::tokens::{component, icon, space};
 use reui_design::Color;
 use reui_protocol::{Button, ButtonContent};
 use windows::core::Result;
@@ -16,7 +16,7 @@ impl Renderer {
     pub(in crate::render) fn search(&self, rt: &ID2D1RenderTarget, text: &str, placeholder: Option<&str>, glyph_char: Option<char>, caret: bool, buttons: &[Button], y: f32, accent: Color, hits: &mut Vec<Hit>) -> Result<f32> {
         let h = component::search::HEIGHT;
         let pad = component::search::PADDING;
-        let inset = island::expanded::INSET;
+        let inset = self.look.inset();
         let mut right = self.width.get() - inset;
         for button in buttons.iter().rev() {
             let bw = match &button.content {
@@ -27,22 +27,22 @@ impl Renderer {
             self.button(rt, button, right, y, bw, h, accent, hits)?;
             right -= component::search::BUTTON_GAP;
         }
-        unsafe { self.round_rect(rt, inset, y, right, y + h, h / 2.0, color::fill::QUATERNARY)? };
+        unsafe { self.round_rect(rt, inset, y, right, y + h, self.capsule(h, inset), self.pal().fill_quaternary)? };
         let glyph = icon::SEARCH;
-        self.text(rt, &glyph_char.unwrap_or('\u{E721}').to_string(), &self.fonts.icon_search, inset + pad, y + (h - glyph) / 2.0, glyph, Align::Center, color::label::SECONDARY)?;
+        self.text(rt, &glyph_char.unwrap_or('\u{E721}').to_string(), &self.fonts.icon_search, inset + pad, y + (h - glyph) / 2.0, glyph, Align::Center, self.pal().label_secondary)?;
         let left = inset + pad + glyph + space::SM;
         let avail = (right - pad - left).max(0.0);
         let line = self.fonts.search.style.line_height;
         let top = y + (h - line) / 2.0;
         let mut end = left;
         if text.is_empty() {
-            self.text(rt, placeholder.unwrap_or("Search"), &self.fonts.search, left, top, avail, Align::Start, color::label::TERTIARY)?;
+            self.text(rt, placeholder.unwrap_or("Search"), &self.fonts.search, left, top, avail, Align::Start, self.pal().label_tertiary)?;
         } else {
             // Long queries show their end, where the typing is.
             let tw = self.text_width(text, &self.fonts.search)?;
             let x = if tw > avail { left + avail - tw } else { left };
             unsafe { rt.PushAxisAlignedClip(&self.rect(left, y, left + avail + component::search::CARET, y + h), D2D1_ANTIALIAS_MODE_ALIASED) };
-            let drawn = self.text(rt, text, &self.fonts.search, x, top, tw + 1.0, Align::Start, color::label::PRIMARY);
+            let drawn = self.text(rt, text, &self.fonts.search, x, top, tw + 1.0, Align::Start, self.pal().label_primary);
             unsafe { rt.PopAxisAlignedClip() };
             drawn?;
             end = x + tw;

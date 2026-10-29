@@ -11,7 +11,8 @@
 use std::sync::mpsc::Receiver;
 use std::time::Instant;
 
-use reui_design::tokens::{color, motion};
+use reui_design::look::{Appearance, Look};
+use reui_design::tokens::motion;
 use reui_protocol::{
     Activity, ActivityId, ClientMsg, ExpandedView, ImageId, Item, ItemKey, Priority, Row, Snapshot,
 };
@@ -47,6 +48,7 @@ mod visibility;
 mod visuals;
 
 use self::timers::*;
+pub use self::visibility::WM_LOOK;
 
 /// A press on a bar in the open card, followed with the mouse captured until release.
 enum Drag {
@@ -70,7 +72,14 @@ pub enum State {
 
 pub struct Pill {
     hwnd: HWND,
+    /// Pixels per DIP the pill is drawn at: the display's scale times the look's size.
     scale: f32,
+    /// The display's own scale (per-monitor DPI).
+    dpi: f32,
+    /// Colours and geometry (Settings > Appearance), and the settings they came from. A
+    /// change rebuilds the pill (`main.rs`), which is rare and never per frame.
+    look: Look,
+    appearance: Appearance,
     window: RECT,
     monitor: HMONITOR,
     reduced_motion: bool,
@@ -275,14 +284,15 @@ impl Pill {
         self.front_audio = self.front().and_then(|a| a.audio);
         self.minimal_audio = self.snapshot.activities.get(1).and_then(|a| a.audio);
         let front = self.snapshot.activities.first();
-        self.panel.sync(front.map(|a| &a.id), front.and_then(|a| a.expanded.as_ref()), clipboard_keys::captured());
+        self.panel.sync(front.map(|a| &a.id), front.and_then(|a| a.expanded.as_ref()), clipboard_keys::captured(), self.renderer.look().inset());
         if new_list && self.panel.query.is_some() {
             // A new step's field starts from the module's text, not what was typed for the
             // last one.
             self.panel.query = Some(self.panel.module_query().unwrap_or_default().to_string());
             self.search_dirty = false;
         }
-        let accent = |a: Option<&Activity>| a.and_then(|a| a.accent).map(render::rgb).unwrap_or(color::accent::DEFAULT);
+        let default_accent = self.look.accent;
+        let accent = |a: Option<&Activity>| a.and_then(|a| a.accent).map(render::rgb).unwrap_or(default_accent);
         let front = self.snapshot.activities.first();
         let second = self.snapshot.activities.get(1);
 
@@ -448,7 +458,7 @@ impl Pill {
         self.note_lyric();
         self.prune_hold();
         let front = self.snapshot.activities.first();
-        let accent = front.and_then(|a| a.accent).map(render::rgb).unwrap_or(color::accent::DEFAULT);
+        let accent = front.and_then(|a| a.accent).map(render::rgb).unwrap_or(self.look.accent);
         match self.renderer.draw_expanded(&self.expanded_surface, front.and_then(|a| a.expanded.as_ref()), accent, &self.interaction()) {
             Ok(card) => {
                 self.hits = card.hits;

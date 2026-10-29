@@ -6,10 +6,12 @@
 //!
 //! Keys: `visibility` ("always" | "when-active" | "when-needed"), `paused_until` (Unix ms),
 //! `hide_in_fullscreen` (bool, default true), `show_on_desktop` (bool, default true), `monitor` ("primary" | "cursor" | a display's
-//! device name such as `\\.\DISPLAY2`).
+//! device name such as `\\.\DISPLAY2`), and the look (`style`, `theme`, `roundness`, `top_gap`,
+//! `padding`, `scale`, `accent`; read by `reui_design::look::Appearance`).
 
 use std::path::{Path, PathBuf};
 
+use reui_design::look::Appearance;
 use reui_protocol::{Activity, Priority};
 
 use crate::place::MonitorChoice;
@@ -82,11 +84,13 @@ pub struct Settings {
     pub show_on_desktop: bool,
     /// Which display the island sits on.
     pub monitor: MonitorChoice,
+    /// Style, theme, shape and size (Settings > Appearance).
+    pub appearance: Appearance,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { visibility: Visibility::default(), paused_until: None, hide_in_fullscreen: true, show_on_desktop: true, monitor: MonitorChoice::default() }
+        Self { visibility: Visibility::default(), paused_until: None, hide_in_fullscreen: true, show_on_desktop: true, monitor: MonitorChoice::default(), appearance: Appearance::default() }
     }
 }
 
@@ -115,6 +119,7 @@ impl Settings {
             hide_in_fullscreen: map.get("hide_in_fullscreen").and_then(Value::as_bool).unwrap_or(true),
             show_on_desktop: map.get("show_on_desktop").and_then(Value::as_bool).unwrap_or(true),
             monitor: map.get("monitor").and_then(Value::as_str).map(MonitorChoice::parse).unwrap_or_default(),
+            appearance: Appearance::read(|k| map.get(k).and_then(Value::as_str).map(str::to_string), |k| map.get(k).and_then(Value::as_f64)),
         }
     }
 

@@ -31,6 +31,8 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 
 
 use crate::features::clipboard_keys;
+use reui_design::look::Look;
+
 use crate::pill::{MenuEntry, Pill};
 use crate::place::{MonitorChoice, Placement};
 use crate::settings::Settings;
@@ -88,14 +90,29 @@ fn schedule_place(hwnd: HWND, late: bool) {
     }
 }
 
+/// The look for `settings` as Windows is now.
+fn look_for(settings: &Settings) -> Look {
+    Look::new(&settings.appearance, false, None)
+}
+
 /// Puts the island where the `monitor` setting says, at that display's DPI, and back on
-/// top. A display with another scale needs the pill rebuilt for it.
-fn place(hwnd: HWND) {
+/// top. A display with another scale needs the pill rebuilt for it, and so does a new
+/// look (`relook`).
+fn place(hwnd: HWND, relook: bool) {
     let mut choice = MonitorChoice::default();
-    with_pill(|pill| choice = pill.monitor_choice().clone());
-    let Some(placement) = place::current(&choice) else { return };
-    let mut moved = true;
-    with_pill(|pill| moved = pill.move_to(&placement));
+    let mut look = Look::default();
+    with_pill(|pill| {
+        choice = pill.monitor_choice().clone();
+        look = *pill.look().0;
+    });
+    if relook {
+        look = look_for(&Settings::load());
+    }
+    let Some(placement) = place::current(&choice, &look) else { return };
+    let mut moved = !relook;
+    if moved {
+        with_pill(|pill| moved = pill.move_to(&placement));
+    }
     if !moved {
         rebuild(hwnd, &placement);
     }
@@ -107,7 +124,7 @@ fn follow_cursor(hwnd: HWND) {
     let mut follow = false;
     with_pill(|pill| follow = *pill.monitor_choice() == MonitorChoice::Cursor && pill.idle());
     if follow {
-        place(hwnd);
+        place(hwnd, false);
     }
 }
 
@@ -126,7 +143,8 @@ fn rebuild(hwnd: HWND, placement: &Placement) {
         _ = SetWindowPos(hwnd, Some(HWND_TOPMOST), w.left, w.top, w.right - w.left, w.bottom - w.top, SWP_NOACTIVATE | SWP_NOOWNERZORDER);
     }
     let settings = Settings::load();
-    match Pill::new(hwnd, placement.scale, placement.window, placement.monitor, !animations_enabled(), settings.visibility, to_hub, events) {
+    let look = look_for(&settings);
+    match Pill::new(hwnd, placement.scale, placement.window, placement.monitor, !animations_enabled(), settings.visibility, settings.appearance, look, to_hub, events) {
         Ok(mut pill) => {
             pill.apply_settings(settings);
             pill.restore(snapshot);
@@ -254,7 +272,11 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             LRESULT(0)
         }
         place::WM_PLACE => {
-            place(hwnd);
+            place(hwnd, false);
+            LRESULT(0)
+        }
+        pill::WM_LOOK => {
+            place(hwnd, true);
             LRESULT(0)
         }
         // Displays added, removed or re-arranged; resolution or scale changed; the taskbar
@@ -346,7 +368,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         }
         WM_TIMER if wparam.0 == TIMER_PLACE || wparam.0 == TIMER_PLACE_LATE => {
             _ = KillTimer(Some(hwnd), wparam.0);
-            place(hwnd);
+            place(hwnd, false);
             LRESULT(0)
         }
         WM_TIMER if wparam.0 == TIMER_SETTINGS => {
@@ -390,7 +412,8 @@ fn main() -> Result<()> {
 
     // The chosen display (primary by default), top centre, at its DPI.
     let settings = Settings::load();
-    let Some(Placement { monitor, scale, window }) = place::current(&settings.monitor) else {
+    let look = look_for(&settings);
+    let Some(Placement { monitor, scale, window }) = place::current(&settings.monitor, &look) else {
         return Err(windows::core::Error::from_thread());
     };
 
@@ -416,7 +439,7 @@ fn main() -> Result<()> {
 
     ISLAND.set(hwnd.0 as isize);
     let link = ipc::spawn(hwnd);
-    let mut pill = Pill::new(hwnd, scale, window, monitor, !animations_enabled(), settings.visibility, link.to_hub, link.events)?;
+    let mut pill = Pill::new(hwnd, scale, window, monitor, !animations_enabled(), settings.visibility, settings.appearance, look, link.to_hub, link.events)?;
     pill.apply_settings(settings);
     settings::watch(hwnd);
     PILL.with(|cell| *cell.borrow_mut() = Some(pill));

@@ -1,7 +1,7 @@
 //! The tab row, scrolled so the selected tab stays in view.
 
 
-use reui_design::tokens::{color, component, island};
+use reui_design::tokens::component;
 use reui_protocol::Tab;
 use windows::core::Result;
 use windows::Win32::Graphics::Direct2D::*;
@@ -16,7 +16,7 @@ impl Renderer {
         let h = component::tabs::HEIGHT;
         let pad = component::tabs::PADDING;
         let gap = component::tabs::GAP;
-        let inset = island::expanded::INSET;
+        let inset = self.look.inset();
         let w = self.width.get();
         let mut sizes = Vec::with_capacity(tabs.len());
         for tab in tabs {
@@ -34,9 +34,9 @@ impl Renderer {
             for (tab, (label_w, count_w, tw)) in tabs.iter().zip(sizes) {
                 if x + tw > 0.0 && x < w {
                     // Plain text; the selected tab sits on a soft fill (no bright pill).
-                    let (ink, quiet) = if tab.selected { (color::label::PRIMARY, color::label::SECONDARY) } else { (color::label::SECONDARY, color::label::TERTIARY) };
+                    let (ink, quiet) = if tab.selected { (self.pal().label_primary, self.pal().label_secondary) } else { (self.pal().label_secondary, self.pal().label_tertiary) };
                     if tab.selected {
-                        unsafe { self.round_rect(rt, x, y, x + tw, y + h, h / 2.0, color::fill::SECONDARY)? };
+                        unsafe { self.round_rect(rt, x, y, x + tw, y + h, self.capsule(h, inset), self.pal().fill_secondary)? };
                     }
                     self.text(rt, &tab.label, &self.fonts.tab, x + pad, top, label_w + 1.0, Align::Start, ink)?;
                     self.text(rt, &tab.count.to_string(), &self.fonts.tab_count, x + tw - pad - count_w, top, count_w + 1.0, Align::Start, quiet)?;

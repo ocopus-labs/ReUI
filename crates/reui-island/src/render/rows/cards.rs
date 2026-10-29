@@ -1,7 +1,7 @@
 //! The horizontally scrolling row of item cards (clipboard history and the like).
 
 
-use reui_design::tokens::{color, component, icon, island, space};
+use reui_design::tokens::{color, component, icon, space};
 use reui_design::Color;
 use reui_protocol::{Item, Preview, Rgb};
 use windows::core::Result;
@@ -20,7 +20,7 @@ impl Renderer {
     /// age, one fact), so nothing sits under the cards.
     pub(in crate::render) fn cards(&self, rt: &ID2D1RenderTarget, items: &[Item], y: f32, accent: Color, with: &Interaction, hits: &mut Vec<Hit>) -> Result<f32> {
         let w = self.width.get();
-        let row = CardRow::new(w, items.len());
+        let row = CardRow::new(w, items.len(), self.look.inset());
         let pad = component::card::PADDING;
         let footer = component::card::FOOTER;
         let cw = row.card_width();
@@ -29,18 +29,18 @@ impl Renderer {
         let scroll = row.clamp(with.scroll);
         let ring = component::card::RING_GAP + component::card::RING_WIDTH;
         // Cut at the content inset, not the surface edge: the pill's corners curve in there.
-        let inset = island::expanded::INSET;
+        let inset = self.look.inset();
         unsafe { rt.PushAxisAlignedClip(&self.rect(inset - ring, y - ring, w - inset + ring, y + ch + ring), D2D1_ANTIALIAS_MODE_ALIASED) };
         let result = (|| -> Result<()> {
             for i in row.visible(scroll) {
                 let item = &items[i];
                 let l = row.left(i, scroll);
                 let (r, b) = (l + cw, y + ch);
-                let radius = component::card::RADIUS * s;
+                let radius = self.concentric() * s;
                 let shape = D2D1_ROUNDED_RECT { rect: self.rect(l, y, r, b), radiusX: radius, radiusY: radius };
                 let body = (l + pad, y + pad, cw - 2.0 * pad, ch - footer - 2.0 * pad);
                 let selected = with.keyboard && i == with.selected;
-                let card_fill = if selected { color::fill::SECONDARY } else { color::fill::TERTIARY };
+                let card_fill = if selected { self.pal().fill_secondary } else { self.pal().fill_tertiary };
                 let well = |tint: Color| unsafe {
                     rt.FillRoundedRectangle(&shape, &self.brush(rt, tint)?);
                     Ok::<(), windows::core::Error>(())
@@ -51,15 +51,15 @@ impl Renderer {
                     Preview::Image(id) => {
                         if matches!(self.images.get(id), Some(Decoded::Bitmap(_))) {
                             // Behind transparent images, so the card keeps its shape.
-                            well(color::fill::TERTIARY)?;
+                            well(self.pal().fill_tertiary)?;
                             self.cover(rt, *id, &shape)?;
                             self.scrim(rt, &shape, b - footer - pad * 2.0, b)?;
                             on_media = true;
                         } else {
                             // Bytes not here yet: the type's glyph, so the card isn't an empty well.
-                            well(color::fill::TERTIARY)?;
+                            well(self.pal().fill_tertiary)?;
                             let g = icon::TILE;
-                            self.text(rt, "\u{EB9F}", &self.fonts.icon_tile, l, body.1 + (body.3 - g) / 2.0, cw, Align::Center, color::label::TERTIARY)?;
+                            self.text(rt, "\u{EB9F}", &self.fonts.icon_tile, l, body.1 + (body.3 - g) / 2.0, cw, Align::Center, self.pal().label_tertiary)?;
                         }
                     }
                     Preview::Text(text) => {
@@ -70,17 +70,17 @@ impl Renderer {
                             // Several lines: the first reads as a title, the rest quieter.
                             Some((first, rest)) if !first.trim().is_empty() => {
                                 let line = self.fonts.card_label.style.line_height;
-                                self.text(rt, first.trim(), &self.fonts.card_label, body.0, body.1, first_w, Align::Start, color::label::PRIMARY)?;
+                                self.text(rt, first.trim(), &self.fonts.card_label, body.0, body.1, first_w, Align::Start, self.pal().label_primary)?;
                                 let top = body.1 + line + space::XS;
-                                self.text_block(rt, rest.trim_start(), &self.fonts.card_text, body.0, top, body.2, body.1 + body.3 - top, color::label::SECONDARY)?;
+                                self.text_block(rt, rest.trim_start(), &self.fonts.card_text, body.0, top, body.2, body.1 + body.3 - top, self.pal().label_secondary)?;
                             }
-                            _ => self.text_block(rt, text.trim(), &self.fonts.card_text, body.0, body.1, first_w, body.3, color::label::PRIMARY)?,
+                            _ => self.text_block(rt, text.trim(), &self.fonts.card_text, body.0, body.1, first_w, body.3, self.pal().label_primary)?,
                         }
                     }
                     Preview::Code(text) => {
                         well(card_fill)?;
                         self.kind_glyph(rt, '\u{E943}', r - pad, body.1)?;
-                        self.text_block(rt, text, &self.fonts.card_code, body.0, body.1, body.2 - component::card::KIND_ICON - space::XS, body.3, color::label::PRIMARY)?;
+                        self.text_block(rt, text, &self.fonts.card_code, body.0, body.1, body.2 - component::card::KIND_ICON - space::XS, body.3, self.pal().label_primary)?;
                     }
                     Preview::Color(rgb) => {
                         let swatch = rgb_color(*rgb);
@@ -107,20 +107,20 @@ impl Renderer {
                         }
                         // The site goes in the footer (the module sends it as the card's fact).
                         let heading = title.clone().unwrap_or_else(|| format!("{host}{path}"));
-                        self.text_block(rt, &heading, &self.fonts.card_title, body.0, text_top, body.2, b - footer - pad * 0.5 - text_top, color::label::PRIMARY)?;
+                        self.text_block(rt, &heading, &self.fonts.card_title, body.0, text_top, body.2, b - footer - pad * 0.5 - text_top, self.pal().label_primary)?;
                     }
                     Preview::Files { name, .. } => {
                         well(card_fill)?;
                         self.text(rt, "\u{E8A5}", &self.fonts.icon_tile, body.0, body.1, icon::TILE, Align::Start, accent)?;
                         let name_top = body.1 + icon::TILE + pad * 0.75;
-                        self.text_block(rt, name, &self.fonts.card_title, body.0, name_top, body.2, body.1 + body.3 - name_top, color::label::PRIMARY)?;
+                        self.text_block(rt, name, &self.fonts.card_title, body.0, name_top, body.2, body.1 + body.3 - name_top, self.pal().label_primary)?;
                     }
                 }
                 self.card_footer(rt, item, l, b - footer - pad * 0.25, cw, on_media)?;
                 if selected {
                     // Concentric with the card: its radius grows by exactly the ring's offset.
                     let out = component::card::RING_GAP + component::card::RING_WIDTH / 2.0;
-                    let rr = (component::card::RADIUS + out) * s;
+                    let rr = (self.concentric() + out) * s;
                     let ring = D2D1_ROUNDED_RECT { rect: self.rect(l - out, y - out, r + out, b + out), radiusX: rr, radiusY: rr };
                     unsafe { rt.DrawRoundedRectangle(&ring, &self.brush(rt, accent)?, component::card::RING_WIDTH * s, None) };
                 }
@@ -146,7 +146,7 @@ impl Renderer {
     #[allow(clippy::too_many_arguments)]
     fn edge_fade(&self, rt: &ID2D1RenderTarget, left: f32, right: f32, top: f32, bottom: f32, rightward: bool) -> Result<()> {
         let s = self.scale;
-        let bg = color::island::BACKGROUND;
+        let bg = self.pal().background;
         let clear = D2D1_COLOR_F { r: bg.r, g: bg.g, b: bg.b, a: 0.0 };
         let solid = D2D1_COLOR_F { r: bg.r, g: bg.g, b: bg.b, a: 1.0 };
         let (from, to) = if rightward { (clear, solid) } else { (solid, clear) };
@@ -163,7 +163,7 @@ impl Renderer {
     /// A card's small type glyph, right-aligned at `right`, top at `top`.
     fn kind_glyph(&self, rt: &ID2D1RenderTarget, glyph: char, right: f32, top: f32) -> Result<()> {
         let size = component::card::KIND_ICON;
-        self.text(rt, &glyph.to_string(), &self.fonts.icon_kind, right - size, top, size, Align::Center, color::label::TERTIARY)
+        self.text(rt, &glyph.to_string(), &self.fonts.icon_kind, right - size, top, size, Align::Center, self.pal().label_tertiary)
     }
 
     /// Source app icon, age, a star when pinned, and one fact on the right, inside the
@@ -172,7 +172,7 @@ impl Renderer {
         let pad = component::card::PADDING;
         let icon = component::card::ICON;
         let mid = top + component::card::FOOTER / 2.0;
-        let (ink, quiet) = if on_media { (color::label::PRIMARY, color::label::PRIMARY.with_alpha(0.75)) } else { (color::label::SECONDARY, color::label::TERTIARY) };
+        let (ink, quiet) = if on_media { (color::label::PRIMARY, color::label::PRIMARY.with_alpha(0.75)) } else { (self.pal().label_secondary, self.pal().label_tertiary) };
         let mut x = l + pad;
         let right = l + w - pad;
         if let Some(id) = item.icon.filter(|id| matches!(self.images.get(id), Some(Decoded::Bitmap(_)))) {

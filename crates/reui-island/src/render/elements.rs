@@ -3,16 +3,15 @@
 
 use std::borrow::Cow;
 
-use reui_design::tokens::{color, component, island, opacity};
+use reui_design::tokens::{component, island, opacity};
 use reui_design::Color;
 use reui_protocol::{Element, Tone};
 use windows::core::Result;
 use windows::Win32::Graphics::Direct2D::Common::*;
 use windows::Win32::Graphics::Direct2D::*;
 
-use crate::render::{tone_color, Align, Renderer, Slot, BARS};
+use crate::render::{Align, Renderer, Slot, BARS};
 use crate::features::clock;
-use crate::render::images::art_shape;
 
 impl Renderer {
     pub(super) fn measure(&self, element: &Element, slot: Slot) -> Result<(f32, f32)> {
@@ -27,7 +26,7 @@ impl Renderer {
                 (s, s)
             }
             Element::Art(_) => {
-                let s = art_shape(slot).0;
+                let s = self.art_shape(slot).0;
                 (s, s)
             }
             Element::Ring(_) => {
@@ -62,8 +61,8 @@ impl Renderer {
         let top = mid - h / 2.0;
         match element {
             Element::Empty => {}
-            Element::Text { text, tone } => self.text(rt, text, self.text_font(slot), left, top, w, Align::Start, tone_color(*tone, accent))?,
-            Element::Glyph { glyph, tone } => self.text(rt, &glyph.to_string(), self.glyph_font(slot), left, top, w, Align::Center, tone_color(*tone, accent))?,
+            Element::Text { text, tone } => self.text(rt, text, self.text_font(slot), left, top, w, Align::Start, self.tone_color(*tone, accent))?,
+            Element::Glyph { glyph, tone } => self.text(rt, &glyph.to_string(), self.glyph_font(slot), left, top, w, Align::Center, self.tone_color(*tone, accent))?,
             Element::Art(art) => self.art(rt, art, slot, left, top, accent)?,
             Element::Ring(progress) => self.ring(rt, *progress, slot, left + w / 2.0, mid, accent)?,
             // Level bars are always live visuals the pill moves; nothing to draw here.
@@ -98,7 +97,7 @@ impl Renderer {
         let s = self.scale;
         let (left, top, h) = ((left * s).round() / s, (top * s).round() / s, (h * s).round() / s);
         unsafe {
-            self.round_rect(rt, left, top, left + w, top + h, h / 2.0, color::fill::TRACK)?;
+            self.round_rect(rt, left, top, left + w, top + h, h / 2.0, self.pal().fill_track)?;
             if value > 0.0 {
                 self.round_rect(rt, left, top, left + (w * value).max(h), top + h, h / 2.0, fill)?;
             }
@@ -118,7 +117,7 @@ impl Renderer {
         let progress = progress.clamp(0.0, 1.0);
         unsafe {
             let circle = D2D1_ELLIPSE { point: self.point(cx, cy), radiusX: radius * s, radiusY: radius * s };
-            rt.DrawEllipse(&circle, &self.brush(rt, color::fill::TRACK)?, stroke * s, &self.round);
+            rt.DrawEllipse(&circle, &self.brush(rt, self.pal().fill_track)?, stroke * s, &self.round);
             if progress >= 0.999 {
                 rt.DrawEllipse(&circle, &self.brush(rt, accent)?, stroke * s, &self.round);
                 return Ok(());

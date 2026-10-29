@@ -3,7 +3,7 @@
 //! At most `choice.max-height` tall: a longer list scrolls inside the card (the wheel, or
 //! the cursor moving), so the card never grows past its max-height (E-A6).
 
-use reui_design::tokens::{color, component, island, opacity, radius, space};
+use reui_design::tokens::{component, opacity, space};
 use reui_design::Color;
 use reui_protocol::Choice;
 use windows::core::Result;
@@ -41,7 +41,7 @@ impl Renderer {
     /// checked. Only what shows is drawn and hit-tested.
     #[allow(clippy::too_many_arguments)]
     pub(in crate::render) fn choices(&self, rt: &ID2D1RenderTarget, options: &[Choice], multi: bool, cursor: Option<usize>, y: f32, scroll: f32, accent: Color, hits: &mut Vec<Hit>) -> Result<ChoiceList> {
-        let inset = island::expanded::INSET;
+        let inset = self.look.inset();
         let (l, r) = (inset, self.width.get() - inset);
         let pad = component::choice::PADDING_X;
         let check = component::choice::CHECK;
@@ -69,9 +69,9 @@ impl Renderer {
                 if top + h <= clip_top || top >= clip_bottom {
                     continue;
                 }
-                let corner = radius::CONCENTRIC.min(h / 2.0);
+                let corner = self.concentric().min(h / 2.0);
                 let picked = multi && choice.selected;
-                let fill = if picked { accent.with_alpha(opacity::TINT_FILL) } else { color::fill::QUATERNARY };
+                let fill = if picked { accent.with_alpha(opacity::TINT_FILL) } else { self.pal().fill_quaternary };
                 unsafe { self.round_rect(rt, l, top, r, top + h, corner, fill)? };
                 if cursor == Some(i) {
                     let s = self.scale;
@@ -80,18 +80,18 @@ impl Renderer {
                     unsafe { rt.DrawRoundedRectangle(&ring, &self.brush(rt, accent)?, component::choice::RING_WIDTH * s, None) };
                 }
                 let mut line = top + component::choice::PADDING_Y;
-                self.text(rt, &choice.label, &self.fonts.choice, l + pad, line, text_w, Align::Start, color::label::PRIMARY)?;
+                self.text(rt, &choice.label, &self.fonts.choice, l + pad, line, text_w, Align::Start, self.pal().label_primary)?;
                 line += self.fonts.choice.style.line_height;
                 match &choice.detail {
                     Some(detail) if wraps => {
                         let lines = 2.0 * self.fonts.choice_detail.style.line_height;
-                        self.text_block(rt, detail, &self.fonts.choice_detail_wrap, l + pad, line, text_w, lines, color::label::SECONDARY)?
+                        self.text_block(rt, detail, &self.fonts.choice_detail_wrap, l + pad, line, text_w, lines, self.pal().label_secondary)?
                     }
-                    Some(detail) => self.text(rt, detail, &self.fonts.choice_detail, l + pad, line, text_w, Align::Start, color::label::SECONDARY)?,
+                    Some(detail) => self.text(rt, detail, &self.fonts.choice_detail, l + pad, line, text_w, Align::Start, self.pal().label_secondary)?,
                     None => {}
                 }
                 if multi {
-                    let (glyph, ink) = if choice.selected { (GLYPH_CHECKED, accent) } else { (GLYPH_UNCHECKED, color::label::TERTIARY) };
+                    let (glyph, ink) = if choice.selected { (GLYPH_CHECKED, accent) } else { (GLYPH_UNCHECKED, self.pal().label_tertiary) };
                     self.text(rt, &glyph.to_string(), &self.fonts.icon_check, r - pad - check, top + (h - check) / 2.0, check, Align::Center, ink)?;
                 }
                 // Hit-tested only where it shows; the wheel anywhere on the list scrolls it.

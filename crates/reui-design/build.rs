@@ -19,6 +19,7 @@ fn main() {
 
     let mut out = String::from("// Generated from design/tokens.json by build.rs. Do not edit.\n");
     emit_group(&root, &root, &mut Vec::new(), None, &mut out, 0);
+    emit_palettes(&root, &mut out);
     let dest = Path::new(&std::env::var("OUT_DIR").unwrap()).join("tokens.rs");
     std::fs::write(dest, out).unwrap();
 }
@@ -46,6 +47,70 @@ fn emit_group(root: &Value, group: &Value, path: &mut Vec<String>, inherited: Op
             writeln!(out, "{indent}    #[allow(unused_imports)]\n{indent}    use crate::*;").unwrap();
             emit_group(root, child, path, group_type, out, depth + 1);
             writeln!(out, "{indent}}}").unwrap();
+        }
+        path.pop();
+    }
+}
+
+/// One `Palette` struct with a field per colour of a theme (`label.primary` is
+/// `label_primary`), and a constant per theme under `palette` (`palette::DARK`), so a
+/// surface can switch themes at run time. Every theme must have the same keys.
+fn emit_palettes(root: &Value, out: &mut String) {
+    let Some(themes) = root.get("theme").and_then(Value::as_object) else { return };
+    let mut shape: Option<Vec<Leaf>> = None;
+    let mut consts = String::new();
+    for (name, theme) in themes.iter().filter(|(k, _)| !k.starts_with('$')) {
+        let mut leaves = Vec::new();
+        collect_leaves(theme, &mut Vec::new(), &mut leaves);
+        let fields = |l: &[Leaf]| l.iter().map(|leaf| leaf.field.clone()).collect::<Vec<_>>();
+        match &shape {
+            None => shape = Some(leaves.clone()),
+            Some(first) => assert_eq!(fields(first), fields(&leaves), "theme.{name} must have the same keys as the first theme"),
+        }
+        writeln!(consts, "    pub const {}: Palette = Palette {{", const_name(name)).unwrap();
+        for leaf in &leaves {
+            let mut module = vec!["super".to_string(), "theme".into(), mod_name(name)];
+            module.extend(leaf.path[..leaf.path.len() - 1].iter().map(|k| mod_name(k)));
+            writeln!(consts, "        {}: {}::{},", leaf.field, module.join("::"), const_name(leaf.path.last().unwrap())).unwrap();
+        }
+        writeln!(consts, "    }};").unwrap();
+    }
+    let Some(shape) = shape else { return };
+    writeln!(out, "/// A theme's colours (`theme.*` in tokens.json).").unwrap();
+    writeln!(out, "#[derive(Clone, Copy, Debug, PartialEq)]").unwrap();
+    writeln!(out, "pub struct Palette {{").unwrap();
+    for leaf in &shape {
+        if let Some(desc) = &leaf.description {
+            writeln!(out, "    /// {desc}").unwrap();
+        }
+        writeln!(out, "    pub {}: crate::Color,", leaf.field).unwrap();
+    }
+    writeln!(out, "}}").unwrap();
+    writeln!(out, "pub mod palette {{").unwrap();
+    writeln!(out, "    use super::Palette;").unwrap();
+    out.push_str(&consts);
+    writeln!(out, "}}").unwrap();
+}
+
+#[derive(Clone)]
+struct Leaf {
+    field: String,
+    path: Vec<String>,
+    description: Option<String>,
+}
+
+/// Every token under `group`, with its field name (`label_primary`) and path.
+fn collect_leaves(group: &Value, path: &mut Vec<String>, out: &mut Vec<Leaf>) {
+    for (key, child) in group.as_object().expect("token groups are objects") {
+        if key.starts_with('$') {
+            continue;
+        }
+        path.push(key.clone());
+        if child.get("$value").is_some() {
+            let description = child.get("$description").and_then(Value::as_str).map(str::to_string);
+            out.push(Leaf { field: path.iter().map(|k| mod_name(k)).collect::<Vec<_>>().join("_"), path: path.clone(), description });
+        } else {
+            collect_leaves(child, path, out);
         }
         path.pop();
     }

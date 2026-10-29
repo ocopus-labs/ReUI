@@ -3,7 +3,7 @@
 
 use std::time::Instant;
 
-use reui_design::tokens::{color, motion};
+use reui_design::tokens::motion;
 use reui_protocol::{
     Activity, Row,
 };
@@ -158,7 +158,8 @@ impl Pill {
     /// open card, so the pill's width is right when it folds back; a width change (9:59
     /// after 10:00) re-springs the pill only when compact is what's showing.
     fn tick_clock(&mut self) {
-        let accent = |a: &Activity| a.accent.map(render::rgb).unwrap_or(color::accent::DEFAULT);
+        let default_accent = self.look.accent;
+        let accent = |a: &Activity| a.accent.map(render::rgb).unwrap_or(default_accent);
         if let Some(a) = self.snapshot.activities.first().filter(|a| clock::in_compact(a)) {
             match self.renderer.draw_compact(&self.compact_surface, Some(&a.compact), accent(a), None) {
                 Ok(layout) if layout.width != self.compact_width => {
@@ -255,7 +256,8 @@ impl Pill {
     fn tick_level(&mut self) {
         let now = Instant::now();
         let moving = self.levels.settle(now);
-        let accent = |a: &Activity| a.accent.map(render::rgb).unwrap_or(color::accent::DEFAULT);
+        let default_accent = self.look.accent;
+        let accent = |a: &Activity| a.accent.map(render::rgb).unwrap_or(default_accent);
         let front = self.snapshot.activities.first();
         if let Some(a) = front.filter(|a| level::is_level(&a.compact.leading) || level::is_level(&a.compact.trailing)) {
             if let Err(e) = self.renderer.draw_compact(&self.compact_surface, Some(&a.compact), accent(a), self.levels.value(&a.id, now)) {

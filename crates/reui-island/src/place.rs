@@ -9,9 +9,10 @@ use windows::Win32::Graphics::Gdi::{EnumDisplayMonitors, GetMonitorInfoW, HDC, H
 use windows::Win32::UI::HiDpi::{GetDpiForMonitor, MDT_EFFECTIVE_DPI};
 use windows::Win32::UI::WindowsAndMessaging::{GetCursorPos, MONITORINFOF_PRIMARY};
 
+use reui_design::look::Look;
 use reui_design::tokens::island;
 
-use crate::render::{COMPACT_MAX_WIDTH, EXPANDED_SURFACE};
+use crate::render::{expanded_surface, COMPACT_MAX_WIDTH};
 
 /// Posted to the island window to re-place it now (the `monitor` setting changed).
 pub const WM_PLACE: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 5;
@@ -56,6 +57,7 @@ pub struct Screen {
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Placement {
     pub monitor: HMONITOR,
+    /// The display's scale (its DPI / 96), before the look's size.
     pub scale: f32,
     pub window: RECT,
 }
@@ -78,11 +80,14 @@ pub fn choose(choice: &MonitorChoice, screens: &[Screen], cursor: POINT) -> Opti
 
 /// The island's window on a display: wide enough for the expanded pill, or the widest
 /// compact pill plus its minimal bubble, whichever is wider; centred on the display, with
-/// its top at the work area's top (below a taskbar docked at the top).
-pub fn window_rect(screen: &RECT, work: &RECT, scale: f32) -> RECT {
-    let half = (EXPANDED_SURFACE.0 / 2.0).max(COMPACT_MAX_WIDTH / 2.0 + island::minimal::GAP + island::minimal::SIZE);
+/// its top at the work area's top (below a taskbar docked at the top). Sized for the
+/// look: its size, padding and gap from the top.
+pub fn window_rect(screen: &RECT, work: &RECT, dpi: f32, look: &Look) -> RECT {
+    let scale = dpi * look.size;
+    let surface = expanded_surface(look);
+    let half = (surface.0 / 2.0).max(COMPACT_MAX_WIDTH / 2.0 + island::minimal::GAP + island::minimal::SIZE);
     let width = ((half + MARGIN) * 2.0 * scale).ceil() as i32;
-    let height = ((island::TOP + EXPANDED_SURFACE.1 + MARGIN) * scale).ceil() as i32;
+    let height = ((look.top() + surface.1 + MARGIN) * scale).ceil() as i32;
     let left = screen.left + (screen.right - screen.left - width) / 2;
     let top = work.top.max(screen.top);
     RECT { left, top, right: left + width, bottom: top + height }
@@ -122,14 +127,15 @@ pub fn screens() -> Vec<Screen> {
         .collect()
 }
 
-/// Where the island should be now for `choice`. `None` only if Windows reports no display.
-pub fn current(choice: &MonitorChoice) -> Option<Placement> {
+/// Where the island should be now for `choice` and `look`. `None` only if Windows reports
+/// no display.
+pub fn current(choice: &MonitorChoice, look: &Look) -> Option<Placement> {
     let screens = screens();
     let mut cursor = POINT::default();
     unsafe { _ = GetCursorPos(&mut cursor) };
     let screen = &screens[choose(choice, &screens, cursor)?];
     let scale = screen.dpi.max(1) as f32 / 96.0;
-    Some(Placement { monitor: screen.handle, scale, window: window_rect(&screen.rect, &screen.work, scale) })
+    Some(Placement { monitor: screen.handle, scale, window: window_rect(&screen.rect, &screen.work, scale, look) })
 }
 
 #[cfg(test)]
@@ -162,13 +168,17 @@ mod tests {
     #[test]
     fn the_window_is_centred_at_the_top_and_scales_with_dpi() {
         let monitor = RECT { left: -1920, top: 0, right: 0, bottom: 1080 };
-        let one = window_rect(&monitor, &monitor, 1.0);
-        let two = window_rect(&monitor, &monitor, 2.0);
+        let look = Look::default();
+        let one = window_rect(&monitor, &monitor, 1.0, &look);
+        let two = window_rect(&monitor, &monitor, 2.0, &look);
         assert_eq!(one.left - monitor.left, monitor.right - one.right, "centred");
         assert!((two.right - two.left) >= 2 * (one.right - one.left) - 1);
         assert_eq!(one.top, 0);
         // A taskbar docked at the top: the island sits below it.
         let work = RECT { top: 48, ..monitor };
-        assert_eq!(window_rect(&monitor, &work, 1.0).top, 48);
+        assert_eq!(window_rect(&monitor, &work, 1.0, &look).top, 48);
+        // A bigger look is a bigger window.
+        let big = Look { size: 1.25, ..look };
+        assert!(window_rect(&monitor, &monitor, 1.0, &big).right - window_rect(&monitor, &monitor, 1.0, &big).left > one.right - one.left);
     }
 }

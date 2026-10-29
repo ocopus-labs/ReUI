@@ -3,7 +3,7 @@
 
 use std::time::Instant;
 
-use reui_design::tokens::{component, island, motion, typography};
+use reui_design::tokens::{component, motion, typography};
 use reui_protocol::{
     ActivityId, ClientMsg, ItemKey, Row, ACTION_ALT, ACTION_SWIPE_NEXT, ACTION_SWIPE_PREV,
 };
@@ -14,7 +14,7 @@ use crate::drag_guard;
 use crate::features::choices;
 use crate::features::clipboard_keys;
 use crate::features::music::{self, SeekHold, Throttle};
-use crate::render::{self, Thumb, EXPANDED_SURFACE};
+use crate::render::{self, expanded_surface, Thumb};
 use crate::settings::Visibility;
 
 use super::{Drag, MenuEntry, Pill, State};
@@ -412,6 +412,6 @@ impl Pill {
     fn card_point(&self, x: f32, y: f32) -> (f32, f32) {
         let s = self.scale;
         let win_w = (self.window.right - self.window.left) as f32;
-        ((x - (win_w - EXPANDED_SURFACE.0 * s) / 2.0) / s, (y - island::TOP * s) / s)
+        ((x - (win_w - expanded_surface(&self.look).0 * s) / 2.0) / s, (y - self.look.top() * s) / s)
     }
 }

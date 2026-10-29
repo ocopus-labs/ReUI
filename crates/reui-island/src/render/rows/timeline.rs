@@ -1,7 +1,7 @@
 //! Progress and timeline bars: the meter, its seek thumb, and the times beside or under it.
 
 
-use reui_design::tokens::{color, component, island, space};
+use reui_design::tokens::{component, space};
 use reui_design::Color;
 use reui_protocol::Button;
 use windows::core::Result;
@@ -34,7 +34,7 @@ impl Renderer {
         let h = component::progress::HEIGHT;
         let end = l + (r - l) * fraction.clamp(0.0, 1.0);
         unsafe {
-            self.round_rect(rt, l, y, r, y + h, h / 2.0, color::fill::TRACK)?;
+            self.round_rect(rt, l, y, r, y + h, h / 2.0, self.pal().fill_track)?;
             self.round_rect(rt, l, y, end, y + h, h / 2.0, accent)?;
         }
         if let Some(length) = seek {
@@ -51,7 +51,7 @@ impl Renderer {
     pub(in crate::render) fn thumb(&self, rt: &ID2D1RenderTarget, x: f32, mid: f32) -> Result<()> {
         let r = component::thumb::SIZE / 2.0 * self.scale;
         let circle = D2D1_ELLIPSE { point: self.point(x, mid), radiusX: r, radiusY: r };
-        unsafe { rt.FillEllipse(&circle, &self.brush(rt, color::label::PRIMARY)?) };
+        unsafe { rt.FillEllipse(&circle, &self.brush(rt, self.pal().label_primary)?) };
         Ok(())
     }
 
@@ -59,7 +59,7 @@ impl Renderer {
     pub(in crate::render) fn fits_between(&self, buttons: &[Button], meter: &Meter) -> Result<bool> {
         let n = buttons.len() as f32;
         let group = n * component::button::TRANSPORT + (n - 1.0).max(0.0) * component::button::TRANSPORT_GAP;
-        let free = (self.width.get() - 2.0 * island::expanded::INSET - group) / 2.0;
+        let free = (self.width.get() - 2.0 * self.look.inset() - group) / 2.0;
         let widest = self.caption_width(meter.leading.as_deref())?.max(self.caption_width(meter.trailing.as_deref())?);
         Ok(widest + space::SM <= free)
     }
@@ -75,14 +75,14 @@ impl Renderer {
 
     /// Elapsed / remaining times at the two ends of the bar, centred on `mid`.
     pub(in crate::render) fn captions(&self, rt: &ID2D1RenderTarget, leading: Option<&str>, trailing: Option<&str>, mid: f32) -> Result<()> {
-        let inset = island::expanded::INSET;
+        let inset = self.look.inset();
         let (l, r) = (inset, self.width.get() - inset);
         let top = mid - self.fonts.caption.style.line_height / 2.0;
         if let Some(text) = leading {
-            self.text(rt, text, &self.fonts.caption, l, top, (r - l) / 2.0, Align::Start, color::label::TERTIARY)?;
+            self.text(rt, text, &self.fonts.caption, l, top, (r - l) / 2.0, Align::Start, self.pal().label_tertiary)?;
         }
         if let Some(text) = trailing {
-            self.text(rt, text, &self.fonts.caption, l + (r - l) / 2.0, top, (r - l) / 2.0, Align::End, color::label::TERTIARY)?;
+            self.text(rt, text, &self.fonts.caption, l + (r - l) / 2.0, top, (r - l) / 2.0, Align::End, self.pal().label_tertiary)?;
         }
         Ok(())
     }

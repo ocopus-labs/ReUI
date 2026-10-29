@@ -9,21 +9,23 @@ use reui_protocol::{ActivityId, CardSize, ExpandedView, ImageId, Row, Snapshot};
 
 /// Layout of a row of `count` cards in a view `width` wide. Card `i`'s left edge is
 /// `inset + i * step - scroll`; the row runs to the panel's right edge and is clipped there.
+/// `inset` is the panel's (the look's padding).
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct CardRow {
     pub width: f32,
     pub count: usize,
+    pub inset: f32,
 }
 
 impl CardRow {
-    pub fn new(width: f32, count: usize) -> Self {
-        Self { width, count }
+    pub fn new(width: f32, count: usize, inset: f32) -> Self {
+        Self { width, count, inset }
     }
 
     /// Four across when they all fit; otherwise four and a half, the half card at the edge
     /// saying there's more.
     pub fn card_width(&self) -> f32 {
-        let inset = island::expanded::INSET;
+        let inset = self.inset;
         let gap = component::card::GAP;
         if self.count as f32 <= component::card::VISIBLE {
             let n = component::card::VISIBLE;
@@ -39,12 +41,12 @@ impl CardRow {
     }
 
     pub fn left(&self, i: usize, scroll: f32) -> f32 {
-        island::expanded::INSET + i as f32 * self.step() - scroll
+        self.inset + i as f32 * self.step() - scroll
     }
 
     /// Scrolled all the way, the last card ends one inset from the edge.
     pub fn max_scroll(&self) -> f32 {
-        let inset = island::expanded::INSET;
+        let inset = self.inset;
         let content = inset + self.count as f32 * self.step() - component::card::GAP + inset;
         (content - self.width).max(0.0)
     }
@@ -55,7 +57,7 @@ impl CardRow {
 
     /// The nearest scroll that shows card `i` whole, inside the insets.
     pub fn reveal(&self, scroll: f32, i: usize) -> f32 {
-        let inset = island::expanded::INSET;
+        let inset = self.inset;
         let left = self.left(i, 0.0);
         let right = left + self.card_width();
         let scroll = if left - scroll < inset {
@@ -187,14 +189,14 @@ impl Panel {
     /// A new snapshot for the front activity. The selection follows its item (by action)
     /// when the list changes; a new search or tab starts over at the first card; an item
     /// that went away (deleted) leaves the selection on its neighbour. `follow` scrolls the
-    /// selection into view (the keyboard is driving).
-    pub fn sync(&mut self, id: Option<&ActivityId>, view: Option<&ExpandedView>, follow: bool) {
+    /// selection into view (the keyboard is driving). `inset` is the panel's (the look's).
+    pub fn sync(&mut self, id: Option<&ActivityId>, view: Option<&ExpandedView>, follow: bool, inset: f32) {
         if self.activity.as_ref() != id {
             self.reset();
             self.activity = id.cloned();
         }
         let new = content(view);
-        let row = view.map(|v| CardRow::new(view_width(v), new.actions.len()));
+        let row = view.map(|v| CardRow::new(view_width(v), new.actions.len(), inset));
         let was = self.selected_action().map(str::to_owned);
         let filter_changed = new.filter != self.content.filter;
         self.selected = match was.and_then(|a| new.actions.iter().position(|n| *n == a)) {
@@ -250,12 +252,12 @@ mod tests {
 
     #[test]
     fn four_fit_and_more_show_a_half_card() {
-        let four = CardRow::new(W, 4);
+        let four = CardRow::new(W, 4, island::expanded::INSET);
         assert_eq!(four.max_scroll(), 0.0);
         let right = four.left(3, 0.0) + four.card_width();
         assert!((right - (W - island::expanded::INSET)).abs() < 0.01);
 
-        let many = CardRow::new(W, 10);
+        let many = CardRow::new(W, 10, island::expanded::INSET);
         // Four whole cards, then half of the fifth cut by the panel's edge.
         let fifth = many.left(4, 0.0);
         assert!((W - fifth - many.card_width() / 2.0).abs() < 0.01);
@@ -264,7 +266,7 @@ mod tests {
 
     #[test]
     fn scrolling_clamps_and_steps_a_card_per_notch() {
-        let row = CardRow::new(W, 10);
+        let row = CardRow::new(W, 10, island::expanded::INSET);
         assert_eq!(row.wheel(0.0, 120), 0.0);
         assert!((row.wheel(0.0, -120) - row.step()).abs() < 0.01);
         assert_eq!(row.wheel(0.0, -120 * 50), row.max_scroll());
@@ -275,7 +277,7 @@ mod tests {
 
     #[test]
     fn revealing_a_card_scrolls_just_enough() {
-        let row = CardRow::new(W, 10);
+        let row = CardRow::new(W, 10, island::expanded::INSET);
         assert_eq!(row.reveal(0.0, 2), 0.0);
         let s = row.reveal(0.0, 4);
         assert!((row.left(4, s) + row.card_width() - (W - island::expanded::INSET)).abs() < 0.01);
@@ -332,7 +334,7 @@ mod tests {
         let mut p = Panel::default();
         let actions: Vec<String> = (0..10).map(|i| format!("p{i}")).collect();
         let refs: Vec<&str> = actions.iter().map(String::as_str).collect();
-        p.sync(Some(&id), Some(&view("", "all", &refs)), true);
+        p.sync(Some(&id), Some(&view("", "all", &refs)), true, island::expanded::INSET);
         p.select(6);
         assert_eq!(p.selected_action(), Some("p6"));
         assert!(p.target > 0.0);
@@ -340,21 +342,21 @@ mod tests {
         // A new copy slides in at the start: the selection stays on the same item.
         let mut more = vec!["new"];
         more.extend(&refs);
-        p.sync(Some(&id), Some(&view("", "all", &more)), true);
+        p.sync(Some(&id), Some(&view("", "all", &more)), true, island::expanded::INSET);
         assert_eq!((p.selected, p.selected_action()), (7, Some("p6")));
 
         // The selected item is deleted: its neighbour takes the place.
         let without: Vec<&str> = more.iter().copied().filter(|a| *a != "p6").collect();
-        p.sync(Some(&id), Some(&view("", "all", &without)), true);
+        p.sync(Some(&id), Some(&view("", "all", &without)), true, island::expanded::INSET);
         assert_eq!(p.selected_action(), Some("p7"));
 
         // A search that drops it starts over at the first card.
-        p.sync(Some(&id), Some(&view("fig", "all", &["p1", "p3"])), true);
+        p.sync(Some(&id), Some(&view("fig", "all", &["p1", "p3"])), true, island::expanded::INSET);
         assert_eq!((p.selected, p.target), (0, 0.0));
 
         // Another activity in front starts from scratch.
         let other = ActivityId { module: "media".into(), key: "x".into() };
-        p.sync(Some(&other), None, true);
+        p.sync(Some(&other), None, true, island::expanded::INSET);
         assert_eq!((p.selected, p.scroll, p.row()), (0, 0.0, None));
     }
 

@@ -1,7 +1,7 @@
 //! Synced lyrics: the current line and its neighbours, sliding up as lines change.
 
 
-use reui_design::tokens::{color, component, island};
+use reui_design::tokens::component;
 use reui_design::Color;
 use reui_protocol::LyricLine;
 use windows::core::Result;
@@ -22,7 +22,7 @@ impl Renderer {
         let line = self.fonts.lyric_wrap.style.line_height;
         let rows = component::lyrics::LINES.max(1.0) as u32;
         let height = line * rows as f32;
-        let inset = island::expanded::INSET;
+        let inset = self.look.inset();
         let width = self.width.get() - 2.0 * inset;
         let Some(position) = position else { return Ok(height) };
         let current = music::current_line(lines, position);
@@ -36,15 +36,15 @@ impl Renderer {
             if let Some((prev, t)) = leaving {
                 let h = self.lyric_height(text(prev), width, rows)?;
                 top = y - t * h;
-                self.lyric_block(rt, text(prev), inset, top, width, rows, color::label::PRIMARY.with_alpha(1.0 - t))?;
+                self.lyric_block(rt, text(prev), inset, top, width, rows, self.pal().label_primary.with_alpha(1.0 - t))?;
                 top += h;
             }
             let mut index = first;
             while top < y + height && index < lines.len() + 1 {
                 let ink = match (current == Some(index), leaving) {
-                    (true, Some((_, t))) => mix(color::label::SECONDARY, color::label::PRIMARY, t),
-                    (true, None) => color::label::PRIMARY,
-                    _ => color::label::SECONDARY,
+                    (true, Some((_, t))) => mix(self.pal().label_secondary, self.pal().label_primary, t),
+                    (true, None) => self.pal().label_primary,
+                    _ => self.pal().label_secondary,
                 };
                 top += self.lyric_block(rt, text(index), inset, top, width, rows, ink)?;
                 index += 1;

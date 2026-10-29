@@ -3,7 +3,8 @@
 
 use std::sync::mpsc::Receiver;
 
-use reui_design::tokens::{color, component, island, motion};
+use reui_design::look::{Appearance, Look};
+use reui_design::tokens::{component, island, look as range, motion};
 use reui_design::Color;
 use reui_protocol::{
     ClientMsg, Snapshot,
@@ -23,7 +24,7 @@ use crate::features::visualizer::Visualizer;
 use crate::ipc::Event;
 use crate::drag_guard::DragGuard;
 use crate::place::MonitorChoice;
-use crate::render::{Renderer, COMPACT_SURFACE, EXPANDED_SURFACE, MINIMAL_SURFACE};
+use crate::render::{expanded_surface, Renderer, COMPACT_SURFACE, MINIMAL_SURFACE};
 use crate::settings::Visibility;
 
 use super::{Pill, State};
@@ -38,15 +39,22 @@ impl Pill {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         hwnd: HWND,
-        scale: f32,
+        dpi: f32,
         window: RECT,
         monitor: HMONITOR,
         reduced_motion: bool,
         visibility: Visibility,
+        appearance: Appearance,
+        look: Look,
         to_hub: UnboundedSender<ClientMsg>,
         events: Receiver<Event>,
     ) -> Result<Self> {
+        // Size scales the whole pill and its type: it's drawn at that much more than the
+        // display's scale, so every DIP below grows with it.
+        let scale = dpi * look.size;
         let s = scale;
+        let top = look.top();
+        let expanded_dims = expanded_surface(&look);
         let compositor = Compositor::new()?;
         let target = unsafe { compositor.cast::<ICompositorDesktopInterop>()?.CreateDesktopWindowTarget(hwnd, true)? };
         let root = compositor.CreateContainerVisual()?;
@@ -61,8 +69,8 @@ impl Pill {
         props.InsertScalar(h!("h"), core.1 * s)?;
         props.InsertScalar(h!("m"), 0.0)?;
         props.InsertScalar(h!("eh"), island::expanded::MIN_HEIGHT * s)?;
-        // Expanded corner radius: the pill's, or the wide panel's calmer one.
-        props.InsertScalar(h!("r"), island::expanded::RADIUS * s)?;
+        // Expanded corner radius: the card's, or the wide panel's calmer one.
+        props.InsertScalar(h!("r"), look.radius() * s)?;
         let win_w = (window.right - window.left) as f32;
         let expr = |text: &str, scalars: &[(&str, f32)]| -> Result<ExpressionAnimation> {
             let e = compositor.CreateExpressionAnimationWithExpression(&HSTRING::from(text))?;
@@ -78,18 +86,26 @@ impl Pill {
 
         // The pill itself.
         let pill = compositor.CreateSpriteVisual()?;
-        pill.SetBrush(&color_brush(&compositor, color::island::BACKGROUND)?)?;
+        pill.SetBrush(&color_brush(&compositor, look.palette.background)?)?;
         pill.StartAnimation(h!("Size"), &expr("Vector2(p.w, p.h)", &[])?)?;
-        pill.StartAnimation(h!("Offset"), &expr("Vector3(Round((W - p.w) / 2), Round(T), 0)", &[("W", win_w), ("T", island::TOP * s)])?)?;
+        pill.StartAnimation(h!("Offset"), &expr("Vector3(Round((W - p.w) / 2), Round(T), 0)", &[("W", win_w), ("T", top * s)])?)?;
+        // Corners: the compact pill's (a capsule at full roundness, `look.rounded`) easing
+        // into the card's `p.r` as the pill opens, never more than half its height. At full
+        // roundness this is exactly `Min(p.h / 2, p.r)`.
+        let corner = format!(
+            "Min(p.h / 2, Min(p.r, (K + (p.h / 2 - K) * R) + (p.r - (K + (p.h / 2 - K) * R)) * {t}))",
+            t = t
+        );
+        let corner_scalars = [("K", range::roundness::MIN_RADIUS * s), ("R", look.roundness)];
         let shape = compositor.CreateRoundedRectangleGeometry()?;
         shape.StartAnimation(h!("Size"), &expr("Vector2(p.w, p.h)", &[])?)?;
-        shape.StartAnimation(h!("CornerRadius"), &expr("Vector2(Min(p.h / 2, p.r), Min(p.h / 2, p.r))", &[])?)?;
+        shape.StartAnimation(h!("CornerRadius"), &expr(&format!("Vector2({corner}, {corner})"), &corner_scalars)?)?;
         pill.SetClip(&compositor.CreateGeometricClipWithGeometry(&shape)?)?;
         root.Children()?.InsertAtTop(&pill)?;
 
-        let renderer = Renderer::new(&compositor, s)?;
+        let renderer = Renderer::new(&compositor, s, look)?;
         let compact_surface = renderer.surface(COMPACT_SURFACE)?;
-        let expanded_surface = renderer.surface(EXPANDED_SURFACE)?;
+        let expanded_surface = renderer.surface(expanded_dims)?;
         let minimal_surface = renderer.surface(MINIMAL_SURFACE)?;
 
         // Compact content: centred, nudged down while peeking, gone early in an expansion.
@@ -119,9 +135,9 @@ impl Pill {
         // Expanded content: fades and scales in during the later part of the morph.
         let start = motion::crossfade::EXPANDED_IN_START;
         let from = motion::crossfade::EXPANDED_SCALE_FROM;
-        let expanded = surface_sprite(&compositor, &expanded_surface, EXPANDED_SURFACE, s)?;
-        expanded.SetCenterPoint(Vector3::new(EXPANDED_SURFACE.0 / 2.0 * s, 0.0, 0.0))?;
-        expanded.StartAnimation(h!("Offset"), &expr("Vector3(Round((p.w - We) / 2), 0, 0)", &[("We", EXPANDED_SURFACE.0 * s)])?)?;
+        let expanded = surface_sprite(&compositor, &expanded_surface, expanded_dims, s)?;
+        expanded.SetCenterPoint(Vector3::new(expanded_dims.0 / 2.0 * s, 0.0, 0.0))?;
+        expanded.StartAnimation(h!("Offset"), &expr("Vector3(Round((p.w - We) / 2), 0, 0)", &[("We", expanded_dims.0 * s)])?)?;
         expanded.StartAnimation(h!("Opacity"), &expr(&format!("Clamp(({t} - {start}) / (1 - {start}), 0, 1)"), &[])?)?;
         let grow = format!("{from} + (1 - {from}) * {t}");
         expanded.StartAnimation(h!("Scale"), &expr(&format!("Vector3({grow}, {grow}, 1)"), &[])?)?;
@@ -132,15 +148,16 @@ impl Pill {
         let size = island::minimal::SIZE * s;
         let bubble = compositor.CreateSpriteVisual()?;
         bubble.SetSize(Vector2::new(size, size))?;
-        bubble.SetBrush(&color_brush(&compositor, color::island::BACKGROUND)?)?;
+        bubble.SetBrush(&color_brush(&compositor, look.palette.background)?)?;
         let circle = compositor.CreateRoundedRectangleGeometry()?;
+        let round = look.rounded(island::minimal::SIZE) * s;
         circle.SetSize(Vector2::new(size, size))?;
-        circle.SetCornerRadius(Vector2::new(size / 2.0, size / 2.0))?;
+        circle.SetCornerRadius(Vector2::new(round, round))?;
         bubble.SetClip(&compositor.CreateGeometricClipWithGeometry(&circle)?)?;
         bubble.SetCenterPoint(Vector3::new(size / 2.0, size / 2.0, 0.0))?;
         bubble.StartAnimation(
             h!("Offset"),
-            &expr("Vector3(Round((W + p.w) / 2 + G), Round(T), 0)", &[("W", win_w), ("G", island::minimal::GAP * s), ("T", island::TOP * s)])?,
+            &expr("Vector3(Round((W + p.w) / 2 + G), Round(T), 0)", &[("W", win_w), ("G", island::minimal::GAP * s), ("T", top * s)])?,
         )?;
         bubble.StartAnimation(h!("Opacity"), &expr(&format!("p.m * {compact_fade}"), &[])?)?;
         bubble.StartAnimation(h!("Scale"), &expr("Vector3(0.6 + 0.4 * p.m, 0.6 + 0.4 * p.m, 1)", &[])?)?;
@@ -152,6 +169,9 @@ impl Pill {
         Ok(Self {
             hwnd,
             scale,
+            dpi,
+            look,
+            appearance,
             window,
             monitor,
             reduced_motion,
