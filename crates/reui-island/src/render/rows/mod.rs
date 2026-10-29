@@ -5,6 +5,7 @@ mod cards;
 mod choices;
 mod context;
 mod controls;
+mod gauges;
 mod lyrics;
 mod note;
 mod search;

@@ -2,7 +2,8 @@
 //! helpers (UTF-16 truncation, clocks) they rely on.
 
 
-use reui_design::Color;
+use reui_design::{Color, TextStyle};
+use windows::core::HSTRING;
 use windows::core::Result;
 use windows::Win32::Graphics::Direct2D::*;
 use windows::Win32::Graphics::DirectWrite::*;
@@ -39,6 +40,26 @@ impl Renderer {
                 Align::Center => DWRITE_TEXT_ALIGNMENT_CENTER,
                 Align::End => DWRITE_TEXT_ALIGNMENT_TRAILING,
             })?;
+            rt.DrawTextLayout(self.point(left, top), &layout, &self.brush(rt, color)?, D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+        }
+        Ok(())
+    }
+
+    /// Numerals in `font` with a smaller unit after them on the same baseline ("32" "%"),
+    /// the unit in `unit` type and `unit_color`. One layout with the unit's range resized,
+    /// so DirectWrite lines up the baselines exactly.
+    #[allow(clippy::too_many_arguments)]
+    pub(super) fn value_with_unit(&self, rt: &ID2D1RenderTarget, value: &str, unit: &str, font: &Font, unit_style: TextStyle, left: f32, top: f32, width: f32, color: Color, unit_color: Color) -> Result<()> {
+        let text = format!("{value}{unit}");
+        let layout = self.layout(&text, font, width)?;
+        let range = DWRITE_TEXT_RANGE { startPosition: value.encode_utf16().count() as u32, length: unit.encode_utf16().count() as u32 };
+        unsafe {
+            if range.length > 0 {
+                layout.SetFontFamilyName(&HSTRING::from(unit_style.family), range)?;
+                layout.SetFontWeight(DWRITE_FONT_WEIGHT(unit_style.weight as i32), range)?;
+                layout.SetFontSize(unit_style.size * self.scale, range)?;
+                layout.SetDrawingEffect(&self.brush(rt, unit_color)?, range)?;
+            }
             rt.DrawTextLayout(self.point(left, top), &layout, &self.brush(rt, color)?, D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
         }
         Ok(())

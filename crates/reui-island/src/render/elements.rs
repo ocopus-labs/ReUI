@@ -3,9 +3,10 @@
 
 use std::borrow::Cow;
 
-use reui_design::tokens::{component, island, opacity};
+use reui_design::layout::header;
+use reui_design::tokens::{component, icon, island, opacity};
 use reui_design::Color;
-use reui_protocol::{Element, Tone};
+use reui_protocol::{ButtonContent, ButtonRole, Element, Tone};
 use windows::core::Result;
 use windows::Win32::Graphics::Direct2D::Common::*;
 use windows::Win32::Graphics::Direct2D::*;
@@ -46,6 +47,16 @@ impl Renderer {
                 let s = ring_size(slot).0;
                 (s, s)
             }
+            Element::Button(button) => match (&button.content, slot) {
+                // Elsewhere a button is only what it shows.
+                (ButtonContent::Glyph(g), Slot::Compact | Slot::Minimal) => return self.measure(&Element::Glyph { glyph: *g, tone: Tone::Secondary }, slot),
+                (ButtonContent::Text(t), Slot::Compact | Slot::Minimal) => return self.measure(&Element::Text { text: t.clone(), tone: Tone::Secondary }, slot),
+                // Bare on the eyebrow's line: only as tall as the glyph, so the header
+                // doesn't grow; its click target is larger (`header::end_button`).
+                (ButtonContent::Glyph(_), _) if button.role == ButtonRole::Plain => (icon::HEADER, icon::HEADER),
+                (ButtonContent::Glyph(_), _) => (component::button::INLINE, component::button::INLINE),
+                (ButtonContent::Text(t), _) => (header::inline_text_width(self.text_width(t, &self.fonts.button)?), component::button::INLINE),
+            },
         })
     }
 
@@ -84,6 +95,14 @@ impl Renderer {
                 let fill = if clock.running { accent } else { accent.with_alpha(accent.a * opacity::LEVEL_DIM) };
                 self.ring(rt, clock::fraction(clock, *total_ms, reui_protocol::unix_ms()), slot, left + w / 2.0, mid, fill)?;
             }
+            Element::Button(button) => match (&button.content, slot) {
+                (ButtonContent::Glyph(g), Slot::Compact | Slot::Minimal) => self.element(rt, &Element::Glyph { glyph: *g, tone: Tone::Secondary }, slot, x, mid, align, accent)?,
+                (ButtonContent::Text(t), Slot::Compact | Slot::Minimal) => self.element(rt, &Element::Text { text: t.clone(), tone: Tone::Secondary }, slot, x, mid, align, accent)?,
+                // Quiet like the pager: chrome, not content.
+                (ButtonContent::Glyph(g), _) if button.role == ButtonRole::Plain => self.text(rt, &g.to_string(), &self.fonts.icon_header, left, top, w, Align::Center, self.pal().label_secondary)?,
+                // The header records the click target; this only draws.
+                _ => self.button(rt, button, left, top, w, h, accent, &mut Vec::new())?,
+            },
         }
         Ok(())
     }
@@ -105,7 +124,7 @@ impl Renderer {
         Ok(())
     }
 
-    fn ring(&self, rt: &ID2D1RenderTarget, progress: f32, slot: Slot, cx: f32, cy: f32, accent: Color) -> Result<()> {
+    pub(super) fn ring(&self, rt: &ID2D1RenderTarget, progress: f32, slot: Slot, cx: f32, cy: f32, accent: Color) -> Result<()> {
         let (size, stroke) = ring_size(slot);
         let s = self.scale;
         // Centre on a pixel boundary (or pixel centre for odd-width strokes) so the stroke

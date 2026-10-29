@@ -7,7 +7,7 @@ use reui_design::layout::{self, rows};
 use reui_design::tokens::{component, island, opacity, radius, space};
 use reui_design::Color;
 use crate::features::clock;
-use reui_protocol::{Button, ButtonContent, CardSize, Element, ExpandedView, Headline, Row};
+use reui_protocol::{Button, ButtonContent, ButtonRole, CardSize, Element, ExpandedView, Headline, Row};
 use windows::core::Result;
 use windows::UI::Composition::CompositionDrawingSurface;
 use windows::Win32::Graphics::Direct2D::Common::*;
@@ -95,6 +95,8 @@ impl Renderer {
             let line_gap = island::expanded::LINE_GAP;
             let hero = match &view.headline {
                 Headline::Value(_) | Headline::Clock { .. } => Hero::Value,
+                // No headline: a row is the hero (gauges), the header is its eyebrow.
+                Headline::Text(t) if t.is_empty() => Hero::None,
                 Headline::Text(_) => Hero::Text,
                 Headline::Code(_) => Hero::Code,
             };
@@ -140,7 +142,21 @@ impl Renderer {
                         self.button(rt, button, x, mid - size / 2.0, size, size, accent, &mut hits)?;
                     }
                 }
-                None => self.element(rt, &trailing, Slot::Trailing, w - inset, mid, Align::End, accent)?,
+                None => {
+                    self.element(rt, &trailing, Slot::Trailing, w - inset, mid, Align::End, accent)?;
+                    // A button at the header's end: a bare glyph gets a target larger than
+                    // itself, a filled one is its own shape.
+                    if let Element::Button(b) = trailing.as_ref() {
+                        let (l, t, r, bottom) = match b.content {
+                            ButtonContent::Glyph(_) if b.role == ButtonRole::Plain => {
+                                let (l, t, s) = header::end_button(&self.look, w, mid);
+                                (l, t, l + s, t + s)
+                            }
+                            _ => (w - inset - tw, mid - th / 2.0, w - inset, mid + th / 2.0),
+                        };
+                        hits.push(Hit::new(l, t, r, bottom, &b.action));
+                    }
+                }
             }
 
             // The source switcher sits at the top right, on the first line of text, which
@@ -214,7 +230,7 @@ impl Renderer {
                             seek: seekable.then_some(*length_ms),
                         })
                     }
-                    Row::Buttons(_) | Row::Items(_) | Row::Search { .. } | Row::Tabs(_) | Row::Note(_) | Row::Slider { .. } | Row::Lyrics(_) | Row::Choices { .. } | Row::Block { .. } => None,
+                    Row::Buttons(_) | Row::Items(_) | Row::Search { .. } | Row::Tabs(_) | Row::Note(_) | Row::Slider { .. } | Row::Lyrics(_) | Row::Choices { .. } | Row::Block { .. } | Row::Gauges(_) | Row::Facts(_) => None,
                 };
                 let controls = match rows.get(i + 1) {
                     Some(Row::Buttons(b)) if b.iter().all(|b| matches!(b.content, ButtonContent::Glyph(_))) => Some(b),
@@ -274,6 +290,8 @@ impl Renderer {
                             y += self.slider(rt, leading, value, action, trailing.as_ref(), y, thumb, dragging, accent, &mut hits)?
                         }
                         Row::Lyrics(lines) => y += self.lyrics(rt, lines, track_at, y, with.lyric)?,
+                        Row::Gauges(list) => y += self.gauges(rt, list, y, accent)?,
+                        Row::Facts(facts) => y += self.facts(rt, facts, y, accent)?,
                         Row::Choices { options, multi } => {
                             let list = self.choices(rt, options, *multi, with.choice, y, with.block_scroll, accent, &mut hits)?;
                             block_max = list.max_scroll;

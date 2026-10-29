@@ -418,6 +418,11 @@ fn fonts(dwrite: &IDWriteFactory, scale: f32) -> Result<Fonts> {
         icon_check: f(icons(component::choice::CHECK), false)?,
         block_code: f(typography::BLOCK_CODE, false)?,
         block_prose: wrapped(typography::BLOCK_PROSE)?,
+        icon_header: f(icons(icon::HEADER), false)?,
+        icon_gauge: f(icons(component::gauge::GLYPH), false)?,
+        gauge_label: f(typography::GAUGE_LABEL, false)?,
+        fact_label: f(typography::FACT_LABEL, false)?,
+        fact: f(typography::FACT, true)?,
     })
 }
 
