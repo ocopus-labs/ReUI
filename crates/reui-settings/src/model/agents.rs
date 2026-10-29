@@ -22,6 +22,9 @@ pub enum Agent {
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Status {
     Connected,
+    /// Connected by an older build: Claude's questions and plans can't be answered from
+    /// the island until the hooks are installed again (agent moments E-A13).
+    Outdated,
     NotConnected,
     /// The file is there but isn't JSON: the installer won't touch it either.
     Unreadable,
@@ -97,6 +100,7 @@ impl Agent {
         match std::fs::read_to_string(&file) {
             Ok(text) if text.trim().is_empty() => Status::NotConnected,
             Ok(text) => match serde_json::from_str::<Value>(&text) {
+                Ok(root) if has_our_hooks(&root) && self == Agent::Claude && !has_ask_hook(&root) => Status::Outdated,
                 Ok(root) if has_our_hooks(&root) => Status::Connected,
                 Ok(Value::Object(_)) => Status::NotConnected,
                 _ => Status::Unreadable,
@@ -129,8 +133,8 @@ pub fn ago(now_ms: u64, then_ms: u64) -> String {
 /// What a row says about an agent: connection first, then whether it has been heard from.
 pub fn status_line(status: Status, installed: bool, last_event: Option<u64>, now_ms: u64) -> String {
     match (status, last_event) {
-        (Status::Connected, Some(t)) => format!("Connected · last event {}", ago(now_ms, t)),
-        (Status::Connected, None) => "Connected · no events yet".into(),
+        (Status::Connected | Status::Outdated, Some(t)) => format!("Connected · last event {}", ago(now_ms, t)),
+        (Status::Connected | Status::Outdated, None) => "Connected · no events yet".into(),
         (_, _) if !installed => "Agent not found on this PC".into(),
         _ => "Not connected".into(),
     }
@@ -140,6 +144,17 @@ pub fn status_line(status: Status, installed: bool, last_event: Option<u64>, now
 pub fn has_our_hooks(root: &Value) -> bool {
     let Some(hooks) = root.get("hooks").and_then(Value::as_object) else { return false };
     hooks.values().filter_map(Value::as_array).flatten().filter_map(|group| group.get("hooks").and_then(Value::as_array)).flatten().any(is_ours)
+}
+
+/// Claude's blocking `PreToolUse` entry for its questions and plans (the installer's
+/// `ASK_MATCHER`, a handler of ours that isn't async), which builds before agent moments
+/// M2 didn't install.
+pub fn has_ask_hook(root: &Value) -> bool {
+    let Some(groups) = root.get("hooks").and_then(|h| h.get("PreToolUse")).and_then(Value::as_array) else { return false };
+    groups.iter().any(|g| {
+        let asks = g.get("matcher").and_then(Value::as_str).is_some_and(|m| m.contains("AskUserQuestion"));
+        asks && g.get("hooks").and_then(Value::as_array).is_some_and(|h| h.iter().any(|h| is_ours(h) && h.get("async").and_then(Value::as_bool) != Some(true)))
+    })
 }
 
 fn is_ours(handler: &Value) -> bool {
@@ -217,6 +232,15 @@ mod tests {
     }
 
     #[test]
+    fn the_blocking_question_entry_is_told_apart_from_the_async_one() {
+        let entry = |matcher: &str, extra: Value| json!({ "hooks": { "PreToolUse": [{ "matcher": matcher, "hooks": [extra] }] } });
+        assert!(has_ask_hook(&entry("AskUserQuestion|ExitPlanMode", json!({ "command": "reui-bridge.exe", "args": ["claude", "ask"], "timeout": 300 }))));
+        assert!(!has_ask_hook(&entry("*", json!({ "command": "reui-bridge.exe", "args": ["claude"], "async": true }))));
+        assert!(!has_ask_hook(&entry("AskUserQuestion", json!({ "command": "reui-bridge.exe", "async": true }))));
+        assert!(!has_ask_hook(&entry("AskUserQuestion", json!({ "command": "my-hook.exe" }))));
+    }
+
+    #[test]
     fn status_reads_the_agents_files() {
         let dir = crate::model::doc::tests::temp_dir("agents");
         let paths = Paths { config: dir.join("c"), local: dir.join("l"), home: dir.clone(), exe_dir: dir.clone(), sandbox: true };
@@ -224,6 +248,8 @@ mod tests {
         let file = Agent::Claude.file(&paths);
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, r#"{ "hooks": { "Stop": [{ "hooks": [{ "command": "reui-bridge.exe" }] }] } }"#).unwrap();
+        assert_eq!(Agent::Claude.status(&paths), Status::Outdated, "hooks without the blocking question entry");
+        std::fs::write(&file, r#"{ "hooks": { "PreToolUse": [{ "matcher": "AskUserQuestion|ExitPlanMode", "hooks": [{ "command": "reui-bridge.exe", "args": ["claude", "ask"], "timeout": 300 }] }] } }"#).unwrap();
         assert_eq!(Agent::Claude.status(&paths), Status::Connected);
         std::fs::write(&file, "{ oops").unwrap();
         assert_eq!(Agent::Claude.status(&paths), Status::Unreadable);

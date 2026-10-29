@@ -25,6 +25,8 @@ pub fn build(state: &State) -> Vec<Block> {
             let line = agents::status_line(state.agents[i], installed, state.agent_last[i], now);
             let row = match state.agents[i] {
                 Status::Connected => row.detail(format!("{line} · {file}")).tone(Tone::Positive).part(button("Send test", Role::Secondary)).part(button("Disconnect", Role::Secondary)),
+                // Questions and plans need the newer hooks; installing again replaces ours.
+                Status::Outdated => row.detail(format!("{line} · questions need newer hooks")).tone(Tone::Warning).part(button("Update hooks", Role::Accent)).part(button("Disconnect", Role::Secondary)),
                 Status::NotConnected if installed => row.detail(format!("{line} · adds ReUI to {file}")).part(button("Connect", Role::Accent)),
                 Status::NotConnected => row.detail(line).part(button("Connect", Role::Secondary)),
                 Status::Unreadable => row.detail(format!("{file} isn't valid JSON")).tone(Tone::Negative).part(button("Connect", Role::Accent)).enabled(false),
@@ -64,9 +66,14 @@ pub fn act(state: &mut State, target: &Target, act: Act) -> Effect {
         return Effect::None;
     }
     let agent = Agent::ALL[i];
-    let connected = state.agents[i] == Status::Connected;
-    // Connected rows: Send test, Disconnect. Others: Connect.
-    let test = connected && target.part == 0;
+    let status = state.agents[i];
+    // Connected rows: Send test, Disconnect. Outdated: Update hooks (connect again),
+    // Disconnect. Others: Connect.
+    let connected = match status {
+        Status::Outdated => target.part == 1,
+        s => s == Status::Connected,
+    };
+    let test = status == Status::Connected && target.part == 0;
     let note = match agents::bridge(&state.paths) {
         None => Some(("reui-bridge.exe isn't next to Settings".to_string(), Tone::Warning)),
         Some(bridge) if test => match agents::send_test(&bridge, agent, &state.paths) {
@@ -104,6 +111,12 @@ mod tests {
         std::fs::write(dir.join("reui-bridge.exe"), b"").unwrap();
         std::fs::create_dir_all(dir.join("home").join(".claude")).unwrap();
         std::fs::write(dir.join("home").join(".claude").join("settings.json"), r#"{ "hooks": { "Stop": [{ "hooks": [{ "command": "reui-bridge.exe" }] }] } }"#).unwrap();
+        state.refresh();
+        let blocks = build(&state);
+        let claude = row(&blocks, "agent:claude");
+        assert!(claude.detail.as_deref().unwrap().ends_with("questions need newer hooks"), "an older build's hooks");
+        assert!(matches!(&claude.parts[0], Part::Button { label, .. } if label == "Update hooks"));
+        std::fs::write(dir.join("home").join(".claude").join("settings.json"), r#"{ "hooks": { "PreToolUse": [{ "matcher": "AskUserQuestion|ExitPlanMode", "hooks": [{ "command": "reui-bridge.exe", "args": ["claude", "ask"] }] }] } }"#).unwrap();
         state.refresh();
         let blocks = build(&state);
         let claude = row(&blocks, "agent:claude");
