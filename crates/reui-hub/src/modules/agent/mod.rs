@@ -280,7 +280,7 @@ async fn run(profile: &'static Profile, mut ctx: ModuleContext) {
                         ctx.retract(&action.key);
                     }
                 }
-                Some(ModuleInput::Action(_)) => {}
+                Some(ModuleInput::Action(_) | ModuleInput::Drop(_)) => {}
                 None => break,
             },
             _ = async { scan.as_mut().unwrap().await }, if scan.is_some() => {

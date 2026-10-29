@@ -254,6 +254,31 @@ pub struct Item {
     /// More things to do with it: the card's context menu, and their keyboard shortcuts
     /// while the card is selected. `action` above is the click / Enter.
     pub actions: Vec<ItemAction>,
+    /// What the card carries when it's dragged out of the surface into another app (a held
+    /// file); `None` when it can't be dragged.
+    pub drag: Option<Drag>,
+}
+
+/// Content a surface hands to another app by drag and drop. Surfaces offer it to copy or
+/// link, never to move: the original stays where it is.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum Drag {
+    /// Files and folders, by full path.
+    Files(Vec<String>),
+    Text(String),
+    Link(String),
+}
+
+/// What was let go on a surface (see [`ClientMsg::Drop`]), as the surface read it.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
+pub enum Dropped {
+    /// Files and folders, by full path.
+    Files(Vec<String>),
+    Text(String),
+    Link(String),
+    /// Content that has no file of its own (a browser's image, a mail attachment): its name
+    /// and its bytes.
+    Data { name: String, bytes: Vec<u8> },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -561,6 +586,9 @@ pub enum ClientMsg {
     /// handles it ("claude"); `payload` is the hook's stdin JSON. When `wants_reply` is set
     /// the bridge waits for a [`HubMsg::HookReply`].
     Hook { agent: String, payload: String, wants_reply: bool },
+    /// Something was dropped on the surface, for the place that takes drops
+    /// ([`Destination::drops`]); `module` is that place's.
+    Drop { module: String, items: Vec<Dropped> },
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -598,6 +626,9 @@ pub struct Destination {
     /// The [`ClientMsg::Command`] action that opens it (the tray's own path); the module
     /// publishes its card and asks for focus.
     pub open: String,
+    /// Things dropped on the surface go to this place (the file shelf): the surface may
+    /// offer a drop target while one does.
+    pub drops: bool,
 }
 
 impl Element {
@@ -728,9 +759,12 @@ mod tests {
         write_frame(&mut a, &HubMsg::Welcome { version: PROTOCOL_VERSION }).await.unwrap();
         assert_eq!(read_frame::<_, HubMsg>(&mut b).await.unwrap(), snapshot);
         assert_eq!(read_frame::<_, HubMsg>(&mut b).await.unwrap(), HubMsg::Welcome { version: PROTOCOL_VERSION });
-        let places = HubMsg::Destinations(vec![Destination { module: "clipboard".into(), glyph: '\u{E77F}', name: "Clipboard".into(), open: "open".into() }]);
+        let places = HubMsg::Destinations(vec![Destination { module: "clipboard".into(), glyph: '\u{E77F}', name: "Clipboard".into(), open: "open".into(), drops: false }]);
         write_frame(&mut a, &places).await.unwrap();
         assert_eq!(read_frame::<_, HubMsg>(&mut b).await.unwrap(), places);
+        let drop = ClientMsg::Drop { module: "shelf".into(), items: vec![Dropped::Files(vec!["C:/a.pdf".into()]), Dropped::Data { name: "Image.png".into(), bytes: vec![1, 2] }] };
+        write_frame(&mut a, &drop).await.unwrap();
+        assert_eq!(read_frame::<_, ClientMsg>(&mut b).await.unwrap(), drop);
     }
 
     #[test]

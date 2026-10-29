@@ -23,10 +23,12 @@ pub enum File {
     Stats,
     /// `calendar.json`: its links are DPAPI-sealed (`model::calendar`).
     Calendar,
+    /// `shelf.json`: the file shelf.
+    Shelf,
 }
 
 impl File {
-    pub const ALL: [File; 10] = [File::Island, File::Media, File::Clipboard, File::Osd, File::Devices, File::Timers, File::Privacy, File::Coding, File::Stats, File::Calendar];
+    pub const ALL: [File; 11] = [File::Island, File::Media, File::Clipboard, File::Osd, File::Devices, File::Timers, File::Privacy, File::Coding, File::Stats, File::Calendar, File::Shelf];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -40,6 +42,7 @@ impl File {
             File::Coding => "coding.json",
             File::Stats => "stats.json",
             File::Calendar => "calendar.json",
+            File::Shelf => "shelf.json",
         }
     }
 
@@ -57,6 +60,7 @@ impl File {
             File::Coding => &["claude", "codex", "opencode"],
             File::Stats => &["stats"],
             File::Calendar => &["calendar"],
+            File::Shelf => &["shelf"],
         }
     }
 
@@ -73,6 +77,7 @@ impl File {
             File::Coding => "coding",
             File::Stats => "stats",
             File::Calendar => "calendar",
+            File::Shelf => "shelf",
         }
     }
 
@@ -139,6 +144,7 @@ impl File {
             File::Coding => json!({ "show_sessions": "needed", "show_finished": false }),
             File::Stats => json!({ "enabled": true, "shortcut": "Win+Alt+S", "gpu": true, "disk": true, "network": true, "power": true }),
             File::Calendar => json!({ "enabled": true, "lead_min": 10, "windows": false, "sources": [] }),
+            File::Shelf => json!({ "enabled": true, "keep": "removed", "saved_cap_mb": 512 }),
         }
     }
 
@@ -157,6 +163,8 @@ pub const VISIBILITY: [&str; 3] = ["always", "when-active", "when-needed"];
 pub const VISUALIZER: [&str; 3] = ["real", "simple", "off"];
 /// `show_sessions` in `coding.json`.
 pub const SHOW_SESSIONS: [&str; 2] = ["needed", "working"];
+/// `keep` in `shelf.json`: how long held things stay.
+pub const KEEP: [&str; 4] = ["removed", "restart", "day", "week"];
 /// `monitor` values besides a display's device name (`\\.\DISPLAY2`).
 pub const MONITOR_PRIMARY: &str = "primary";
 pub const MONITOR_CURSOR: &str = "cursor";
@@ -214,6 +222,12 @@ impl Files {
     pub fn visualizer(&self) -> usize {
         let v = self.doc(File::Media).str("visualizer").map(|s| s.trim().to_ascii_lowercase());
         v.and_then(|v| VISUALIZER.iter().position(|x| *x == v)).unwrap_or(0)
+    }
+
+    /// Index into [`KEEP`]; anything else is the module's default (until removed).
+    pub fn keep(&self) -> usize {
+        let v = self.doc(File::Shelf).str("keep").map(str::trim);
+        v.and_then(|v| KEEP.iter().position(|x| *x == v)).unwrap_or(0)
     }
 
     pub fn retract_min(&self) -> u64 {

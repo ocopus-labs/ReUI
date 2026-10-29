@@ -30,12 +30,16 @@ struct Place {
 /// (Now Playing) never shifts the others.
 const PLACES: &[Place] = &[
     Place { module: "clipboard", glyph: '\u{E77F}', name: "Clipboard", open: "open", available: Available::Always },
+    Place { module: "shelf", glyph: '\u{E7B8}', name: "Shelf", open: "open", available: Available::Always },
     Place { module: "timers", glyph: '\u{E916}', name: "Timers", open: "launcher", available: Available::Always },
     Place { module: "calendar", glyph: '\u{E787}', name: "Calendar", open: "open", available: Available::Always },
     Place { module: "devices", glyph: '\u{E772}', name: "Devices", open: "overview", available: Available::Always },
     Place { module: "stats", glyph: '\u{E9D9}', name: "System stats", open: "open", available: Available::Always },
     Place { module: "media", glyph: '\u{E8D6}', name: "Now Playing", open: "show", available: Available::WithCard },
 ];
+
+/// The one place that takes things dropped on the island (docs/PRD-file-shelf.md).
+const DROPS: &str = "shelf";
 
 /// The places there are now: those whose module is running (`modules`, by name), and of
 /// those that need a card, the ones with an expanded card among `activities`.
@@ -45,7 +49,7 @@ pub fn available<'a>(modules: impl IntoIterator<Item = &'a str>, activities: &[&
         .iter()
         .filter(|p| running.contains(p.module))
         .filter(|p| p.available == Available::Always || activities.iter().any(|a| a.id.module == p.module && a.expanded.is_some()))
-        .map(|p| Destination { module: p.module.into(), glyph: p.glyph, name: p.name.into(), open: p.open.into() })
+        .map(|p| Destination { module: p.module.into(), glyph: p.glyph, name: p.name.into(), open: p.open.into(), drops: p.module == DROPS })
         .collect()
 }
 
@@ -93,5 +97,12 @@ mod tests {
         assert_eq!(names(&available(["clipboard"], &[&playing])), ["Clipboard"], "a card from a module that isn't running counts for nothing");
         let open = &available(modules, &[&playing])[2];
         assert_eq!((open.module.as_str(), open.open.as_str()), ("media", "show"));
+    }
+
+    #[test]
+    fn only_the_shelf_takes_drops() {
+        let list = available(["shelf", "clipboard", "timers"], &[]);
+        assert_eq!(names(&list), ["Clipboard", "Shelf", "Timers"]);
+        assert_eq!(list.iter().filter(|d| d.drops).map(|d| d.module.as_str()).collect::<Vec<_>>(), ["shelf"]);
     }
 }

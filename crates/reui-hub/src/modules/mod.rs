@@ -15,6 +15,7 @@ pub mod media;
 pub mod onboarding;
 pub mod osd;
 pub mod privacy;
+pub mod shelf;
 pub mod stats;
 mod system_events;
 pub mod timers;

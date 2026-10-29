@@ -169,6 +169,7 @@ async fn serve(pipe: NamedPipeServer, hub: Hub) -> Result<()> {
         match read_frame::<_, ClientMsg>(&mut reader).await {
             Ok(ClientMsg::Action { id, action }) => hub.route_action(&id, action),
             Ok(ClientMsg::Command { module, action }) => hub.route_command(&module, action),
+            Ok(ClientMsg::Drop { module, items }) => hub.route_drop(&module, items),
             Ok(ClientMsg::Hello { .. } | ClientMsg::Hook { .. }) => {}
             Err(e) => break Err(e.into()),
         }

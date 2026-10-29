@@ -33,7 +33,7 @@ To drive a sandboxed island without touching the real mouse or keyboard, post to
 
 ## The hub's flags
 
-The hub starts the island plus every module. `--no-agents`, `--no-media`, `--no-clipboard`, `--no-osd`, `--no-devices`, `--no-timers` skip one; `--no-link-previews` keeps clipboard links offline; `--no-updates` never looks for updates or mentions them. `--no-island` runs the hub alone so you can start `reui-island.exe` yourself (under a debugger, say). `--no-onboarding` skips the first run and one-time tips; `--first-run` replays the demo and welcome. The full list is the doc comment at the top of `crates/reui-hub/src/main.rs`.
+The hub starts the island plus every module. `--no-agents`, `--no-media`, `--no-clipboard`, `--no-osd`, `--no-devices`, `--no-timers`, `--no-privacy`, `--no-stats`, `--no-shelf` skip one; `--no-link-previews` keeps clipboard links offline; `--no-updates` never looks for updates or mentions them. `--no-island` runs the hub alone so you can start `reui-island.exe` yourself (under a debugger, say). `--no-onboarding` skips the first run and one-time tips; `--first-run` replays the demo and welcome. The full list is the doc comment at the top of `crates/reui-hub/src/main.rs`.
 
 `--demo` enables a module that shows now-playing, a 5-minute timer and, 25 s after each one is settled, the next agent moment: a permission with a scrolling script, a three-step question (one step multi-select) and a plan to approve. They take over the pill, answer nothing real, and time out and fail open (20 s for the permission, 60 s for the others). Hover to peek, click to expand, right-click the pill to quit ReUI.
 
@@ -58,6 +58,8 @@ Setup options: `--no-autostart` (don't start with Windows), `--no-launch`, `--qu
 | `%LOCALAPPDATA%\ReUI\calendar\` | Each calendar's last good copy (`<id>.cache`, DPAPI-encrypted) and `status.json` (each source's last refresh) |
 | `%LOCALAPPDATA%\ReUI` | Caches and logs |
 | `%LOCALAPPDATA%\ReUI\update.json` | What the last update check found |
+| `%APPDATA%\ReUI\shelf.json` | File shelf: `keep` (`removed` \| `restart` \| `day` \| `week`), `saved_cap_mb` |
+| `%LOCALAPPDATA%\ReUI\shelf\` | What the file shelf holds (`held.json`) and the copies it made (`files\<card>\`) |
 | `%LOCALAPPDATA%\ReUI\agents.json` | Each coding agent's last event (at most one write per 10 s) |
 | `%LOCALAPPDATA%\ReUI\bin\reui-bridge.exe` | The bridge the hooks run; the hub keeps it in step with itself when it starts |
 
@@ -118,6 +120,10 @@ The hub's `stats` module shows CPU, GPU, memory, disk and network in a card: **W
 ## Calendar internals
 
 The hub's `calendar` module reads secret ICS links (Google's, Outlook's, any provider's) and, opt-in, Windows' own appointment store. Feeds are fetched with `If-None-Match` / `If-Modified-Since` every 15 minutes, at once on resume and when connectivity hints say the internet is back, parsed off the hub thread by its own RFC 5545 reader (`ics/`: VTIMEZONE, RRULE in the event's wall time, exceptions; zones without a VTIMEZONE from Windows' ICU), and expanded for yesterday to the day after tomorrow. The module then sleeps until the next countdown, start, lapse, end or midnight; the island runs the ring. Links are DPAPI-encrypted in `%APPDATA%\ReUI\calendar.json` (`sources[].url` is `dpapi:` + hex; a link typed in by hand is sealed on first read) and the last good copy of each feed in `%LOCALAPPDATA%\ReUI\calendar\<id>.cache`; `calendar\status.json` is each source's last refresh for Settings. Logs never name a link or an event. To try it without a real calendar, serve an `.ics` on `http://127.0.0.1` (plain http is accepted only for loopback) and add that link. `--no-calendar` turns it off. Spec and research: [docs/PRD-calendar.md](PRD-calendar.md).
+
+## File shelf internals
+
+The island is the drop target and the drag source; the hub's `shelf` module holds the list. A drag from elsewhere near the island (`DragGuard` says a button that went down elsewhere is held, within `island.shelf.reach` of the shape) makes the window hit-testable for it, which is the only way OLE's `DoDragDrop` finds a `WS_EX_TRANSPARENT` layered window; away from it the island is click-through again at once. `dragdrop/target.rs` answers Copy, else Link, never Move, reads the formats once on the drop (`CF_HDROP`, `FileGroupDescriptorW`/`FileContents`, `UniformResourceLocatorW`, `PNG`, `CF_UNICODETEXT`) and sends `ClientMsg::Drop` to the destination with `drops`. Out: `SHDoDragDrop` of the shell's data object (`SHCreateDataObject` over absolute IDLists, so files from several folders go together, with `CF_HDROP`), or text and URL formats; marked `ReUI.Drag` so the island never takes its own drag back. Debug builds: `WM_APP + 21` posted to the island (wparam 1 over, 0 leave, 2 let go of `REUI_TEST_DROP`'s `;`-separated paths) shows the target and checks island → hub → shelf without a real drag. Real drags need a person: drag a file from Explorer to the island and back into another folder (it must copy, never move). `--no-shelf` turns it off. Spec: [docs/PRD-file-shelf.md](PRD-file-shelf.md).
 
 ## Adding a module
 

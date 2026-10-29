@@ -22,6 +22,8 @@ const CMD_UPDATE: usize = 108;
 const CMD_STATS: usize = 109;
 const CMD_HIDE: usize = 110;
 const CMD_CALENDAR: usize = 120;
+const CMD_SHELF: usize = 111;
+const CMD_SHELF_CLEAR: usize = 112;
 /// Timer presets: this plus the preset's index.
 const CMD_PRESET: usize = 200;
 const CMD_ITEM: usize = 400;
@@ -125,6 +127,11 @@ pub fn menu(hwnd: HWND, paused: bool, hidden: bool) -> Option<Command> {
         _ = AppendMenuW(menu, MF_STRING, CMD_DEVICES, w!("Devices"));
         _ = AppendMenuW(menu, MF_STRING, CMD_STATS, w!("System stats"));
         _ = AppendMenuW(menu, MF_STRING, CMD_CALENDAR, w!("Calendar"));
+        if let Ok(shelf) = CreatePopupMenu() {
+            _ = AppendMenuW(shelf, MF_STRING, CMD_SHELF, w!("Open shelf"));
+            _ = AppendMenuW(shelf, MF_STRING, CMD_SHELF_CLEAR, w!("Clear shelf"));
+            _ = AppendMenuW(menu, MF_POPUP, shelf.0 as usize, w!("Shelf"));
+        }
         let presets = timer_presets();
         if let Ok(timer) = CreatePopupMenu() {
             _ = AppendMenuW(timer, MF_STRING, CMD_NEW_TIMER, w!("New timer…"));
@@ -157,6 +164,8 @@ pub fn menu(hwnd: HWND, paused: bool, hidden: bool) -> Option<Command> {
             CMD_DEVICES => Some(Command::Module("devices", "overview".into())),
             CMD_STATS => Some(Command::Module("stats", "open".into())),
             CMD_CALENDAR => Some(Command::Module("calendar", "open".into())),
+            CMD_SHELF => Some(Command::Module("shelf", "open".into())),
+            CMD_SHELF_CLEAR => Some(Command::Module("shelf", "clear".into())),
             CMD_NEW_TIMER => Some(Command::Module("timers", "launcher".into())),
             CMD_FOCUS => Some(Command::Module("timers", "start:focus".into())),
             CMD_STOPWATCH => Some(Command::Module("timers", "start:stopwatch".into())),

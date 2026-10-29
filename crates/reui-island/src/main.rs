@@ -7,6 +7,7 @@
 
 mod desktop;
 mod drag_guard;
+mod dragdrop;
 mod features;
 mod fullscreen;
 mod images;
@@ -43,6 +44,11 @@ use crate::settings::Settings;
 /// Debug builds: a test script's pointer position (see the window procedure).
 #[cfg(debug_assertions)]
 const WM_TEST_POINTER: u32 = WM_APP + 20;
+/// Debug builds: a test script's drag over the island (wparam 1: it comes over the pill's
+/// middle, 0: it leaves, 2: it's let go), so the drop target and the shelf's intake can be
+/// checked without a real drag (`Pill::test_drag`).
+#[cfg(debug_assertions)]
+const WM_TEST_DROP: u32 = WM_APP + 21;
 
 const TIMER_SETTINGS: usize = 100;
 const SETTINGS_SETTLE_MS: u32 = 150;
@@ -218,6 +224,13 @@ fn card_menu(hwnd: HWND, entries: Vec<MenuEntry>) {
     });
 }
 
+fn press_drag(lparam: LPARAM) -> bool {
+    let (x, y) = client_point(lparam);
+    let mut pressed = false;
+    with_pill(|pill| pressed = pill.press_drag(x, y));
+    pressed
+}
+
 fn client_point(lparam: LPARAM) -> (f32, f32) {
     ((lparam.0 & 0xffff) as i16 as f32, ((lparam.0 >> 16) & 0xffff) as i16 as f32)
 }
@@ -333,12 +346,35 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             with_pill(|pill| pill.on_mouse_move(POINT { x: x as i32, y: y as i32 }));
             LRESULT(0)
         }
+        #[cfg(debug_assertions)]
+        WM_TEST_DROP => {
+            with_pill(|pill| pill.test_drag(wparam.0));
+            LRESULT(0)
+        }
         clipboard_keys::WM_KEYS => {
             with_pill(|pill| pill.on_keys());
             LRESULT(0)
         }
         // A press on a bar in the open card drags it, with the mouse captured so the drag
         // follows the pointer off the island; anything else acts on release.
+        // A press on something that can be dragged out (a held file's card, the shelf's
+        // pill) is watched with the mouse captured; moving past the drag distance starts
+        // Windows' drag, outside the pill's borrow (the island's own drop target and
+        // timers run during it).
+        WM_LBUTTONDOWN if press_drag(lparam) => {
+            SetCapture(hwnd);
+            LRESULT(0)
+        }
+        WM_MOUSEMOVE => {
+            let (x, y) = client_point(lparam);
+            let mut out = None;
+            with_pill(|pill| out = pill.drag_out_due(x, y));
+            if let Some(drag) = out {
+                _ = ReleaseCapture();
+                dragdrop::drag_out(hwnd, &drag);
+            }
+            LRESULT(0)
+        }
         WM_LBUTTONDOWN => {
             let (x, y) = client_point(lparam);
             let mut dragging = false;
@@ -350,6 +386,11 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         }
         WM_LBUTTONUP => {
             let (x, y) = client_point(lparam);
+            let mut pressed = false;
+            with_pill(|pill| pressed = pill.release_press());
+            if pressed {
+                _ = ReleaseCapture();
+            }
             let shift = wparam.0 & 0x0004 != 0; // MK_SHIFT
             // The island never has focus, so Alt is read from the hardware state.
             let alt = GetAsyncKeyState(VK_MENU.0 as i32) as u16 & 0x8000 != 0;
@@ -419,6 +460,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             LRESULT(0)
         }
         WM_DESTROY => {
+            dragdrop::unregister(hwnd);
             tray::remove(hwnd);
             PostQuitMessage(0);
             LRESULT(0)
@@ -480,6 +522,13 @@ fn main() -> Result<()> {
     pill.apply_settings(settings);
     settings::watch(hwnd);
     PILL.with(|cell| *cell.borrow_mut() = Some(pill));
+    // Things dragged onto the island go to the file shelf (its drop target answers only
+    // near the island, `pill/drop.rs`).
+    dragdrop::register(hwnd, Box::new(|event| {
+        let mut taken = false;
+        with_pill(|pill| taken = pill.on_drop_event(event));
+        taken
+    }));
     unsafe { _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE) };
     watch_location(unsafe { GetForegroundWindow() });
     TASKBAR_CREATED.set(tray::taskbar_created());

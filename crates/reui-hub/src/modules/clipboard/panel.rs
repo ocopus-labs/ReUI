@@ -86,6 +86,7 @@ fn item(it: &cv::Item, view: &cv::View) -> Item {
         meta: it.meta.clone(),
         pinned: it.pinned,
         actions: actions(it, view),
+        drag: None,
     }
 }
 

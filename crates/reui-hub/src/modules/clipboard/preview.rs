@@ -9,7 +9,7 @@ pub(super) fn prefix(text: &str, chars: usize) -> &str {
 
 /// What copied text is, for its card: a colour, a link, code, or plain text. Only the
 /// start of a long text is looked at.
-pub(super) fn classify(text: &str) -> Preview {
+pub(crate) fn classify(text: &str) -> Preview {
     let text = prefix(text, 16 * 1024);
     let trimmed = text.trim();
     if let Some(rgb) = parse_color(trimmed) {

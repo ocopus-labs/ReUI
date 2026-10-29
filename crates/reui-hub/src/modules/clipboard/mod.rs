@@ -51,6 +51,9 @@ mod window;
 
 use self::link::LinkMeta;
 pub(crate) use self::os::{app_name, exe_icon, thumbnail};
+// The file shelf's cards read like the clipboard's.
+pub(crate) use self::preview::classify;
+pub(crate) use self::view::age;
 use self::os::{Captured, Clipboard, Command, Content, Hotkey, OsEvent, OsStatus, Target};
 use self::settings::Settings;
 use self::stack::PasteStack;

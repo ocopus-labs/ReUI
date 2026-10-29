@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
-use reui_protocol::{Activity, ActivityId, CompactView, Destination, Element, ExpandedView, ImageId, Priority, Rgb, Snapshot};
+use reui_protocol::{Activity, ActivityId, CompactView, Destination, Dropped, Element, ExpandedView, ImageId, Priority, Rgb, Snapshot};
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
 
 /// How an activity presents itself; see the protocol for each presentation.
@@ -45,6 +45,8 @@ pub enum ModuleInput {
     /// The bridge waiting on this hook call went away (the agent was answered in its own
     /// UI, timed out, or was closed); drop whatever was shown for it.
     HookGone(u64),
+    /// Things the user let go on the island, for the place that takes drops.
+    Drop(Vec<Dropped>),
 }
 
 struct Entry {
@@ -156,6 +158,13 @@ impl Hub {
     pub fn route_command(&self, module: &str, action: String) {
         if let Some(route) = self.state.lock().unwrap().routes.get(module) {
             _ = route.send(ModuleInput::Action(ModuleAction { key: String::new(), action }));
+        }
+    }
+
+    /// Things dropped on a surface, for `module` (the place that takes drops).
+    pub fn route_drop(&self, module: &str, items: Vec<Dropped>) {
+        if let Some(route) = self.state.lock().unwrap().routes.get(module) {
+            _ = route.send(ModuleInput::Drop(items));
         }
     }
 

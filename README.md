@@ -51,6 +51,10 @@ Whatever plays on your PC shows in the pill: Spotify, a browser, VLC, Media Play
 
 **Win+Alt+V** brings back everything you copied: text with its formatting, images, files, links with their page's title, colours, code. Type to search, press Enter to paste into the app you were in, or Alt+1 to Alt+9 to paste one of the first nine. Pin what you want to keep. Copies from password managers and anything that looks like a password, key or token are never saved, and the history is kept only on your PC.
 
+### Shelf
+
+Drag files, an image, a link or some text to the top of the screen and the island holds them. Collect things from different folders and apps, then drag them back out into a mail, a chat or an upload page, one at a time or all at once. Files never move: the shelf only remembers where they are, and nothing leaves your PC.
+
 ### Volume and brightness
 
 <img src="docs/images/volume.png" width="392" alt="The volume level in the island, at 56 %">

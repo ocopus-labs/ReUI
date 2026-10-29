@@ -68,6 +68,11 @@ impl Pill {
     }
 
     pub fn on_mouse_move(&mut self, pt: POINT) {
+        self.pointer_moved(pt);
+        self.drop_near(pt);
+    }
+
+    fn pointer_moved(&mut self, pt: POINT) {
         if self.drag.is_some() {
             // The card stays as it is (no leave, no collapse) until the button comes up.
             return self.on_drag(pt);
@@ -196,6 +201,11 @@ impl Pill {
             };
             let mut action = action.unwrap_or_else(|| hit.action_at(cx));
             let moment = self.front_view().is_some_and(|v| v.context.is_some());
+            // A card's click may open something (a held file); the app it opens may come
+            // forward, as it would from Explorer.
+            if card && !action.is_empty() {
+                unsafe { _ = AllowSetForegroundWindow(ASFW_ANY) };
+            }
             if alt && moment && !hit.pager && hit.choice.is_none() && !action.is_empty() {
                 action = format!("{ACTION_ALT}{action}");
             }
@@ -455,7 +465,7 @@ impl Pill {
     }
 
     /// Client pixels to expanded-surface DIPs.
-    fn card_point(&self, x: f32, y: f32) -> (f32, f32) {
+    pub(super) fn card_point(&self, x: f32, y: f32) -> (f32, f32) {
         let s = self.scale;
         let win_w = (self.window.right - self.window.left) as f32;
         ((x - (win_w - expanded_surface(&self.look).0 * s) / 2.0) / s, (y - self.look.top() * s) / s)

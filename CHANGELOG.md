@@ -13,4 +13,5 @@ First public build.
 - Timers: type how long (`10m tea`, `1h30`) after Win+Ctrl+T, several at once, a finish you can't miss, focus sessions with optional Do Not Disturb, and a stopwatch. They survive sleep and restarts.
 - Calendar: your next meeting counted down in the island, Join for Teams, Zoom, Meet and Webex links, and the day's card in the row of places. Add Google or Outlook calendars by their secret iCal address (kept encrypted).
 - Turn Now Playing, Clipboard history or Devices off entirely (takes effect when ReUI restarts).
+- The shelf: drag files, images, links or text onto the island to hold them, then drag them out into any app (files are referred to, never copied or moved).
 - A guide to every feature and shortcut (`docs/guide.md`).

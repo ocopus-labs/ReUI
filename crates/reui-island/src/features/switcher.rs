@@ -63,7 +63,7 @@ mod tests {
     }
 
     fn places(modules: &[&str]) -> Vec<Destination> {
-        modules.iter().map(|m| Destination { module: (*m).into(), glyph: 'x', name: (*m).into(), open: "open".into() }).collect()
+        modules.iter().map(|m| Destination { module: (*m).into(), glyph: 'x', name: (*m).into(), open: "open".into(), drops: false }).collect()
     }
 
     fn open(module: &str, priority: Priority) -> Option<Open<'_>> {
