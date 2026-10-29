@@ -1,14 +1,16 @@
 //! What gets through to the pill: the hub's snapshot, less what the user has quieted. A
 //! pause or the hide shortcut lets only decisions (and a card the user summons) through; an
 //! app rule for the app in front hides the island or lets only decisions through
-//! (`app_rules.rs`). Then `order::arrange` decides what's in front.
+//! (`app_rules.rs`); a snoozed module's moments wait (`quiet.rs`). Then `order::arrange`
+//! decides what's in front.
 
-use reui_protocol::{Priority, Snapshot};
+use reui_protocol::{ActivityId, Priority, Quiet, Snapshot};
 use windows::Win32::Foundation::HWND;
 
 use crate::app_rules::{self, AppRule};
 use crate::desktop;
 use crate::order;
+use crate::quiet;
 use crate::settings::Visibility;
 
 use super::{Pill, State};
@@ -22,6 +24,12 @@ pub(super) struct Gate {
     pub app: Option<String>,
     /// Whether `app` has been read yet (the island may start with any app in front).
     pub seen: bool,
+    /// `snoozed` from settings.json: module, until (Unix ms).
+    pub snoozed: Vec<(String, u64)>,
+    /// The moment a right-click menu is about, and what it declared, until an entry is picked.
+    pub quieting: Option<(ActivityId, Quiet)>,
+    /// A moment just turned off from itself: held back until the module retracts it.
+    pub dismissed: Option<ActivityId>,
 }
 
 impl Gate {
@@ -39,6 +47,11 @@ impl Pill {
         // waiting in the bubble beside something the user can't see.
         let briefs_lead = self.visibility == Visibility::WhenNeeded && !self.desktop_shows() && !self.raw.activities.iter().any(|a| a.priority >= Priority::Alert);
         let mut raw = self.raw.activities.clone();
+        if self.gate.dismissed.as_ref().is_some_and(|id| !raw.iter().any(|a| a.id == *id)) {
+            self.gate.dismissed = None;
+        }
+        let now = reui_protocol::unix_ms();
+        raw.retain(|a| !quiet::held(&self.gate.snoozed, a, now) && Some(&a.id) != self.gate.dismissed.as_ref());
         if self.paused || self.hidden_by_user || self.only_decisions() {
             // Paused, hidden or an app that wants quiet: only decisions show (see
             // `wants_shown`), alone in the pill; hidden, so does a card the user summons (a
@@ -78,7 +91,7 @@ impl Pill {
             self.gate.app = app_rules::front_app(desktop::front(fg), app_rules::exe_of(fg), None);
         }
         if self.gate.rule() != before {
-            self.rule_changed();
+            self.gate_changed();
         }
     }
 
@@ -95,7 +108,7 @@ impl Pill {
         self.gate.app = app_rules::front_app(front, exe, self.gate.app.take());
         if self.gate.rule() != before {
             eprintln!("island: app rule {:?} for {:?}", self.gate.rule(), self.gate.app);
-            self.rule_changed();
+            self.gate_changed();
         }
     }
 
@@ -104,14 +117,5 @@ impl Pill {
     #[cfg(debug_assertions)]
     pub fn test_front_app(&mut self, pid: u32) {
         self.set_front_app(desktop::Front::App, app_rules::exe_of_pid(pid));
-    }
-
-    /// What gets through changed: show it, and hide or show for it.
-    fn rule_changed(&mut self) {
-        let ordered = self.ordered();
-        if let Err(e) = self.render(ordered) {
-            eprintln!("island: render failed: {e}");
-        }
-        self.refresh_visibility();
     }
 }

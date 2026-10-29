@@ -35,7 +35,7 @@ use std::path::PathBuf;
 use std::pin::Pin;
 use std::time::Duration;
 
-use reui_protocol::{unix_ms, Priority, ACTION_COLLAPSED, ACTION_EXPANDED, ACTION_SEARCH, ACTION_SUBMIT, ACTION_UNDO};
+use reui_protocol::{unix_ms, Priority, Quiet, ACTION_COLLAPSED, ACTION_EXPANDED, ACTION_SEARCH, ACTION_SUBMIT, ACTION_UNDO};
 use tokio::sync::mpsc;
 use tokio::time::{sleep_until, Instant};
 
@@ -80,8 +80,15 @@ impl Module for TimersModule {
     }
 
     fn run(self: Box<Self>, mut ctx: ModuleContext) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        ctx.declare_quiet(quiet);
         Box::pin(async move { supervise("timers", &mut ctx, |ctx| Box::pin(run(ctx))).await })
     }
+}
+
+/// A timer that finished quietly ("Finished at …", an alert) can be snoozed; there's no
+/// setting to stop timers saying they're done. A ringing one is a decision and never quiet.
+fn quiet(key: &str, _: Priority) -> Option<Quiet> {
+    (key == DONE).then(Quiet::snooze_only)
 }
 
 /// The finish card: what ended, and whether it's still ringing.

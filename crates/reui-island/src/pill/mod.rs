@@ -42,6 +42,7 @@ mod gate;
 mod idle;
 mod input;
 mod link;
+mod quiet;
 mod setup;
 mod summon;
 mod switcher;
@@ -223,7 +224,7 @@ pub struct Pill {
     idle: idle::Idle,
     /// Whether a rest opens or peeks, and how long it is (`intent.rs`).
     intent: crate::intent::Intent,
-    /// What the user has quieted: app rules (`gate.rs`).
+    /// What the user has quieted: app rules, snoozes (`gate.rs`, `quiet.rs`).
     gate: gate::Gate,
     to_hub: UnboundedSender<ClientMsg>,
     events: Receiver<Event>,
@@ -234,9 +235,10 @@ impl Pill {
         self.snapshot.activities.first()
     }
 
-    /// Nothing is happening (no activities from the hub).
+    /// Nothing is showing: no activities from the hub, or none the user lets through (a
+    /// snoozed module's), so the resting pill is itself.
     pub fn idle(&self) -> bool {
-        self.raw.activities.is_empty()
+        self.snapshot.activities.is_empty()
     }
 
     fn apply(&mut self, snapshot: Snapshot) -> Result<()> {

@@ -48,7 +48,7 @@ mod tests {
     use reui_protocol::{ActivityId, CompactView, Element};
 
     fn activity(module: &str, priority: Priority) -> Activity {
-        Activity { id: ActivityId { module: module.into(), key: "k".into() }, priority, accent: None, compact: CompactView::default(), minimal: Element::Empty, audio: None, expanded: None }
+        Activity { id: ActivityId { module: module.into(), key: "k".into() }, priority, accent: None, compact: CompactView::default(), minimal: Element::Empty, audio: None, expanded: None, quiet: None }
     }
 
     #[test]

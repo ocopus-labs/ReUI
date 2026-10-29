@@ -107,6 +107,7 @@ mod tests {
             compact: CompactView { leading: Element::Glyph { glyph: '\u{E767}', tone: reui_protocol::Tone::Primary }, trailing: Element::Level { value, dim: false } },
             minimal: Element::Ring(value),
             audio: None,
+            quiet: None,
             expanded: None,
         }
     }

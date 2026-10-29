@@ -24,6 +24,8 @@ const CMD_HIDE: usize = 110;
 /// Timer presets: this plus the preset's index.
 const CMD_PRESET: usize = 200;
 const CMD_ITEM: usize = 400;
+/// A moment's own entries (Don't show these, Snooze): this plus the entry's index.
+const CMD_MOMENT: usize = 500;
 
 pub enum Command {
     Settings,
@@ -33,6 +35,8 @@ pub enum Command {
     ToggleHidden,
     /// (module, action)
     Module(&'static str, String),
+    /// The `n`th of the moment's own entries.
+    Moment(usize),
     Quit,
 }
 
@@ -106,10 +110,32 @@ pub fn open_settings() {
 
 /// Shows the menu at the pointer and returns what was picked. `paused`: ReUI is paused, so
 /// the pause entry resumes. `hidden`: the island is hidden (its shortcut), so the entry
-/// shows it again: the tray is the one place a hidden island can be found.
-pub fn menu(hwnd: HWND, paused: bool, hidden: bool) -> Option<Command> {
+/// shows it again: the tray is the one place a hidden island can be found. `moment`: the
+/// right-clicked moment's own entries, first, since they're what the click was about.
+///
+/// Like [`item_menu`], the island takes the foreground only for the menu's life and hands
+/// it back to the app that had it; returns that app too.
+pub fn menu(hwnd: HWND, paused: bool, hidden: bool, moment: &[&str]) -> (Option<Command>, HWND) {
+    let previous = unsafe { GetForegroundWindow() };
+    let picked = show_menu(hwnd, paused, hidden, moment);
+    unsafe {
+        if !previous.is_invalid() && GetForegroundWindow() == hwnd {
+            _ = SetForegroundWindow(previous);
+        }
+    }
+    (picked, previous)
+}
+
+fn show_menu(hwnd: HWND, paused: bool, hidden: bool, moment: &[&str]) -> Option<Command> {
     unsafe {
         let menu = CreatePopupMenu().ok()?;
+        for (i, label) in moment.iter().enumerate() {
+            let label: Vec<u16> = label.encode_utf16().chain([0]).collect();
+            _ = AppendMenuW(menu, MF_STRING, CMD_MOMENT + i, PCWSTR(label.as_ptr()));
+        }
+        if !moment.is_empty() {
+            _ = AppendMenuW(menu, MF_SEPARATOR, 0, None);
+        }
         _ = AppendMenuW(menu, MF_STRING, CMD_SETTINGS, w!("Settings"));
         let pause = if paused { w!("Resume ReUI") } else { w!("Pause ReUI for 1 hour") };
         _ = AppendMenuW(menu, MF_STRING, CMD_PAUSE, pause);
@@ -158,6 +184,7 @@ pub fn menu(hwnd: HWND, paused: bool, hidden: bool) -> Option<Command> {
             CMD_FOCUS => Some(Command::Module("timers", "start:focus".into())),
             CMD_STOPWATCH => Some(Command::Module("timers", "start:stopwatch".into())),
             CMD_UPDATE => Some(Command::Module("updates", "install".into())),
+            n if (CMD_MOMENT..CMD_MOMENT + moment.len()).contains(&n) => Some(Command::Moment(n - CMD_MOMENT)),
             n if (CMD_PRESET..CMD_PRESET + presets.len()).contains(&n) => Some(Command::Module("timers", format!("start:{}m", presets[n - CMD_PRESET]))),
             CMD_QUIT => Some(Command::Quit),
             _ => None,

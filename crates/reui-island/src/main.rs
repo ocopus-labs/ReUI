@@ -16,6 +16,7 @@ mod ipc;
 mod order;
 mod pill;
 mod place;
+mod quiet;
 mod render;
 mod settings;
 mod theme;
@@ -48,6 +49,10 @@ const WM_TEST_POINTER: u32 = WM_APP + 20;
 /// Debug builds: a test script's "this process is in front" (wparam: its id), for app rules.
 #[cfg(debug_assertions)]
 const WM_TEST_FOREGROUND: u32 = WM_APP + 21;
+/// Debug builds: a test script picks entry `wparam` of the quiet menu for the moment at
+/// client point `lparam`, without showing a menu at the user's pointer.
+#[cfg(debug_assertions)]
+const WM_TEST_QUIET: u32 = WM_APP + 22;
 
 const TIMER_SETTINGS: usize = 100;
 const SETTINGS_SETTLE_MS: u32 = 150;
@@ -182,10 +187,17 @@ fn rebuild(hwnd: HWND, placement: &Placement) {
     }
 }
 
-fn open_menu(hwnd: HWND) {
+/// The island's menu, led by `moment`'s entries when it was opened on a moment that can be
+/// quieted (`quiet.rs`).
+fn open_menu(hwnd: HWND, moment: Vec<MenuEntry>) {
     let (mut paused, mut hidden) = (false, false);
     with_pill(|pill| (paused, hidden) = (pill.paused(), pill.hidden_by_user()));
-    match tray::menu(hwnd, paused, hidden) {
+    let labels: Vec<&str> = moment.iter().map(|(label, ..)| label.as_str()).collect();
+    with_pill(|pill| pill.menu_opened());
+    let (picked, previous) = tray::menu(hwnd, paused, hidden, &labels);
+    with_pill(|pill| pill.menu_closed(previous));
+    match picked {
+        Some(tray::Command::Moment(i)) => with_pill(|pill| pill.quiet_pick(&moment[i].1)),
         Some(tray::Command::Settings) => tray::open_settings(),
         Some(tray::Command::TogglePause) => with_pill(|pill| pill.set_paused(!paused)),
         Some(tray::Command::ToggleHidden) => with_pill(|pill| pill.toggle_hidden()),
@@ -195,13 +207,19 @@ fn open_menu(hwnd: HWND) {
     }
 }
 
-/// Right-click: a card's own menu over a card that has one, the island's menu elsewhere.
+/// Right-click: a card's own menu over a card that has one, the island's menu elsewhere
+/// (led by the moment's quiet entries when it has them).
 fn right_click(hwnd: HWND, x: f32, y: f32) {
-    let mut entries = None;
-    with_pill(|pill| entries = pill.card_menu(x, y));
+    let (mut entries, mut moment) = (None, Vec::new());
+    with_pill(|pill| {
+        entries = pill.card_menu(x, y);
+        if entries.is_none() {
+            moment = pill.moment_menu(x, y);
+        }
+    });
     match entries {
         Some(entries) => card_menu(hwnd, entries),
-        None => open_menu(hwnd),
+        None => open_menu(hwnd, moment),
     }
 }
 
@@ -343,6 +361,12 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             with_pill(|pill| pill.test_front_app(wparam.0 as u32));
             LRESULT(0)
         }
+        #[cfg(debug_assertions)]
+        WM_TEST_QUIET => {
+            let (x, y) = client_point(lparam);
+            with_pill(|pill| pill.test_quiet(x, y, wparam.0));
+            LRESULT(0)
+        }
         clipboard_keys::WM_KEYS => {
             with_pill(|pill| pill.on_keys());
             LRESULT(0)
@@ -398,7 +422,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         tray::WM_TRAY => {
             match tray::click(lparam) {
                 Some(tray::Click::Open) => tray::open_settings(),
-                Some(tray::Click::Menu) => open_menu(hwnd),
+                Some(tray::Click::Menu) => open_menu(hwnd, Vec::new()),
                 None => {}
             }
             LRESULT(0)

@@ -1,12 +1,14 @@
-//! General's quieting groups (docs/PRD-behaviour.md §4.3): **App rules**, the apps in front
-//! of which the island hides or shows only decisions (settings.json `app_rules`, an object
-//! of exe → "hide" | "decisions"). Apps are added as the clipboard's ignored apps are: typed,
-//! or picked from the running apps.
+//! General's quieting groups (docs/PRD-behaviour.md §4.3–4.4): **App rules**, the apps in
+//! front of which the island hides or shows only decisions (settings.json `app_rules`, an
+//! object of exe → "hide" | "decisions"; apps are added as the clipboard's ignored apps are:
+//! typed, or picked from the running apps), and **Snoozed**, the modules snoozed from a
+//! moment's menu (`snoozed`, module → Unix ms), each with Undo.
 
 use serde_json::{Map, Value};
 
-use super::{button, footed};
+use super::{button, footed, group, Page};
 use crate::keys;
+use crate::system;
 use crate::model::files::{add_app, File, APP_RULES};
 use crate::state::State;
 use crate::ui::{Act, Block, Part, Role, Row, Target};
@@ -29,7 +31,34 @@ pub fn blocks(state: &State, ok: bool) -> Vec<Block> {
             .part(Part::Dropdown { label: "Running apps".into() })
             .enabled(ok),
     );
-    vec![footed("App rules", rows, "While the app is in front. Only decisions still shows permission requests and questions.")]
+    let mut blocks = vec![footed("App rules", rows, "While the app is in front. Only decisions still shows permission requests and questions.")];
+    let now = reui_protocol::unix_ms();
+    let snoozed: Vec<Row> = state
+        .files
+        .snoozed(now)
+        .into_iter()
+        .map(|(module, until)| Row::new(&format!("snooze:{module}"), &module_name(&module)).detail(format!("Shows again in {}", system::time_left(until - now))).part(button("Undo", Role::Secondary)).enabled(ok))
+        .collect();
+    if !snoozed.is_empty() {
+        blocks.push(group("Snoozed", snoozed));
+    }
+    blocks
+}
+
+/// A module as its Settings page names it.
+fn module_name(module: &str) -> String {
+    let page = match module {
+        "osd" => Some(Page::Osd),
+        "devices" => Some(Page::Devices),
+        "clipboard" => Some(Page::Clipboard),
+        "timers" => Some(Page::Timers),
+        "media" => Some(Page::NowPlaying),
+        "privacy" => Some(Page::Indicators),
+        "stats" => Some(Page::Stats),
+        "claude" | "codex" | "opencode" => Some(Page::Agents),
+        _ => None,
+    };
+    page.map_or_else(|| module.to_string(), |p| p.title().to_string())
 }
 
 pub fn menu(state: &mut State, target: &Target) -> Option<(Vec<String>, Option<usize>)> {
@@ -64,6 +93,13 @@ pub fn act(state: &mut State, target: &Target, act: &Act) -> bool {
         (row, 1, Act::Press) if row.starts_with("rule:") => {
             let exe = row["rule:".len()..].to_string();
             edit(state, |rules| _ = rules.remove(&exe));
+        }
+        // The island sees the file change and lets the module's moments through again.
+        (row, 0, Act::Press) if row.starts_with("snooze:") => {
+            let module = &row["snooze:".len()..];
+            let mut snoozed = state.files.doc(File::Island).get("snoozed").and_then(Value::as_object).cloned().unwrap_or_default();
+            snoozed.remove(module);
+            state.set(File::Island, "snoozed", Value::Object(snoozed));
         }
         _ => return false,
     }
@@ -109,6 +145,22 @@ mod tests {
         act(&mut state, &Target::new("rule:game.exe", 1), &Act::Press);
         assert!(state.files.app_rules().is_empty());
         assert!(!act(&mut state, &Target::new("visibility", 0), &Act::Choose(0)));
+        _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn snoozes_show_with_undo() {
+        let (mut state, dir) = state("quiet-snoozed");
+        std::fs::create_dir_all(dir.join("roaming")).unwrap();
+        let later = reui_protocol::unix_ms() + 30 * 60_000;
+        std::fs::write(dir.join("roaming").join("settings.json"), format!(r#"{{ "snoozed": {{ "osd": {later}, "devices": 5 }} }}"#)).unwrap();
+        state.refresh();
+        let built = blocks(&state, true);
+        let Some(Block::Group { label, rows, .. }) = built.last() else { panic!("no snoozed group") };
+        assert_eq!((label.as_deref(), rows.len(), rows[0].title.as_str()), (Some("Snoozed"), 1, "Volume & brightness"), "ended snoozes don't show");
+        assert!(act(&mut state, &Target::new("snooze:osd", 0), &Act::Press));
+        assert!(state.files.snoozed(0).iter().all(|(m, _)| m != "osd"));
+        assert_eq!(blocks(&state, true).len(), 1, "nothing snoozed: no group");
         _ = std::fs::remove_dir_all(&dir);
     }
 

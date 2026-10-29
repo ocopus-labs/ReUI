@@ -106,6 +106,7 @@ impl File {
                 "retention_days": 30,
                 "ignored_apps": ["keepass.exe", "keepassxc.exe", "bitwarden.exe", "1password.exe", "dashlane.exe", "keeper.exe", "enpass.exe", "lastpass.exe"],
                 "link_previews": true,
+                "copy_toast": true,
                 "layout": "strip",
             }),
             File::Osd => json!({
@@ -207,6 +208,14 @@ impl Files {
             map.iter().filter_map(|(exe, rule)| Some((exe.trim().to_lowercase(), APP_RULES.iter().position(|r| Some(*r) == rule.as_str())?))).filter(|(exe, _)| !exe.is_empty()).collect();
         rules.sort();
         rules
+    }
+
+    /// The snoozes still running at `now` (Unix ms): module, until.
+    pub fn snoozed(&self, now: u64) -> Vec<(String, u64)> {
+        let Some(map) = self.doc(File::Island).get("snoozed").and_then(Value::as_object) else { return Vec::new() };
+        let mut list: Vec<(String, u64)> = map.iter().filter_map(|(m, until)| Some((m.clone(), until.as_u64()?))).filter(|(_, until)| *until > now).collect();
+        list.sort();
+        list
     }
 
     /// Index into [`REVEAL_ZONE`]; Wide when missing or unknown, as the island reads it.

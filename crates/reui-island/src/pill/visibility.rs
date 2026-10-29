@@ -163,6 +163,7 @@ impl Pill {
         self.intent.delay = settings.hover_delay;
         self.intent.reveal_zone = settings.reveal_zone;
         self.set_app_rules(settings.app_rules);
+        self.set_snoozed(settings.snoozed);
         self.set_switcher_enabled(settings.view_switcher);
         self.set_idle_clock(settings.idle_clock);
         if self.hide_in_fullscreen != settings.hide_in_fullscreen {

@@ -22,7 +22,7 @@ use std::collections::HashMap;
 use std::future::Future;
 use std::pin::Pin;
 
-use reui_protocol::{Priority, ACTION_COLLAPSED, ACTION_EXPANDED};
+use reui_protocol::{Priority, Quiet, ACTION_COLLAPSED, ACTION_EXPANDED};
 use tokio::sync::mpsc;
 use tokio::time::{sleep_until, Instant};
 use windows::core::{HSTRING, PCWSTR};
@@ -61,8 +61,22 @@ impl Module for SystemOsd {
     }
 
     fn run(self: Box<Self>, mut ctx: ModuleContext) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        ctx.declare_quiet(quiet);
         Box::pin(async move { supervise("osd", &mut ctx, |ctx| Box::pin(run(ctx))).await })
     }
+}
+
+/// Each pop-up turns off with its own switch in `osd.json` (Settings → Volume & brightness).
+fn quiet(key: &str, _: Priority) -> Option<Quiet> {
+    let setting = match key {
+        VOLUME => "volume",
+        BRIGHTNESS => "brightness",
+        LOCK => "lock_keys",
+        BATTERY_SAVER => "battery_saver",
+        MIC => "mic_mute",
+        _ => return None,
+    };
+    Some(Quiet::setting("osd.json", setting))
 }
 
 /// Whether osd.json asks to hide Windows' volume pop-up (for onboarding's offer).
@@ -461,5 +475,17 @@ fn open_display_settings() {
         if result.0 as isize <= 32 {
             eprintln!("osd: can't open Display settings ({})", result.0 as isize);
         }
+    }
+}
+
+#[cfg(test)]
+mod quiet_tests {
+    use super::*;
+
+    #[test]
+    fn each_pop_up_maps_to_its_switch() {
+        let key = |k: &str| quiet(k, Priority::Brief).and_then(|q| q.setting).map(|s| s.key);
+        assert_eq!((key(VOLUME), key(BRIGHTNESS), key(LOCK)), (Some("volume".into()), Some("brightness".into()), Some("lock_keys".into())));
+        assert_eq!((key(BATTERY_SAVER), key(MIC), key("other")), (Some("battery_saver".into()), Some("mic_mute".into()), None));
     }
 }

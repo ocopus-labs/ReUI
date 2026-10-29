@@ -31,7 +31,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use reui_protocol::{Priority, ACTION_COLLAPSED, ACTION_EXPANDED};
+use reui_protocol::{Priority, Quiet, ACTION_COLLAPSED, ACTION_EXPANDED};
 use tokio::sync::mpsc;
 use tokio::time::{sleep_until, Instant};
 use windows::Gaming::Input::RawGameController;
@@ -85,8 +85,26 @@ impl Module for Devices {
     }
 
     fn run(self: Box<Self>, mut ctx: ModuleContext) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        ctx.declare_quiet(quiet);
         Box::pin(async move { supervise("devices", &mut ctx, |ctx| Box::pin(run(ctx))).await })
     }
+}
+
+/// Each kind of moment turns off with its own switch in `devices.json` (Settings →
+/// Devices), found by its key: `device:` a connect card, `low:` a low battery, `drive:` a
+/// drive. Being on a UPS has no switch, so it can only be snoozed.
+fn quiet(key: &str, _: Priority) -> Option<Quiet> {
+    let setting = match key {
+        k if k.starts_with("device:") => "connect_cards",
+        k if k.starts_with("low:") => "low_battery",
+        k if k.starts_with("drive:") => "drives",
+        machine::POWER => "charging",
+        "phone" => "phones",
+        "slow-charger" => "slow_charger",
+        "ups" => return Some(Quiet::snooze_only()),
+        _ => return None,
+    };
+    Some(Quiet::setting("devices.json", setting))
 }
 
 /// The adapters, started together off the hub thread.
@@ -460,5 +478,21 @@ impl State {
         if self.moments.is_live(OVERVIEW) {
             ctx.publish(OVERVIEW, Priority::Passive, self.overview());
         }
+    }
+}
+
+#[cfg(test)]
+mod quiet_tests {
+    use super::*;
+
+    #[test]
+    fn each_kind_of_moment_maps_to_its_switch() {
+        let setting = |key: &str| quiet(key, Priority::Brief).map(|q| q.setting.map(|s| (s.file, s.key)));
+        assert_eq!(setting("device:00000000000000ff"), Some(Some(("devices.json".into(), "connect_cards".into()))));
+        assert_eq!(setting("low:laptop"), Some(Some(("devices.json".into(), "low_battery".into()))));
+        assert_eq!(setting("drive:E"), Some(Some(("devices.json".into(), "drives".into()))));
+        assert_eq!(setting("power"), Some(Some(("devices.json".into(), "charging".into()))));
+        assert_eq!(setting("ups"), Some(None), "snooze only");
+        assert_eq!(setting(OVERVIEW), None, "the overview is a place, not a moment");
     }
 }

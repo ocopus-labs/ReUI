@@ -10,8 +10,8 @@
 //! device name such as `\\.\DISPLAY2`), `view_switcher` (bool, default true: tabs under an
 //! open place's card), `idle_clock` (bool, default false: the time in the resting pill),
 //! `open_on` ("click" | "hover"), `hover_delay` (ms) and `reveal_zone` ("off" | "pill" |
-//! "wide"; see `intent.rs`), `app_rules` (exe → "hide" | "decisions"; `app_rules.rs`), and
-//! the look (`style`, `theme`, `roundness`, `top_gap`,
+//! "wide"; see `intent.rs`), `app_rules` (exe → "hide" | "decisions"; `app_rules.rs`),
+//! `snoozed` (module → Unix ms; `quiet.rs`), and the look (`style`, `theme`, `roundness`, `top_gap`,
 //! `padding`, `scale`, `accent`; read by `reui_design::look::Appearance`).
 
 use std::path::{Path, PathBuf};
@@ -107,13 +107,15 @@ pub struct Settings {
     pub reveal_zone: RevealZone,
     /// While one of these apps is in front: hide the island, or show only decisions.
     pub app_rules: Vec<(String, AppRule)>,
+    /// Modules whose moments are snoozed, and until when (Unix ms).
+    pub snoozed: Vec<(String, u64)>,
     /// Style, theme, shape and size (Settings > Appearance).
     pub appearance: Appearance,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { visibility: Visibility::default(), paused_until: None, hidden: false, hide_in_fullscreen: true, show_on_desktop: true, monitor: MonitorChoice::default(), view_switcher: true, idle_clock: false, open_on: OpenOn::default(), hover_delay: intent::hover_delay(None), reveal_zone: RevealZone::default(), app_rules: Vec::new(), appearance: Appearance::default() }
+        Self { visibility: Visibility::default(), paused_until: None, hidden: false, hide_in_fullscreen: true, show_on_desktop: true, monitor: MonitorChoice::default(), view_switcher: true, idle_clock: false, open_on: OpenOn::default(), hover_delay: intent::hover_delay(None), reveal_zone: RevealZone::default(), app_rules: Vec::new(), snoozed: Vec::new(), appearance: Appearance::default() }
     }
 }
 
@@ -149,6 +151,7 @@ impl Settings {
             hover_delay: intent::hover_delay(map.get("hover_delay").and_then(Value::as_u64)),
             reveal_zone: map.get("reveal_zone").and_then(Value::as_str).and_then(RevealZone::parse).unwrap_or_default(),
             app_rules: app_rules::parse(map.get("app_rules")),
+            snoozed: crate::quiet::parse_snoozed(map.get("snoozed")),
             appearance: Appearance::read(|k| map.get(k).and_then(Value::as_str).map(str::to_string), |k| map.get(k).and_then(Value::as_f64)),
         }
     }
@@ -183,6 +186,13 @@ impl Settings {
         match self.hidden {
             true => map.insert("hidden".into(), Value::Bool(true)),
             false => map.remove("hidden"),
+        };
+        // Snoozes that have ended go with the next write.
+        let now = now_ms();
+        let snoozed: Map<String, Value> = self.snoozed.iter().filter(|(_, until)| *until > now).map(|(module, until)| (module.clone(), Value::from(*until))).collect();
+        match snoozed.is_empty() {
+            true => map.remove("snoozed"),
+            false => map.insert("snoozed".into(), Value::Object(snoozed)),
         };
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir)?;
@@ -267,6 +277,12 @@ mod tests {
         assert!(Settings::parse(&std::fs::read_to_string(&path).unwrap()).hidden);
         Settings::default().save_to(&path).unwrap();
         assert!(!std::fs::read_to_string(&path).unwrap().contains("hidden"));
+        // Snoozes are written while they run; ended ones are dropped.
+        let later = now_ms() + 60_000;
+        Settings { snoozed: vec![("osd".into(), later), ("devices".into(), 1)], ..Settings::default() }.save_to(&path).unwrap();
+        assert_eq!(Settings::parse(&std::fs::read_to_string(&path).unwrap()).snoozed, vec![("osd".to_string(), later)]);
+        Settings::default().save_to(&path).unwrap();
+        assert!(!std::fs::read_to_string(&path).unwrap().contains("snoozed"));
         _ = std::fs::remove_dir_all(&dir);
     }
 
@@ -290,6 +306,7 @@ mod tests {
                     compact: Default::default(),
                     minimal: reui_protocol::Element::Empty,
                     audio: None,
+                    quiet: None,
                     expanded: None,
                 })
                 .collect()

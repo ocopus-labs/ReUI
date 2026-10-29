@@ -73,10 +73,10 @@ Driven by the foreground hook the island already has (no polling): each change r
 
 Right-click the pill (or the bubble) while a brief or an alert from a module that offers it is in front:
 
-- **Don't show these**: turns off that module's own setting for this kind of moment (the volume pop-up: `osd.json` `volume`; a device connecting: `devices.json` `connect_cards`; the copy toast: `clipboard.json` `copy_toast`, new). The island writes the key (keeping every other key, never over an invalid file) and tells the module `reload`, exactly as Settings does. Settings shows it off on that module's page, where it turns back on.
-- **Snooze for 1 hour**: every non-decision moment of that module stays out of the island for an hour (`snoozed` in settings.json: module → Unix ms). Settings → General → **Snoozed** lists each with **Undo**.
+- **Don't show these**: turns off that module's own setting for this kind of moment (the volume pop-up: `osd.json` `volume`; a device connecting: `devices.json` `connect_cards`; the copy toast: `clipboard.json` `copy_toast`, new). The island writes the key (keeping every other key, never over an invalid file) and tells the module `reload`, exactly as Settings does, and the moment on screen goes at once. Settings shows it off on that module's page, where it turns back on.
+- **Snooze for 1 hour**: that module's briefs and alerts stay out of the island for an hour (`snoozed` in settings.json: module → Unix ms). What the user is in (music, a running timer, a place they opened) isn't an interruption and stays. Settings → General → **Snoozed** lists each with **Undo**.
 
-The rest of the island's menu follows. Never for a decision (a loud finished timer is one: it rings until stopped). The module declares the setting (`Activity::quiet`, protocol v22): `Quiet { setting: Option<QuietSetting { file, key }> }`, `None` meaning snooze only; a module that declares nothing gets no entries.
+The rest of the island's menu follows, and the island hands the foreground back to the app that had it when the menu closes (before, the island's menu kept it). Never for a decision (a loud finished timer is one: it rings until stopped). The module declares the setting once (`ModuleContext::declare_quiet`, a function of the moment's key and priority); the hub attaches it to its briefs and alerts (`Activity::quiet`, protocol v22): `Quiet { setting: Option<QuietSetting { file, key }> }`, `None` meaning snooze only; a module that declares nothing gets no entries.
 
 | Module | Moment | "Don't show these" turns off |
 |---|---|---|
@@ -84,6 +84,7 @@ The rest of the island's menu follows. Never for a decision (a loud finished tim
 | devices | A device connecting; low battery; charging; a drive; a phone; a slow charger | `connect_cards`; `low_battery`; `charging`; `drives`; `phones`; `slow_charger` |
 | clipboard | The copy toast | `copy_toast` (new, default on) |
 | timers | A timer that finished quietly | Snooze only |
+| claude, codex, opencode | A finished turn | `coding.json` `show_finished` (only the module whose moment it was reloads; the other two pick it up at their next reload) |
 
 ## 5. Settings (all in `settings.json` unless said; unknown keys kept)
 

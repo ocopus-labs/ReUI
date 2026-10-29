@@ -33,7 +33,8 @@ reui-settings.exe  the Settings window, opened from the tray; single instance
 ```
 main.rs            flags (--no-agents, --no-media, --no-clipboard, --no-osd, --no-devices, --no-timers,
                    --no-privacy, --no-stats, …), module list
-hub.rs             activities, ordering, ModuleContext (publish, retract, focus, image store)
+hub.rs             activities, ordering, ModuleContext (publish, retract, focus, image store,
+                   declare_quiet: which setting turns a module's moment off)
 ipc.rs             the pipe: snapshots + images to surfaces, actions/commands/hooks back
 island.rs          launches and supervises reui-island
 bridge_sync.rs     keeps the installed reui-bridge (and an installed OpenCode plugin) in step
@@ -118,7 +119,8 @@ modules/
 main.rs            window class, message loop, mouse/foreground hooks
 ipc.rs             pipe client
 settings.rs        visibility modes, pause, the look's keys, watching settings.json
-tray.rs            tray icon, short menu (Install update while one is known)
+tray.rs            tray icon, short menu (Install update while one is known; a moment's quiet
+                   entries first when it was right-clicked)
 theme.rs           Windows' app mode (Auto) and accent, re-read on "ImmersiveColorSet"
 order.rs           which activity is in the pill and which in the bubble
 place.rs           which display (monitor setting) and the window rect at its DPI
@@ -127,11 +129,13 @@ desktop.rs         whether the desktop (not an app) is in front, for "Always sho
 intent.rs          reading the pointer: open on click or hover, the hover delay, the reveal
                    zone, when a just-appeared pill may take a click
 app_rules.rs       per-app rules: which applies to the app in front, its executable's name
+quiet.rs           quieting a moment from itself: its menu, snoozes, writing a module's setting off
 drag_guard.rs      no hover intent while a drag from elsewhere passes over
 images.rs          encoded images from the hub
 pill/              the island's behaviour
   mod.rs           state machine, snapshot apply, render orchestration
-  gate.rs          what gets through: pause, hidden, app rules; then order.rs
+  gate.rs          what gets through: pause, hidden, app rules, snoozes; then order.rs
+  quiet.rs         the right-clicked moment's quiet entries, picking one, the snooze timer
   link.rs          the hub link: snapshots, images and focus requests as they arrive
   setup.rs         builds the composition tree for the Look (shape, hairline, notch ears);
                    a new look rebuilds it (WM_LOOK), like a DPI change
@@ -203,7 +207,7 @@ render/            drawing only: Renderer/Painter primitives, fonts, text (layou
                    levels, devices, timers, stats, agents; switcher (under the timer card)
 pages/             one file per page: build its rows from State, handle its controls;
                    welcome.rs is the three-step welcome (first run, Replay the tour);
-                   quiet.rs is General's App rules group
+                   quiet.rs is General's App rules and Snoozed groups
 model/             settings files (read, change a key, atomic write, keep unknown keys,
                    never write an invalid file), hotkeys, coding agents (status, test)
 updates/           GitHub releases: release.rs (JSON, checksums, notes; pure), net.rs
