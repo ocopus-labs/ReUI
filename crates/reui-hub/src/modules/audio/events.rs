@@ -75,6 +75,14 @@ pub fn capture_muted() -> Option<bool> {
     Some(unsafe { ev.GetMute() }.ok()?.as_bool())
 }
 
+/// Mutes or unmutes the default microphone (the privacy indicator's mute). `false` without
+/// one. Tagged as ours, like the output's volume changes.
+pub fn set_capture_muted(muted: bool) -> bool {
+    let Some(dev) = enumerator().and_then(|en| unsafe { en.GetDefaultAudioEndpoint(eCapture, CAPTURE_ROLE) }.ok()) else { return false };
+    let Ok(ev) = (unsafe { dev.Activate::<IAudioEndpointVolume>(CLSCTX_ALL, None) }) else { return false };
+    unsafe { ev.SetMute(muted, &EVENT_CONTEXT) }.is_ok()
+}
+
 /// A change [`watch_events`] reports.
 #[derive(Debug, Clone, PartialEq)]
 pub enum AudioEvent {

@@ -175,7 +175,7 @@ pub(super) fn file_name_lower(path: &str) -> String {
 }
 
 /// `C:\...\chrome.exe` → "Chrome".
-pub(super) fn app_name(path: &str) -> String {
+pub(crate) fn app_name(path: &str) -> String {
     let file = path.rsplit(['\\', '/']).next().unwrap_or(path);
     let stem = file.strip_suffix(".exe").or_else(|| file.strip_suffix(".EXE")).unwrap_or(file);
     let known = [
@@ -194,6 +194,9 @@ pub(super) fn app_name(path: &str) -> String {
         ("figma", "Figma"),
         ("slack", "Slack"),
         ("discord", "Discord"),
+        ("zoom", "Zoom"),
+        ("ms-teams", "Teams"),
+        ("obs64", "OBS Studio"),
     ];
     let lower = stem.to_ascii_lowercase();
     if let Some((_, name)) = known.iter().find(|(k, _)| *k == lower) {

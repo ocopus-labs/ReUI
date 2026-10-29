@@ -110,6 +110,17 @@ pub fn thumbnail(bytes: &[u8], max_px: u32) -> Option<Vec<u8>> {
     }
 }
 
+/// An exe's icon as a PNG, for modules that show which app something is about (the privacy
+/// indicators). Initialises COM on the calling thread, so it can run from a blocking-pool
+/// thread.
+pub fn exe_icon(exe: &str) -> Option<Vec<u8>> {
+    unsafe {
+        _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+        let wic: IWICImagingFactory = CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER).ok()?;
+        app_icon(&wic, exe)
+    }
+}
+
 /// The app's own icon as a 32×32 PNG with transparency.
 pub(super) fn app_icon(wic: &IWICImagingFactory, exe: &str) -> Option<Vec<u8>> {
     unsafe {
