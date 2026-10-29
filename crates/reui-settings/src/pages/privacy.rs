@@ -7,7 +7,7 @@ use crate::state::State;
 use crate::system;
 use crate::ui::{icons, Act, Block, Part, Role, Row, Target};
 
-pub const STATEMENT: &str = "Everything stays on this PC. ReUI connects to the internet only for lyrics (lrclib.net) and link previews when you turn them on, and to check for updates.";
+pub const STATEMENT: &str = "Everything stays on this PC. ReUI connects to the internet only to show link previews, to fetch lyrics (lrclib.net) when you turn them on, and to check for updates.";
 
 pub fn build(state: &State) -> Vec<Block> {
     let mut blocks = vec![intro(state, Page::Privacy, STATEMENT)];

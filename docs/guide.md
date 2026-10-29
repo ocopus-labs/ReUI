@@ -54,7 +54,7 @@ Everything you copy (text with its formatting, images, files) is kept on this PC
 | Alt+1 … Alt+9 | Pastes the 1st … 9th card |
 | Ctrl+P | Pins or unpins |
 | Delete | Deletes (Ctrl+Z brings it back) |
-| Tab | Next tab (All, Pinned, Links, Images, Text, Code, Colors, Files) |
+| Tab | Next tab (History, Pinned, then your collections) |
 | Esc | Clears the search, then closes |
 | Point at a card | Its star (pin or unpin) and bin (delete; Ctrl+Z brings it back) appear in its corner |
 | Right-click a card | Its menu |
