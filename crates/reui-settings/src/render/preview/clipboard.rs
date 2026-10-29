@@ -5,7 +5,9 @@
 //! On a stage too narrow for the panel at the look's size, the toast a copy shows instead
 //! (`toast.rs`): the copy glyph and the text's first words, side by side.
 
-use reui_design::look::Look;
+use reui_design::layout::cards::{tab_width, CardRow};
+use reui_design::layout::{compact, rows};
+use reui_design::look::{concentric, Look};
 use reui_design::tokens::{color, component, icon, island, space, typography};
 use reui_design::Color;
 use windows::core::Result;
@@ -51,16 +53,17 @@ pub fn draw(p: &Painter, look: &Look) -> Result<()> {
     let pal = &look.palette;
     let inset = look.inset();
     let capsule = |h: f32| look.capsule(h, radius, inset);
+    let [search_y, tabs_y, cards_y] = stage::panel_rows(look);
     // Search: the field across the panel, its glyph and placeholder.
     let (sh, pad) = (component::search::HEIGHT, component::search::PADDING);
-    let mut y = inset;
+    let y = search_y;
     p.fill(Rect::new(inset, y, w - inset, y + sh), capsule(sh), pal.fill_quaternary)?;
     let g = icon::SEARCH;
     glyph(p, SEARCH, g, inset + pad, y + (sh - g) / 2.0, pal.label_secondary)?;
     let lh = typography::DETAIL.line_height;
-    line(p, "Search", IslandFont::Detail, inset + pad + g + space::SM, y + (sh - lh) / 2.0, 200.0, Align::Start, pal.label_tertiary)?;
-    y += sh + look.row_gap();
+    line(p, "Search", IslandFont::Detail, rows::search_text_left(look), y + (sh - lh) / 2.0, 200.0, Align::Start, pal.label_tertiary)?;
     // Tabs: the selected one filled, each with its count.
+    let y = tabs_y;
     let th = component::tabs::HEIGHT;
     let tpad = component::tabs::PADDING;
     let mut x = inset;
@@ -68,7 +71,7 @@ pub fn draw(p: &Painter, look: &Look) -> Result<()> {
     for (label, count, selected) in TABS {
         let lw = p.measure(label, Font::Island(IslandFont::Tab));
         let cw = p.measure(count, Font::Island(IslandFont::Tab));
-        let tw = tpad + lw + component::tabs::COUNT_GAP + cw + tpad;
+        let tw = tab_width(lw, cw);
         let (ink, quiet) = if selected { (pal.label_primary, pal.label_secondary) } else { (pal.label_secondary, pal.label_tertiary) };
         if selected {
             p.fill(Rect::at(x, y, tw, th), capsule(th), pal.fill_secondary)?;
@@ -78,16 +81,15 @@ pub fn draw(p: &Painter, look: &Look) -> Result<()> {
         p.figures(count, Font::Island(IslandFont::Tab), Rect::at(x + tw - tpad - cw, top, cw + 1.0, tab_lh), Align::Start, quiet)?;
         x += tw + component::tabs::GAP;
     }
-    y += th + look.row_gap();
     // Cards: four and a half across, clipped at the inset, fading out at the right.
-    let gap = component::card::GAP;
-    let n = component::card::VISIBLE_MORE;
-    let cw = (w - inset - gap * n.floor()) / n;
+    let y = cards_y;
+    let row = CardRow::new(w, CARDS.len(), inset);
+    let cw = row.card_width();
     let ch = component::card::HEIGHT;
-    let corner = reui_design::look::concentric(radius, inset);
+    let corner = concentric(radius, inset);
     p.clip(Rect::new(inset, y - 2.0, w - inset, y + ch + 2.0), || {
         for (i, (face, age, fact)) in CARDS.iter().enumerate() {
-            card(p, look, face, age, fact, Rect::at(inset + i as f32 * (cw + gap), y, cw, ch), corner)?;
+            card(p, look, face, age, fact, Rect::at(row.left(i, 0.0), y, cw, ch), corner)?;
         }
         let fade = component::card::FADE;
         p.fade_in_right(Rect::new(w - inset - fade, y - 2.0, w - inset, y + ch + 2.0), pal.background)
@@ -160,17 +162,20 @@ fn card(p: &Painter, look: &Look, face: &Face, age: &str, fact: &str, r: Rect, c
 /// The toast's width: the glyph tile, the glimpse beside it (`compact.rs`, a text label
 /// with its mark), never narrower than the resting pill.
 pub fn toast_width(p: &Painter) -> f32 {
-    let tw = p.measure(GLIMPSE, Font::Island(IslandFont::Compact)).min(island::compact::JOINED_TEXT);
-    let lead = island::compact::SIDE_MARGIN + component::art::COMPACT + island::compact::JOINED_GAP;
-    (lead + tw + island::compact::TEXT_MARGIN).max(island::idle::WIDTH)
+    toast_layout(p).width
+}
+
+fn toast_layout(p: &Painter) -> compact::Joined {
+    compact::joined(component::art::COMPACT, compact::margin(true), p.measure(GLIMPSE, Font::Island(IslandFont::Compact)))
 }
 
 pub fn toast(p: &Painter, look: &Look) -> Result<()> {
-    let (w, h) = (toast_width(p), island::HEIGHT);
+    let j = toast_layout(p);
+    let (w, h) = (j.width, island::HEIGHT);
     super::parts::shape(p, look, Rect::at(0.0, 0.0, w, h), look.rounded(h), (true, true))?;
-    let (m, a) = (island::compact::SIDE_MARGIN, component::art::COMPACT);
+    let (m, a) = (compact::margin(true), component::art::COMPACT);
     super::parts::glyph_tile(p, look, look.radius(), true, COPY, m, (h - a) / 2.0, ACCENT)?;
-    let x = m + a + island::compact::JOINED_GAP;
+    let x = j.text_x;
     let lh = typography::COMPACT.line_height;
     line(p, GLIMPSE, IslandFont::Compact, x, (h - lh) / 2.0, w - x - island::compact::TEXT_MARGIN + 1.0, Align::Start, look.palette.label_secondary)
 }
