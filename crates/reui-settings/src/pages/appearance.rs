@@ -2,25 +2,24 @@
 //! watches the file and rebuilds itself with the new look). The header shows the island
 //! drawn with the same `Look` the island uses.
 
-use reui_design::look::{Accent, Look, Padding, Style, Theme};
+use reui_design::look::{Accent, Padding, Style, Theme};
 use reui_design::tokens::{color::system as palette, look as range};
 use serde_json::Value;
 
 use super::{file_error, group, Effect, Page};
 use crate::model::files::File;
 use crate::state::State;
-use crate::system;
-use crate::ui::{icons, Act, Block, Part, Preview, Row, Target};
+use crate::ui::{icons, Act, Block, Part, Row, Target};
 
 pub fn build(state: &State) -> Vec<Block> {
     let a = state.files.appearance();
-    let look = Look::new(&a, system::apps_light(), system::accent_color());
+    let look = super::look(state);
     let mut blocks = vec![Block::Intro {
         eyebrow: None,
         title: Page::Appearance.title().into(),
         body: Some("How the island looks: floating or joined to the top edge, dark or light, and its shape.".into()),
         icon: Some(Page::Appearance.icon()),
-        preview: Some(Preview::Appearance(look)),
+        preview: Page::Appearance.preview(state),
         row: None,
     }];
     blocks.extend(file_error(state, File::Island));
@@ -153,7 +152,7 @@ mod tests {
     fn the_page_builds_with_its_preview() {
         let (state, dir) = state("appearance-build");
         let blocks = build(&state);
-        assert!(matches!(&blocks[0], Block::Intro { preview: Some(Preview::Appearance(_)), .. }));
+        assert!(matches!(&blocks[0], Block::Intro { preview: Some(crate::ui::Preview { moment: crate::ui::Moment::Timer, .. }), .. }));
         _ = std::fs::remove_dir_all(&dir);
     }
 }

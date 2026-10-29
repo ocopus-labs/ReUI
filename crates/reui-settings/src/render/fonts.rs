@@ -34,7 +34,7 @@ const ROLES: [Font; 14] = [
     Font::AccountDetail,
 ];
 
-const ISLAND: [IslandFont; 10] = [
+const ISLAND: [IslandFont; 14] = [
     IslandFont::Eyebrow,
     IslandFont::Headline,
     IslandFont::Detail,
@@ -45,6 +45,10 @@ const ISLAND: [IslandFont; 10] = [
     IslandFont::Tab,
     IslandFont::CardText,
     IslandFont::CardLabel,
+    IslandFont::Value,
+    IslandFont::Context,
+    IslandFont::CardTitle,
+    IslandFont::CardCode,
 ];
 
 pub fn style(font: Font) -> TextStyle {
@@ -74,6 +78,10 @@ pub fn style(font: Font) -> TextStyle {
             IslandFont::Tab => island::TAB,
             IslandFont::CardText => island::CARD_TEXT,
             IslandFont::CardLabel => island::CARD_LABEL,
+            IslandFont::Value => island::VALUE,
+            IslandFont::Context => island::CONTEXT,
+            IslandFont::CardTitle => island::CARD_TITLE,
+            IslandFont::CardCode => island::CARD_CODE,
         },
     }
 }

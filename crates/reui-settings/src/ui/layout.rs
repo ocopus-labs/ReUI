@@ -5,7 +5,7 @@
 
 use reui_design::tokens::prefs as s;
 
-use super::{Block, Part, Preview, Row, Target};
+use super::{Block, Part, Row, Target};
 
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum Font {
@@ -39,6 +39,10 @@ pub enum IslandFont {
     Tab,
     CardText,
     CardLabel,
+    Value,
+    Context,
+    CardTitle,
+    CardCode,
 }
 
 pub trait Measure {
@@ -228,7 +232,7 @@ fn label_above(out: &mut Layout, block: usize, label: bool, y: f32, width: f32) 
 fn header(out: &mut Layout, i: usize, block: &Block, y: f32, width: f32, m: &impl Measure) -> f32 {
     let Block::Intro { eyebrow, body, preview, row, .. } = block else { return y };
     let pad = s::header::PADDING;
-    let stage = preview.map(|kind| Rect::new(0.0, y, width, y + stage_height(kind)));
+    let stage = preview.map(|kind| Rect::new(0.0, y, width, y + super::stage::height(kind, width)));
     let top = stage.map_or(y, |r| r.b) + pad;
     let icon = Rect::at(pad, top, s::header::ICON, s::header::ICON);
     // The on/off row's controls sit at the right, level with the icon.
@@ -346,15 +350,6 @@ pub fn part_size(part: &Part, m: &impl Measure) -> (f32, f32, f32, Vec<(f32, f32
     }
 }
 
-/// A header's island stage: shorter when it only shows compact pills.
-pub fn stage_height(preview: Preview) -> f32 {
-    match preview {
-        Preview::Idle | Preview::Levels => s::header::STAGE_COMPACT,
-        Preview::Appearance(_) => s::header::STAGE_LOOK,
-        _ => s::header::STAGE,
-    }
-}
-
 /// What the shortcut recorder says while it listens.
 pub const RECORDING: &str = "Press keys";
 
@@ -389,7 +384,7 @@ mod tests {
 
     fn page() -> Vec<Block> {
         vec![
-            Block::Intro { eyebrow: None, title: "Clipboard".into(), body: Some("x".repeat(200)), icon: None, preview: Some(Preview::Clipboard), row: Some(Row::new("clip:enabled", "Clipboard").part(Part::Toggle { on: true })) },
+            Block::Intro { eyebrow: None, title: "Clipboard".into(), body: Some("x".repeat(200)), icon: None, preview: Some(crate::ui::Preview { moment: crate::ui::Moment::Clipboard, look: reui_design::look::Look::default() }), row: Some(Row::new("clip:enabled", "Clipboard").part(Part::Toggle { on: true })) },
             group("History", vec![
                 Row::new("a", "One").detail("quiet").part(Part::Toggle { on: true }),
                 Row::new("b", "Two").icon(Icon::Mark).part(button("Open", Role::Secondary)).part(Part::Remove),
@@ -408,7 +403,7 @@ mod tests {
         let l = layout(&page(), 600.0, &Fixed);
         let Shape::Header { rect, stage: Some(stage), icon, title, body: Some(body), .. } = &l.shapes[0] else { panic!("header first") };
         assert_eq!(rect.t, s::page::TOP);
-        assert_eq!(stage.h(), s::header::STAGE);
+        assert_eq!(stage.h(), crate::ui::stage::height(crate::ui::Preview { moment: crate::ui::Moment::Clipboard, look: reui_design::look::Look::default() }, 600.0));
         assert_eq!(icon.t, stage.b + s::header::PADDING);
         assert_eq!(title.l, icon.r + s::header::ICON_GAP);
         assert_eq!(body.t, title.b + s::header::LINE_GAP);

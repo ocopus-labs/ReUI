@@ -9,7 +9,6 @@ pub const GEAR: char = '\u{E713}';
 pub const MUSIC: char = '\u{EC4F}';
 pub const PASTE: char = '\u{E77F}';
 pub const VOLUME: char = '\u{E767}';
-pub const BRIGHTNESS: char = '\u{E706}';
 pub const DEVICES: char = '\u{E772}';
 pub const BLUETOOTH: char = '\u{E702}';
 pub const CODE: char = '\u{E943}';

@@ -318,6 +318,7 @@ impl App {
             _ => None,
         };
         let version = format!("Version {}", pages::VERSION);
+        let backdrop = crate::wallpaper::current();
         let motion = &self.motion;
         let lit = |key: &Hover| motion.lit(key);
         let view = View {
@@ -342,6 +343,7 @@ impl App {
             knobs: &knobs,
             menu: self.menu.as_ref(),
             scrollbar_active: matches!(self.drag, Some(Drag::Scrollbar(_))),
+            backdrop: backdrop.as_deref(),
             enter: self.motion.enter(),
             fresh: self.page_fresh,
         };
@@ -441,6 +443,11 @@ impl App {
     }
 
     /// The update worker moved on.
+    /// The wallpaper was read again: the stage shows the new one.
+    pub fn on_wallpaper(&mut self) {
+        self.invalidate();
+    }
+
     pub fn on_updates(&mut self) {
         if let Phase::Ready(path) = self.state.updates.phase() {
             if self.state.paths.sandbox {

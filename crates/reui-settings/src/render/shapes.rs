@@ -1,6 +1,6 @@
 //! Painter primitives beyond fills and text: the cached bitmaps that let scrolling move
-//! the page without recording it again, the island stage's top-rounded backdrop, polygons
-//! and arcs for the previews, and the Claude mark (SVG).
+//! the page without recording it again, the island stage's backdrop (the wallpaper's top
+//! centre), polygons, lines and arcs for the previews, and the Claude mark (SVG).
 
 use reui_design::Color;
 use windows::core::{Interface, Result};
@@ -10,6 +10,8 @@ use windows::Win32::UI::Shell::SHCreateMemStream;
 use windows_numerics::{Matrix3x2, Vector2};
 
 use super::{d2d, rect, Painter, Slot, CLAUDE_SVG};
+use crate::wallpaper::{Backdrop, Strip};
+use windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM;
 use crate::ui::layout::Rect;
 
 impl Painter<'_> {
@@ -50,9 +52,11 @@ impl Painter<'_> {
         Ok(())
     }
 
-    /// The top of a container: `r` with only its top corners rounded, filled with `color`
-    /// and then a soft glow of `glow` from its top centre (a page's island stage).
-    pub fn stage(&self, r: Rect, radius: f32, color: Color, glow: Color) -> Result<()> {
+    /// The top of a container: `r` with only its top corners rounded, showing the top
+    /// centre of the user's screen (a page's island stage): the wallpaper's colour, its
+    /// strip 1 DIP to 1 DIP over it, then `dim` so Settings stays calm. `fallback` when
+    /// the wallpaper hasn't been read.
+    pub fn backdrop(&self, r: Rect, radius: f32, backdrop: Option<&Backdrop>, fallback: Color, dim: Color) -> Result<()> {
         let key = [r.w().to_bits(), r.h().to_bits(), radius.to_bits()];
         let cached = self.r.device.shapes.borrow().get(&key).cloned();
         let shape = match cached {
@@ -63,27 +67,67 @@ impl Painter<'_> {
                 shape
             }
         };
-        let (a, b, colors) = self.pair(glow, glow.with_alpha(0.0));
-        let cached = self.r.device.radial.borrow().get(&colors).cloned();
-        let brush = match cached {
-            Some(brush) => brush,
-            None => {
-                let props = D2D1_RADIAL_GRADIENT_BRUSH_PROPERTIES { center: Vector2::new(0.0, 0.0), gradientOriginOffset: Vector2::new(0.0, 0.0), radiusX: 1.0, radiusY: 1.0 };
-                let brush = unsafe { self.dc.CreateRadialGradientBrush(&props, None, &self.stops(a, b)?)? };
-                self.r.device.radial.borrow_mut().insert(colors, brush.clone());
-                brush
-            }
-        };
         unsafe {
             let mut previous = Matrix3x2::default();
             self.dc.GetTransform(&mut previous);
             self.dc.SetTransform(&(Matrix3x2::translation(r.l, r.t) * previous));
-            self.dc.FillGeometry(&shape, self.brush(color), None);
-            brush.SetCenter(Vector2::new(r.w() / 2.0, 0.0));
-            brush.SetRadiusX(r.w() * 0.62);
-            brush.SetRadiusY(r.h() * 1.25);
-            self.dc.FillGeometry(&shape, &brush, None);
+            self.dc.FillGeometry(&shape, self.brush(backdrop.map_or(fallback, |b| b.color)), None);
+            if let Some((b, strip)) = backdrop.and_then(|b| Some((b, b.strip.as_ref()?))) {
+                let brush = self.strip_brush(b, strip)?;
+                // The strip's centre on the stage's, its top on the stage's top, scaled
+                // from the monitor's pixels to DIPs; on the pixel grid, so at the same
+                // scale every wallpaper pixel is one screen pixel.
+                let k = 1.0 / b.scale;
+                let x = self.snap(r.l + r.w() / 2.0 - strip.width as f32 * k / 2.0) - r.l;
+                brush.SetTransform(&Matrix3x2 { M11: k, M12: 0.0, M21: 0.0, M22: k, M31: x, M32: 0.0 });
+                let shown = Rect::new(x.max(0.0), 0.0, (x + strip.width as f32 * k).min(r.w()), (strip.height as f32 * k).min(r.h()));
+                self.dc.PushAxisAlignedClip(&rect(shown), D2D1_ANTIALIAS_MODE_ALIASED);
+                self.dc.FillGeometry(&shape, &brush, None);
+                self.dc.PopAxisAlignedClip();
+            }
+            self.dc.FillGeometry(&shape, self.brush(dim), None);
             self.dc.SetTransform(&previous);
+        }
+        Ok(())
+    }
+
+    /// The wallpaper strip as a bitmap brush, uploaded once per read.
+    fn strip_brush(&self, b: &Backdrop, strip: &Strip) -> Result<ID2D1BitmapBrush1> {
+        if let Some((generation, brush)) = &*self.r.device.wallpaper.borrow() {
+            if *generation == b.generation {
+                return Ok(brush.clone());
+            }
+        }
+        let brush = unsafe {
+            let props = D2D1_BITMAP_PROPERTIES1 {
+                pixelFormat: D2D1_PIXEL_FORMAT { format: DXGI_FORMAT_B8G8R8A8_UNORM, alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED },
+                dpiX: 96.0,
+                dpiY: 96.0,
+                ..Default::default()
+            };
+            let size = D2D_SIZE_U { width: strip.width, height: strip.height };
+            let bitmap = self.dc.CreateBitmap(size, Some(strip.pixels.as_ptr().cast()), strip.width * 4, &props)?;
+            let brush_props = D2D1_BITMAP_BRUSH_PROPERTIES1 { extendModeX: D2D1_EXTEND_MODE_CLAMP, extendModeY: D2D1_EXTEND_MODE_CLAMP, interpolationMode: D2D1_INTERPOLATION_MODE_HIGH_QUALITY_CUBIC };
+            self.dc.CreateBitmapBrush(&bitmap, Some(&brush_props), None)?
+        };
+        *self.r.device.wallpaper.borrow_mut() = Some((b.generation, brush.clone()));
+        Ok(brush)
+    }
+
+    /// A straight line from `a` to `b`.
+    pub fn segment(&self, a: (f32, f32), b: (f32, f32), width: f32, color: Color) -> Result<()> {
+        unsafe { self.dc.DrawLine(Vector2::new(a.0, a.1), Vector2::new(b.0, b.1), self.brush(color), width, None) };
+        Ok(())
+    }
+
+    /// `r` filled with `color` fading in from nothing at its left edge to solid at its
+    /// right (a scrolling row running on past an edge).
+    pub fn fade_in_right(&self, r: Rect, color: Color) -> Result<()> {
+        let (a, b, _) = self.pair(color.with_alpha(0.0), color);
+        unsafe {
+            let props = D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES { startPoint: Vector2::new(r.l, 0.0), endPoint: Vector2::new(r.r, 0.0) };
+            let brush = self.dc.CreateLinearGradientBrush(&props, None, &self.stops(a, b)?)?;
+            self.dc.FillRectangle(&rect(r), &brush);
         }
         Ok(())
     }

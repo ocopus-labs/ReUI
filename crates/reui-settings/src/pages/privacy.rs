@@ -10,7 +10,7 @@ use crate::ui::{icons, Act, Block, Part, Role, Row, Target};
 pub const STATEMENT: &str = "Everything stays on this PC. ReUI connects to the internet only for lyrics (lrclib.net) and link previews when you turn them on, and to check for updates.";
 
 pub fn build(state: &State) -> Vec<Block> {
-    let mut blocks = vec![intro(Page::Privacy, STATEMENT)];
+    let mut blocks = vec![intro(state, Page::Privacy, STATEMENT)];
     let folder = |id: &str, title: &str, path: &std::path::Path, size: u64| {
         Row::new(id, title).icon(icons::folder()).detail(path.display().to_string()).part(Part::Value(system::bytes(size))).part(button("Open", Role::Secondary))
     };

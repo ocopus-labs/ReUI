@@ -38,6 +38,7 @@ mod stats;
 mod system;
 mod ui;
 mod updates;
+mod wallpaper;
 mod window;
 
 use windows::core::HSTRING;

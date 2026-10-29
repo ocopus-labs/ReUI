@@ -1,4 +1,4 @@
-//! The page: the header card (the feature's island on its stage, the tile, title and
+//! The page: the header card (the feature's island on the top of the screen, the tile, title and
 //! paragraph), section headers, grouped containers with hairlines between rows, row text
 //! and leading tiles, footnotes, text and figure containers. Controls are in `controls`.
 
@@ -22,12 +22,7 @@ pub fn draw(p: &Painter, v: &View, dx: f32, dy: f32, cull: bool) -> Result<()> {
                 let card = rect.offset(dx, dy);
                 container(p, card)?;
                 if let (Some(stage), Some(shows)) = (stage, shows) {
-                    let stage = stage.offset(dx, dy);
-                    let tint = match tile {
-                        Some(crate::ui::Icon::Glyph(_, c)) => *c,
-                        _ => s::section::GENERAL,
-                    };
-                    preview::draw(p, *shows, stage, tint, v.enter)?;
+                    preview::draw(p, *shows, stage.offset(dx, dy), v.backdrop, v.enter)?;
                 }
                 if let Some(tile) = tile {
                     icons::tile(p, *tile, icon.offset(dx, dy), s::header::ICON_RADIUS, s::header::ICON_GLYPH)?;

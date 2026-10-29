@@ -51,12 +51,13 @@ pub struct Renderer {
 struct Device {
     brush: Option<ID2D1SolidColorBrush>,
     linear: RefCell<HashMap<[u8; 8], ID2D1LinearGradientBrush>>,
-    radial: RefCell<HashMap<[u8; 8], ID2D1RadialGradientBrush>>,
     /// Top-rounded shapes (island stages) by size.
     shapes: RefCell<HashMap<[u32; 3], ID2D1PathGeometry>>,
     /// The page and the sidebar as last drawn ([`Slot`]), and their sizes in pixels.
     cache: RefCell<[Option<(ID2D1Bitmap1, u32, u32)>; 2]>,
     svgs: RefCell<HashMap<u32, ID2D1SvgDocument>>,
+    /// The wallpaper strip ([`crate::wallpaper`]) as uploaded, and which read it is.
+    wallpaper: RefCell<Option<(u64, ID2D1BitmapBrush1)>>,
 }
 
 /// What a cached bitmap holds.

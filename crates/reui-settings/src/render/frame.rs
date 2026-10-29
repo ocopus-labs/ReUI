@@ -48,6 +48,8 @@ pub struct View<'a> {
     pub knobs: &'a HashMap<String, f32>,
     pub menu: Option<&'a Menu>,
     pub scrollbar_active: bool,
+    /// The top of the user's screen, for the island previews' stage (once it's read).
+    pub backdrop: Option<&'a crate::wallpaper::Backdrop>,
     /// How far the page's island preview has settled in, 0..=1.
     pub enter: f32,
     /// Nothing changed but the scroll: last frame's page and sidebar can be reused.
