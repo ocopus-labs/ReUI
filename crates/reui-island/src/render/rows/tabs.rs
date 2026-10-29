@@ -1,12 +1,12 @@
 //! The tab row, scrolled so the selected tab stays in view.
 
 
+use reui_design::layout::cards;
 use reui_design::tokens::component;
 use reui_protocol::Tab;
 use windows::core::Result;
 use windows::Win32::Graphics::Direct2D::*;
 
-use crate::features::clipboard;
 use crate::render::{Align, Hit, Renderer};
 
 impl Renderer {
@@ -22,10 +22,10 @@ impl Renderer {
         for tab in tabs {
             let label = self.text_width(&tab.label, &self.fonts.tab)?;
             let count = self.text_width(&tab.count.to_string(), &self.fonts.tab_count)?;
-            sizes.push((label, count, pad + label + component::tabs::COUNT_GAP + count + pad));
+            sizes.push((label, count, cards::tab_width(label, count)));
         }
         let widths: Vec<f32> = sizes.iter().map(|s| s.2).collect();
-        let offset = clipboard::tabs_offset(&widths, gap, tabs.iter().position(|t| t.selected), w - 2.0 * inset);
+        let offset = cards::tabs_offset(&widths, gap, tabs.iter().position(|t| t.selected), w - 2.0 * inset);
         let line = self.fonts.tab.style.line_height;
         let top = y + (h - line) / 2.0;
         unsafe { rt.PushAxisAlignedClip(&self.rect(inset, y, w - inset, y + h), D2D1_ANTIALIAS_MODE_ALIASED) };

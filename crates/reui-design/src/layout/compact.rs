@@ -6,6 +6,8 @@ use crate::tokens::{component, island, notch};
 
 /// Level bars in a meter.
 pub const BARS: usize = 4;
+/// Their resting heights while live (a frozen meter), as fractions of the bars' height.
+pub const BAR_LEVELS: [f32; BARS] = [0.45, 0.9, 0.6, 0.75];
 
 /// Widest compact presentation: two maximal sides around the centre gap.
 pub const MAX_WIDTH: f32 = island::compact::CENTER_GAP + 2.0 * (island::compact::MAX_SIDE + island::compact::TEXT_MARGIN);

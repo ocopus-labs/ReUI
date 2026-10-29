@@ -1,6 +1,7 @@
 //! The horizontally scrolling row of item cards (clipboard history and the like).
 
 
+use reui_design::layout::cards::CardRow;
 use reui_design::tokens::{color, component, icon, space};
 use reui_design::Color;
 use reui_protocol::{Item, Preview, Rgb};
@@ -9,7 +10,6 @@ use windows::Win32::Graphics::Direct2D::Common::*;
 use windows::Win32::Graphics::Direct2D::*;
 use windows_numerics::Vector2;
 
-use crate::features::clipboard::CardRow;
 use crate::render::{rgb_color, Align, Hit, Interaction, Renderer};
 use crate::render::images::Decoded;
 

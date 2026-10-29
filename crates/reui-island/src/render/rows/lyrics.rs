@@ -1,6 +1,7 @@
 //! Synced lyrics: the current line and its neighbours, sliding up as lines change.
 
 
+use reui_design::layout;
 use reui_design::tokens::component;
 use reui_design::Color;
 use reui_protocol::LyricLine;
@@ -19,9 +20,8 @@ impl Renderer {
     /// above while the new one brightens into place. An empty line (an instrumental gap)
     /// shows nothing. Always the same height, so lines changing never resize the card.
     pub(in crate::render) fn lyrics(&self, rt: &ID2D1RenderTarget, lines: &[LyricLine], position: Option<u64>, y: f32, motion: Option<(usize, f32)>) -> Result<f32> {
-        let line = self.fonts.lyric_wrap.style.line_height;
         let rows = component::lyrics::LINES.max(1.0) as u32;
-        let height = line * rows as f32;
+        let height = layout::rows::lyrics_height();
         let inset = self.look.inset();
         let width = self.width.get() - 2.0 * inset;
         let Some(position) = position else { return Ok(height) };

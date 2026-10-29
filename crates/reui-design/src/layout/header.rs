@@ -51,16 +51,6 @@ impl Text {
         self.eyebrow + self.hero + self.detail
     }
 
-    /// The hero's top, from the column's.
-    pub fn hero_top(&self) -> f32 {
-        self.eyebrow
-    }
-
-    /// The detail's top, from the column's (under the gap).
-    pub fn detail_top(&self) -> f32 {
-        self.eyebrow + self.hero + island::expanded::LINE_GAP
-    }
-
     /// The first line's height, where the source switcher is centred.
     pub fn first_line(&self) -> f32 {
         if self.eyebrow > 0.0 {

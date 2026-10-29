@@ -3,7 +3,8 @@
 //! At most `choice.max-height` tall: a longer list scrolls inside the card (the wheel, or
 //! the cursor moving), so the card never grows past its max-height (E-A6).
 
-use reui_design::tokens::{component, opacity, space};
+use reui_design::layout::rows;
+use reui_design::tokens::{component, opacity};
 use reui_design::Color;
 use reui_protocol::Choice;
 use windows::core::Result;
@@ -25,14 +26,12 @@ impl Renderer {
     /// One choice's height and whether its description wraps: the label, then the
     /// description on one line, or two when it doesn't fit.
     fn choice_height(&self, choice: &Choice, text_w: f32) -> Result<(f32, bool)> {
-        let label = self.fonts.choice.style.line_height;
-        let line = self.fonts.choice_detail.style.line_height;
-        let (detail, wraps) = match &choice.detail {
-            Some(d) if self.text_width(d, &self.fonts.choice_detail)? > text_w => (2.0 * line, true),
-            Some(_) => (line, false),
-            None => (0.0, false),
+        let measured = match &choice.detail {
+            Some(d) => Some(self.text_width(d, &self.fonts.choice_detail)?),
+            None => None,
         };
-        Ok((2.0 * component::choice::PADDING_Y + label + detail, wraps))
+        let lines = rows::choice_detail_lines(measured, text_w);
+        Ok((rows::choice_height(lines), lines > 1.0))
     }
 
     /// The list at `y`, full width, scrolled by `scroll` (clamped here). Each choice is a
@@ -41,25 +40,18 @@ impl Renderer {
     /// checked. Only what shows is drawn and hit-tested.
     #[allow(clippy::too_many_arguments)]
     pub(in crate::render) fn choices(&self, rt: &ID2D1RenderTarget, options: &[Choice], multi: bool, cursor: Option<usize>, y: f32, scroll: f32, accent: Color, hits: &mut Vec<Hit>) -> Result<ChoiceList> {
-        let inset = self.look.inset();
-        let (l, r) = (inset, self.width.get() - inset);
+        let cols = rows::choice_columns(&self.look, self.width.get(), multi);
+        let (l, r, text_w) = (cols.left, cols.right, cols.text_w);
         let pad = component::choice::PADDING_X;
         let check = component::choice::CHECK;
-        let text_r = if multi { r - pad - check - space::SM } else { r - pad };
-        let text_w = text_r - l - pad;
-        let mut rows = Vec::with_capacity(options.len());
-        let mut top = 0.0;
-        for (i, choice) in options.iter().enumerate() {
-            if i > 0 {
-                top += component::choice::GAP;
-            }
-            let (h, wraps) = self.choice_height(choice, text_w)?;
-            rows.push((top, h, wraps));
-            top += h;
+        let mut sized = Vec::with_capacity(options.len());
+        for choice in options {
+            sized.push(self.choice_height(choice, text_w)?);
         }
-        let content = top;
-        let shown = content.min(component::choice::MAX_HEIGHT);
-        let max_scroll = content - shown;
+        let heights: Vec<f32> = sized.iter().map(|&(h, _)| h).collect();
+        let list = rows::choice_list(&heights);
+        let rows: Vec<(f32, f32, bool)> = list.tops.iter().zip(&sized).map(|(&top, &(h, wraps))| (top, h, wraps)).collect();
+        let (shown, max_scroll) = (list.shown, list.max_scroll);
         let scroll = scroll.clamp(0.0, max_scroll);
         let (clip_top, clip_bottom) = (y, y + shown);
         unsafe { rt.PushAxisAlignedClip(&self.rect(l, clip_top, r, clip_bottom), D2D1_ANTIALIAS_MODE_ALIASED) };

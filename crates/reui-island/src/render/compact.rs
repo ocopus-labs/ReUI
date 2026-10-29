@@ -3,7 +3,7 @@
 
 use std::borrow::Cow;
 
-use reui_design::look::concentric;
+use reui_design::layout::compact;
 use reui_design::tokens::{component, island, opacity};
 use reui_design::Color;
 use reui_protocol::{Art, CompactView, Element, ImageId, Tone};
@@ -35,14 +35,12 @@ impl Renderer {
                 let (lw, _) = self.measure(&leading, Slot::Compact)?;
                 let lm = compact_margin(&view.leading);
                 let font = self.text_font(Slot::Compact);
-                let tw = self.text_width(text, font)?.min(island::compact::JOINED_TEXT);
-                let gap = island::compact::JOINED_GAP;
-                let width = (lm + lw + gap + tw + island::compact::TEXT_MARGIN).max(island::idle::WIDTH);
-                let left = (COMPACT_SURFACE.0 - width) / 2.0;
+                let j = compact::joined(lw, lm, self.text_width(text, font)?);
+                let left = compact::left(j.width);
                 let mid = COMPACT_SURFACE.1 / 2.0;
                 self.element(rt, &leading, Slot::Compact, left + lm, mid, Align::Start, accent)?;
-                self.text(rt, text, font, left + lm + lw + gap, mid - font.style.line_height / 2.0, tw, Align::Start, self.tone_color(*tone, accent))?;
-                layout.width = width;
+                self.text(rt, text, font, left + j.text_x, mid - font.style.line_height / 2.0, j.text_w, Align::Start, self.tone_color(*tone, accent))?;
+                layout.width = j.width;
                 let tile = component::art::COMPACT;
                 layout.logo = match &view.leading {
                     Element::Art(Art::Logo { image, animated: true }) => Some((*image, left + lm, mid - tile / 2.0)),
@@ -52,16 +50,14 @@ impl Renderer {
             }
             let (lw, _) = self.measure(&leading, Slot::Compact)?;
             let (tw, _) = self.measure(&trailing, Slot::Compact)?;
-            let (lm, tm) = (compact_margin(&view.leading), compact_margin(&view.trailing));
-            let side = (lw + lm).max(tw + tm);
-            let width = island::compact::CENTER_GAP + 2.0 * side;
-            let left = (COMPACT_SURFACE.0 - width) / 2.0;
+            let sides = compact::sides(lw, compact_margin(&view.leading), tw, compact_margin(&view.trailing));
+            let left = compact::left(sides.width);
             let mid = COMPACT_SURFACE.1 / 2.0;
-            let leading_x = left + lm;
-            let trailing_x = left + width - tm;
+            let leading_x = left + sides.leading;
+            let trailing_x = left + sides.trailing;
             self.element(rt, &leading, Slot::Compact, leading_x, mid, Align::Start, accent)?;
             self.element(rt, &trailing, Slot::Compact, trailing_x, mid, Align::End, accent)?;
-            layout.width = width;
+            layout.width = sides.width;
             layout.bars = match (&view.leading, &view.trailing) {
                 (Element::Bars { live }, _) => Some((leading_x, mid, *live)),
                 (_, Element::Bars { live }) => Some((trailing_x - tw, mid, *live)),
@@ -83,29 +79,24 @@ impl Renderer {
     /// glyph sits centred in the fill's left end and the percentage at the right end. A
     /// muted level keeps its fill, dimmed, and its number turns quiet.
     fn level_pill(&self, rt: &ID2D1RenderTarget, leading: &Element, value: f32, dim: bool, accent: Color) -> Result<()> {
-        let width = island::compact::METER_WIDTH;
-        let (left, h) = ((COMPACT_SURFACE.0 - width) / 2.0, COMPACT_SURFACE.1);
+        let m = compact::meter(&self.look, value);
+        let (left, h) = (compact::left(m.width), COMPACT_SURFACE.1);
         let mid = h / 2.0;
-        let inset = island::compact::METER_INSET;
-        let inner = h - 2.0 * inset;
-        let value = value.clamp(0.0, 1.0);
-        if value > 0.0 {
+        if let Some(fill) = m.fill {
             let alpha = opacity::METER_FILL * if dim { opacity::LEVEL_DIM } else { 1.0 };
-            // Anything above zero shows at least the round end, so "on but quiet" never
-            // reads as off.
-            let right = left + inset + ((width - 2.0 * inset) * value).max(inner);
-            let corner = concentric(self.look.rounded(h), inset).min(inner / 2.0);
-            unsafe { self.round_rect(rt, left + inset, inset, right, h - inset, corner, accent.with_alpha(accent.a * alpha))? };
+            let right = left + m.inset + fill;
+            unsafe { self.round_rect(rt, left + m.inset, m.inset, right, h - m.inset, m.corner, accent.with_alpha(accent.a * alpha))? };
         }
         // The fill is the tint here, so a glyph tile becomes the bare glyph.
         let glyph = match leading {
             Element::Art(Art::Glyph(g)) => Cow::Owned(Element::Glyph { glyph: *g, tone: Tone::Primary }),
             other => Cow::Borrowed(other),
         };
-        self.element(rt, &glyph, Slot::Compact, left + h / 2.0, mid, Align::Center, accent)?;
+        self.element(rt, &glyph, Slot::Compact, left + m.glyph_x, mid, Align::Center, accent)?;
         let tone = if dim { Tone::Secondary } else { Tone::Primary };
+        let value = value.clamp(0.0, 1.0);
         let percent = Element::Text { text: format!("{}%", (value * 100.0).round() as u32), tone };
-        self.element(rt, &percent, Slot::Compact, left + width - island::compact::TEXT_MARGIN, mid, Align::End, accent)
+        self.element(rt, &percent, Slot::Compact, left + m.percent_right, mid, Align::End, accent)
     }
 
     /// The mark alone, centred in a square surface, for the pill's animated logo visual.
@@ -120,8 +111,5 @@ impl Renderer {
 /// Round content sits concentric in the capsule's end; text and level bars keep clear of
 /// the curve.
 fn compact_margin(element: &Element) -> f32 {
-    match element {
-        Element::Art(_) | Element::Ring(_) | Element::ClockRing { .. } => island::compact::SIDE_MARGIN,
-        _ => island::compact::TEXT_MARGIN,
-    }
+    compact::margin(matches!(element, Element::Art(_) | Element::Ring(_) | Element::ClockRing { .. }))
 }

@@ -1,6 +1,7 @@
 //! A text block (a full command, an edit's changed lines, a plan): at most
 //! `block.max-height` tall, scrolling inside the card with the wheel instead of growing it.
 
+use reui_design::layout::rows;
 use reui_design::tokens::component;
 use reui_design::Color;
 use reui_protocol::{diff_tone, BlockKind};
@@ -30,9 +31,7 @@ impl Renderer {
             let layout = unsafe { self.dwrite.CreateTextLayout(&wide, &font.format, (r - l) * s, 100_000.0)? };
             let mut metrics = DWRITE_TEXT_METRICS::default();
             unsafe { layout.GetMetrics(&mut metrics)? };
-            let content = (metrics.height / s).ceil();
-            let shown = content.min(component::block::MAX_HEIGHT);
-            let max = content - shown;
+            let (shown, max) = rows::prose_block((metrics.height / s).ceil());
             let scroll = scroll.clamp(0.0, max);
             unsafe {
                 rt.PushAxisAlignedClip(&self.rect(l, y, r, y + shown), D2D1_ANTIALIAS_MODE_ALIASED);
@@ -47,11 +46,7 @@ impl Renderer {
         let line = font.style.line_height;
         let pad = component::block::PADDING;
         let lines: Vec<&str> = text.lines().take(MAX_LINES).collect();
-        let content = lines.len().max(1) as f32 * line;
-        // Whole lines only, so the last one shown is never cut through.
-        let shown = content.min(((component::block::MAX_HEIGHT - 2.0 * pad) / line).floor() * line);
-        let h = shown + 2.0 * pad;
-        let max = content - shown;
+        let (shown, h, max) = rows::code_block(lines.len());
         let scroll = scroll.clamp(0.0, max);
         unsafe { self.round_rect(rt, l, y, r, y + h, self.concentric().min(h / 2.0), self.pal().fill_quaternary)? };
         let (top, bottom) = (y + pad, y + pad + shown);

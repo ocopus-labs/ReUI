@@ -15,6 +15,7 @@
 use std::cell::Cell;
 use std::collections::HashMap;
 
+use reui_design::layout;
 use reui_design::look::{concentric, Look};
 use reui_design::tokens::{component, font, icon, island, typography, Palette};
 use reui_design::{Color, TextStyle};
@@ -50,21 +51,11 @@ mod notch;
 mod rows;
 mod text;
 
-/// Widest compact presentation: two maximal sides around the centre gap.
-pub const COMPACT_MAX_WIDTH: f32 = island::compact::CENTER_GAP + 2.0 * (island::compact::MAX_SIDE + island::compact::TEXT_MARGIN);
-pub const COMPACT_SURFACE: (f32, f32) = (COMPACT_MAX_WIDTH, island::HEIGHT);
-
-/// Wide enough for the wide expanded island and tall enough for the roomy one at the
-/// look's padding; narrower views are drawn centred in it.
-pub fn expanded_surface(look: &Look) -> (f32, f32) {
-    (island::expanded::WIDE_WIDTH, look.max_height(island::expanded::ROOMY_MAX_HEIGHT))
-}
+pub use reui_design::layout::compact::{BARS, BAR_LEVELS as BAR_LEVELS_LIVE, MAX_WIDTH as COMPACT_MAX_WIDTH, MINIMAL_SURFACE, SURFACE as COMPACT_SURFACE};
+pub use reui_design::layout::expanded_surface;
 pub use self::notch::EAR_SURFACE;
-pub const MINIMAL_SURFACE: (f32, f32) = (island::minimal::SIZE, island::minimal::SIZE);
 
-pub const BARS: usize = 4;
-/// Resting heights: a frozen meter while live, flat otherwise.
-pub const BAR_LEVELS_LIVE: [f32; BARS] = [0.45, 0.9, 0.6, 0.75];
+/// Resting height of every bar while not live (flat).
 pub const BAR_LEVEL_IDLE: f32 = 0.3;
 
 /// Where an element sits; decides its size and shape.
@@ -320,10 +311,7 @@ impl Renderer {
 
     /// The open card's corner radius: the wide panel's or the card's, from the roundness.
     pub fn card_radius(&self, size: CardSize) -> f32 {
-        match size {
-            CardSize::Wide => self.look.panel_radius(),
-            _ => self.look.radius(),
-        }
+        card(size).radius(&self.look)
     }
 
     /// Radius of a shape one inset inside the open card's edge (tiles, wells, cards).
@@ -335,6 +323,15 @@ impl Renderer {
     /// concentric radius allows one, else concentric.
     fn capsule(&self, h: f32, inset: f32) -> f32 {
         self.look.capsule(h, self.card_radius(self.size.get()), inset)
+    }
+}
+
+/// The layout's name for a card's size (`reui-design` doesn't see the protocol).
+pub fn card(size: CardSize) -> layout::Card {
+    match size {
+        CardSize::Regular => layout::Card::Regular,
+        CardSize::Roomy => layout::Card::Roomy,
+        CardSize::Wide => layout::Card::Wide,
     }
 }
 

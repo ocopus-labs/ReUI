@@ -99,7 +99,7 @@ fn the_header_centres_short_text_on_the_tile() {
     let l = Look::default();
     let text = Text::new(true, Hero::Text, 1.0);
     assert_eq!(text.height(), typography::EYEBROW.line_height + typography::HEADLINE.line_height + typography::DETAIL.line_height + 2.0 * island::expanded::LINE_GAP);
-    assert_eq!(text.detail_top(), text.height() - typography::DETAIL.line_height);
+    assert_eq!(text.first_line(), typography::EYEBROW.line_height);
     let tile = component::art::EXPANDED;
     let h = header::header(l.inset(), tile, 0.0, 30.0, false);
     assert_eq!((h.height, h.mid, h.text_top), (tile, l.inset() + tile / 2.0, l.inset() + tile / 2.0 - 15.0));
