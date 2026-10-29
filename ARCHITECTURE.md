@@ -126,10 +126,12 @@ fullscreen.rs      when to hide: D3D, presentation, busy, a window covering the 
 desktop.rs         whether the desktop (not an app) is in front, for "Always show on the desktop"
 intent.rs          reading the pointer: open on click or hover, the hover delay, the reveal
                    zone, when a just-appeared pill may take a click
+app_rules.rs       per-app rules: which applies to the app in front, its executable's name
 drag_guard.rs      no hover intent while a drag from elsewhere passes over
 images.rs          encoded images from the hub
 pill/              the island's behaviour
   mod.rs           state machine, snapshot apply, render orchestration
+  gate.rs          what gets through: pause, hidden, app rules; then order.rs
   link.rs          the hub link: snapshots, images and focus requests as they arrive
   setup.rs         builds the composition tree for the Look (shape, hairline, notch ears);
                    a new look rebuilds it (WM_LOOK), like a DPI change
@@ -200,7 +202,8 @@ render/            drawing only: Renderer/Painter primitives, fonts, text (layou
                    reui_design::layout as the island places them), one file per moment: compact, music, clipboard (+ toast),
                    levels, devices, timers, stats, agents; switcher (under the timer card)
 pages/             one file per page: build its rows from State, handle its controls;
-                   welcome.rs is the three-step welcome (first run, Replay the tour)
+                   welcome.rs is the three-step welcome (first run, Replay the tour);
+                   quiet.rs is General's App rules group
 model/             settings files (read, change a key, atomic write, keep unknown keys,
                    never write an invalid file), hotkeys, coding agents (status, test)
 updates/           GitHub releases: release.rs (JSON, checksums, notes; pure), net.rs

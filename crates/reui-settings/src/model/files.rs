@@ -155,6 +155,8 @@ pub const VISIBILITY: [&str; 3] = ["always", "when-active", "when-needed"];
 pub const OPEN_ON: [&str; 2] = ["click", "hover"];
 /// `reveal_zone`: how much of the top edge reveals a hidden island (docs/PRD-behaviour.md §4.2).
 pub const REVEAL_ZONE: [&str; 3] = ["off", "pill", "wide"];
+/// `app_rules` values (docs/PRD-behaviour.md §4.3): hide the island, or only decisions.
+pub const APP_RULES: [&str; 2] = ["hide", "decisions"];
 /// `hover_delay` choices in ms: Quick, Normal (`motion.delay.hover-intent`), Relaxed.
 pub const HOVER_DELAYS: [u64; 3] = [150, 250, 500];
 pub const VISUALIZER: [&str; 3] = ["real", "simple", "off"];
@@ -195,6 +197,16 @@ impl Files {
     pub fn open_on(&self) -> usize {
         let doc = self.doc(File::Island);
         doc.str("open_on").and_then(|v| OPEN_ON.iter().position(|x| *x == v)).unwrap_or(0)
+    }
+
+    /// The app rules the island understands, by executable name (lower-cased, as it matches
+    /// them), each an index into [`APP_RULES`].
+    pub fn app_rules(&self) -> Vec<(String, usize)> {
+        let Some(map) = self.doc(File::Island).get("app_rules").and_then(Value::as_object) else { return Vec::new() };
+        let mut rules: Vec<(String, usize)> =
+            map.iter().filter_map(|(exe, rule)| Some((exe.trim().to_lowercase(), APP_RULES.iter().position(|r| Some(*r) == rule.as_str())?))).filter(|(exe, _)| !exe.is_empty()).collect();
+        rules.sort();
+        rules
     }
 
     /// Index into [`REVEAL_ZONE`]; Wide when missing or unknown, as the island reads it.

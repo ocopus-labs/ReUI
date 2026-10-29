@@ -6,6 +6,7 @@
 #![windows_subsystem = "windows"]
 
 mod desktop;
+mod app_rules;
 mod drag_guard;
 mod features;
 mod fullscreen;
@@ -44,6 +45,9 @@ use crate::settings::Settings;
 /// Debug builds: a test script's pointer position (see the window procedure).
 #[cfg(debug_assertions)]
 const WM_TEST_POINTER: u32 = WM_APP + 20;
+/// Debug builds: a test script's "this process is in front" (wparam: its id), for app rules.
+#[cfg(debug_assertions)]
+const WM_TEST_FOREGROUND: u32 = WM_APP + 21;
 
 const TIMER_SETTINGS: usize = 100;
 const SETTINGS_SETTLE_MS: u32 = 150;
@@ -332,6 +336,11 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         WM_TEST_POINTER => {
             let (x, y) = client_point(lparam);
             with_pill(|pill| pill.on_mouse_move(POINT { x: x as i32, y: y as i32 }));
+            LRESULT(0)
+        }
+        #[cfg(debug_assertions)]
+        WM_TEST_FOREGROUND => {
+            with_pill(|pill| pill.test_front_app(wparam.0 as u32));
             LRESULT(0)
         }
         clipboard_keys::WM_KEYS => {

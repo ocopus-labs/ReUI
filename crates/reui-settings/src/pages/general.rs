@@ -72,6 +72,7 @@ pub fn build(state: &State) -> Vec<Block> {
     let hide = super::shortcut::named(state, File::Island, "Hide the island", "Until you press it again; permission requests still show")
         .icon(icons::tile(icons::KEYBOARD, palette::GRAY));
     blocks.push(group("Island", vec![visibility, desktop, reveal, opening, delay, monitor, fullscreen, switcher, clock, hide]));
+    blocks.extend(super::quiet::blocks(state, doc_ok));
 
     let left = state.files.paused_until().and_then(|until| until.checked_sub(reui_protocol::unix_ms())).filter(|&ms| ms > 0);
     let pause = match left {
@@ -105,7 +106,7 @@ fn monitor_choices(state: &State) -> Vec<String> {
 
 pub fn menu(state: &mut State, target: &Target) -> Option<(Vec<String>, Option<usize>)> {
     if target.row != "monitor" {
-        return None;
+        return super::quiet::menu(state, target);
     }
     state.monitors = system::monitors();
     let list = monitor_choices(state);
@@ -114,6 +115,9 @@ pub fn menu(state: &mut State, target: &Target) -> Option<(Vec<String>, Option<u
 }
 
 pub fn act(state: &mut State, target: &Target, act: Act) -> Effect {
+    if super::quiet::act(state, target, &act) {
+        return Effect::None;
+    }
     match (target.row.as_str(), act) {
         ("hotkey", Act::Press) => return Effect::Record(File::Island),
         ("monitor", Act::Choose(i)) => {

@@ -37,8 +37,8 @@ use crate::render::{self, Hit, Interaction, Renderer, Thumb};
 use crate::drag_guard::DragGuard;
 use crate::place::MonitorChoice;
 use crate::settings::Visibility;
-use crate::order;
 
+mod gate;
 mod idle;
 mod input;
 mod link;
@@ -223,6 +223,8 @@ pub struct Pill {
     idle: idle::Idle,
     /// Whether a rest opens or peeks, and how long it is (`intent.rs`).
     intent: crate::intent::Intent,
+    /// What the user has quieted: app rules (`gate.rs`).
+    gate: gate::Gate,
     to_hub: UnboundedSender<ClientMsg>,
     events: Receiver<Event>,
 }
@@ -248,26 +250,6 @@ impl Pill {
         self.render(ordered)
     }
 
-    /// What to show where (see `order::arrange`).
-    fn ordered(&mut self) -> Snapshot {
-        let open = if self.state == State::Expanded { self.open_id.clone() } else { None };
-        // "When needed" hides ongoing things, so a confirmation there leads instead of
-        // waiting in the bubble beside something the user can't see.
-        let briefs_lead = self.visibility == Visibility::WhenNeeded && !self.desktop_shows() && !self.raw.activities.iter().any(|a| a.priority >= reui_protocol::Priority::Alert);
-        let mut raw = self.raw.activities.clone();
-        if self.paused || self.hidden_by_user {
-            // Paused or hidden: only decisions show (see `wants_shown`), alone in the pill;
-            // hidden, so does a card the user summons (a hotkey asks for exactly that).
-            let asked = self.pinned.clone().filter(|_| self.hidden_by_user && !self.paused && self.summoned);
-            raw.retain(|a| a.priority == reui_protocol::Priority::Decision || Some(&a.id) == asked.as_ref());
-        }
-        let (activities, pin_alive) = order::arrange(raw, self.pinned.as_ref(), self.summoned, open.as_ref(), briefs_lead);
-        if !pin_alive {
-            self.pinned = None;
-            self.summoned = false;
-        }
-        Snapshot { activities }
-    }
 
     /// Brings another activity to the front and re-renders.
     fn bring_forward(&mut self, id: ActivityId) {

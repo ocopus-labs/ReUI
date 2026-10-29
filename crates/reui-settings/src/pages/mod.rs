@@ -13,6 +13,7 @@ mod indicators;
 mod now_playing;
 mod osd;
 mod privacy;
+mod quiet;
 mod shortcut;
 mod stats;
 mod timers;
