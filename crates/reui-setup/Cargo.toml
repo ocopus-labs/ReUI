@@ -9,6 +9,9 @@ build = "build.rs"
 [dependencies]
 windows-registry = "0.6"
 
+[build-dependencies]
+reui-design.workspace = true
+
 [dependencies.windows]
 workspace = true
 features = [

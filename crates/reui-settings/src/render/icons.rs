@@ -33,9 +33,13 @@ pub fn tile(p: &Painter, icon: Icon, r: Rect, radius: f32, glyph: f32) -> Result
 /// ReUI's mark: a light screen, the black island resting at its top centre.
 pub fn mark(p: &Painter, r: Rect, radius: f32) -> Result<()> {
     p.gradient(r, radius, c::MARK, c::MARK_LOW)?;
-    let w = r.w() * 0.5;
+    // The island and its bubble, centred together near the top, as in the logo
+    // (`tools/logo.ps1`).
+    let w = r.w() * 0.44;
     let h = (r.w() * 0.17).max(3.0);
-    let top = r.t + r.h() * 0.16;
-    let l = r.l + (r.w() - w) / 2.0;
-    p.fill(Rect::new(p.snap(l), p.snap(top), p.snap(l + w), p.snap(top + h)), h / 2.0, BLACK)
+    let gap = (r.w() * 0.05).max(1.0);
+    let top = r.t + r.h() * 0.15;
+    let l = r.l + (r.w() - (w + gap + h)) / 2.0;
+    p.fill(Rect::new(p.snap(l), p.snap(top), p.snap(l + w), p.snap(top + h)), h / 2.0, BLACK)?;
+    p.circle(p.snap(l + w + gap) + h / 2.0, p.snap(top) + h / 2.0, h / 2.0, reui_design::tokens::color::system::BLUE)
 }

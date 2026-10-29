@@ -9,3 +9,6 @@ publish.workspace = true
 reui-protocol.workspace = true
 serde_json = { version = "1.0", features = ["preserve_order"] }
 tokio = { workspace = true, features = ["rt", "net", "io-util", "time"] }
+
+[build-dependencies]
+reui-design.workspace = true

@@ -22,7 +22,7 @@ reui-settings.exe  the Settings window, opened from the tray; single instance
 | Crate | Job |
 |---|---|
 | `reui-protocol` | Wire types: `Activity`, presentations (compact, minimal, expanded), rows, priorities, actions; postcard framing |
-| `reui-design` | `design/tokens.json` compiled into constants at build time |
+| `reui-design` | `design/tokens.json` compiled into constants at build time; `icon.rs` turns `design/logo/reui.ico` into the icon resource every program's `build.rs` links in |
 | `reui-hub` | Feature modules and the hub that orders their activities |
 | `reui-island` | The island window: Windows.UI.Composition + Direct2D/DirectWrite |
 | `reui-bridge` | Hook entry point for coding agents, and the hook installer |
@@ -87,6 +87,7 @@ settings.rs        visibility modes, pause, watching settings.json   tray.rs   t
 order.rs           which activity is in the pill and which in the bubble
 place.rs           which display (monitor setting) and the window rect at its DPI
 fullscreen.rs      when to hide: D3D, presentation, busy, a window covering the display
+desktop.rs         whether the desktop (not an app) is in front, for "Always show on the desktop"
 drag_guard.rs      no hover intent while a drag from elsewhere passes over
 images.rs          encoded images from the hub
 pill/              the island's behaviour
@@ -154,7 +155,7 @@ stats.rs           idle cost: CPU and private memory of ReUI's processes
 
 | Path | What |
 |---|---|
-| `%APPDATA%\ReUI\settings.json` | island `visibility`, `hide_in_fullscreen`, `monitor`, and `paused_until` while ReUI is paused |
+| `%APPDATA%\ReUI\settings.json` | island `visibility`, `show_on_desktop`, `hide_in_fullscreen`, `monitor`, and `paused_until` while ReUI is paused |
 | `%APPDATA%\ReUI\onboarding.json` | first run done (`welcomed`), tips shown, offers answered |
 | `%APPDATA%\ReUI\clipboard.db`, `clipboard.json` | clipboard history and settings |
 | `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json`, `timers.json`, `coding.json` | music, OSD, Devices, Timers and coding agent settings (`coding.json` is read by all three agent modules) |

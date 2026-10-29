@@ -43,6 +43,8 @@ pub struct Spring {
     pub period_ms: f32,
 }
 
+pub mod icon;
+
 #[allow(clippy::excessive_precision, clippy::approx_constant)]
 pub mod tokens {
     include!(concat!(env!("OUT_DIR"), "/tokens.rs"));

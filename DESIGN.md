@@ -11,6 +11,7 @@ The look and behaviour of every ReUI surface. The island is the first surface; t
 | Components and layout | `crates/reui-island/src/render/` (one file per presentation and row) |
 | Presentations and motion | `crates/reui-island/src/pill/` |
 | Semantic view model (what modules may say) | `crates/reui-protocol` |
+| Logo | `design/logo/reui.ico` (+ a PNG per size), drawn by `tools/logo.ps1` on each size's own pixel grid: a light screen with the black island at its top and its bubble in `color.system.blue`. Every program links it in (`reui_design::icon::embed()` in its `build.rs`); the tray, the Settings window and Apps & features load it; Settings' sidebar draws the same mark |
 | References | `design/reference/` (Figma kit export, moodboard in `inspiration/`) |
 | Figma | [Dynamic Island – Live Activities (Community)](https://www.figma.com/design/Oavznl8mcr41wrSfXdpCNs/Dynamic-Island---Live-Activities--Community-) by Jasper Cheyney; island geometry comes from here |
 | Figma (system alerts) | [iOS 17 Dynamic Island Components (Community)](https://www.figma.com/design/Q5jcdhxYldk71bDnC5VzIE/iOS17-Dynamic-Island-Components--Community-); its alerts with buttons shape the agent cards (see `docs/PRD-agent-moments.md` §5.8) |

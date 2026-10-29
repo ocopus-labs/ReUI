@@ -1,5 +1,5 @@
-//! Embeds the payload (see `src/payload_gen.rs`) and the app manifest (asInvoker, modern
-//! common controls, per-monitor DPI).
+//! Embeds the payload (see `src/payload_gen.rs`), the logo and the app manifest (asInvoker,
+//! modern common controls, per-monitor DPI).
 
 #[path = "src/payload_gen.rs"]
 mod payload_gen;
@@ -19,6 +19,7 @@ fn main() {
     let out = PathBuf::from(std::env::var_os("OUT_DIR").expect("OUT_DIR"));
     std::fs::write(out.join("payload.rs"), code).expect("write payload.rs");
 
+    reui_design::icon::embed();
     if std::env::var("CARGO_CFG_TARGET_ENV").as_deref() == Ok("msvc") {
         let manifest = PathBuf::from(std::env::var_os("CARGO_MANIFEST_DIR").expect("CARGO_MANIFEST_DIR")).join("setup.manifest");
         println!("cargo:rustc-link-arg-bins=/MANIFEST:EMBED");

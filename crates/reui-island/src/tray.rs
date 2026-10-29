@@ -31,6 +31,19 @@ pub enum Command {
     Quit,
 }
 
+/// The ReUI logo (linked in by `build.rs`) at the tray's size; shared, so loading it again
+/// for each add or delete costs nothing.
+fn logo() -> HICON {
+    unsafe {
+        let module = windows::Win32::System::LibraryLoader::GetModuleHandleW(None).unwrap_or_default();
+        let (w, h) = (GetSystemMetrics(SM_CXSMICON), GetSystemMetrics(SM_CYSMICON));
+        match LoadImageW(Some(module.into()), PCWSTR(reui_design::icon::ICON_ID as usize as *const u16), IMAGE_ICON, w, h, LR_SHARED) {
+            Ok(icon) => HICON(icon.0),
+            Err(_) => LoadIconW(None, IDI_APPLICATION).unwrap_or_default(),
+        }
+    }
+}
+
 fn icon_data(hwnd: HWND) -> NOTIFYICONDATAW {
     let mut data = NOTIFYICONDATAW {
         cbSize: size_of::<NOTIFYICONDATAW>() as u32,
@@ -38,7 +51,7 @@ fn icon_data(hwnd: HWND) -> NOTIFYICONDATAW {
         uID: ICON_ID,
         uFlags: NIF_MESSAGE | NIF_ICON | NIF_TIP,
         uCallbackMessage: WM_TRAY,
-        hIcon: unsafe { LoadIconW(None, IDI_APPLICATION).unwrap_or_default() },
+        hIcon: logo(),
         ..Default::default()
     };
     for (slot, unit) in data.szTip.iter_mut().zip("ReUI".encode_utf16()) {

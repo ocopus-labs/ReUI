@@ -71,7 +71,9 @@ pub fn create(state: State, page: Page, visible: bool) -> Result<HWND> {
             lpfnWndProc: Some(wndproc),
             hInstance: instance.into(),
             hCursor: LoadCursorW(None, IDC_ARROW)?,
-            hIcon: LoadIconW(None, IDI_APPLICATION)?,
+            // The ReUI logo, linked in by build.rs.
+            hIcon: logo(instance, SM_CXICON, SM_CYICON),
+            hIconSm: logo(instance, SM_CXSMICON, SM_CYSMICON),
             lpszClassName: class,
             ..Default::default()
         };
@@ -360,5 +362,13 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             LRESULT(0)
         }
         _ => DefWindowProcW(hwnd, msg, wparam, lparam),
+    }
+}
+
+/// The ReUI logo (resource 1) at a system icon size; Windows' default icon if it's missing.
+unsafe fn logo(instance: HMODULE, w: SYSTEM_METRICS_INDEX, h: SYSTEM_METRICS_INDEX) -> HICON {
+    match LoadImageW(Some(instance.into()), PCWSTR(reui_design::icon::ICON_ID as usize as *const u16), IMAGE_ICON, GetSystemMetrics(w), GetSystemMetrics(h), LR_SHARED) {
+        Ok(icon) => HICON(icon.0),
+        Err(_) => LoadIconW(None, IDI_APPLICATION).unwrap_or_default(),
     }
 }

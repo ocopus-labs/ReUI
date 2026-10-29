@@ -915,6 +915,7 @@ dependencies = [
 name = "reui-bridge"
 version = "0.1.0"
 dependencies = [
+ "reui-design",
  "reui-protocol",
  "serde_json",
  "tokio",
@@ -936,6 +937,7 @@ dependencies = [
  "chrono",
  "encoding_rs",
  "reqwest",
+ "reui-design",
  "reui-protocol",
  "rusqlite",
  "serde",
@@ -987,6 +989,7 @@ dependencies = [
 name = "reui-setup"
 version = "0.1.0"
 dependencies = [
+ "reui-design",
  "windows",
  "windows-registry",
 ]
