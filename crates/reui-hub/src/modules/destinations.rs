@@ -31,6 +31,7 @@ struct Place {
 const PLACES: &[Place] = &[
     Place { module: "clipboard", glyph: '\u{E77F}', name: "Clipboard", open: "open", available: Available::Always },
     Place { module: "timers", glyph: '\u{E916}', name: "Timers", open: "launcher", available: Available::Always },
+    Place { module: "calendar", glyph: '\u{E787}', name: "Calendar", open: "open", available: Available::Always },
     Place { module: "devices", glyph: '\u{E772}', name: "Devices", open: "overview", available: Available::Always },
     Place { module: "stats", glyph: '\u{E9D9}', name: "System stats", open: "open", available: Available::Always },
     Place { module: "media", glyph: '\u{E8D6}', name: "Now Playing", open: "show", available: Available::WithCard },
@@ -76,8 +77,8 @@ mod tests {
 
     #[test]
     fn only_running_modules_have_a_place_in_a_fixed_order() {
-        let all = ["stats", "media", "osd", "clipboard", "claude", "timers", "devices"];
-        assert_eq!(names(&available(all, &[])), ["Clipboard", "Timers", "Devices", "System stats"]);
+        let all = ["stats", "media", "osd", "clipboard", "claude", "timers", "devices", "calendar"];
+        assert_eq!(names(&available(all, &[])), ["Clipboard", "Timers", "Calendar", "Devices", "System stats"]);
         assert_eq!(names(&available(["stats", "clipboard"], &[])), ["Clipboard", "System stats"], "a module that's off has no tab");
         assert!(available(["osd", "claude", "privacy"], &[]).is_empty(), "moments are not places");
     }
