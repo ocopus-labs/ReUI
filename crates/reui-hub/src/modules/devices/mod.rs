@@ -22,8 +22,8 @@
 //! hash; names, addresses and instance ids are never logged.
 //!
 //! Files: `peripherals.rs` and `machine.rs` (the module's handling of each source),
-//! `view.rs`, `moments.rs` (how long things stay), `kinds.rs`, `low.rs`, `handoff.rs` (the
-//! OSD hand-off) and `settings.rs`.
+//! `view.rs`, `art.rs` (ReUI's device drawings), `moments.rs` (how long things stay),
+//! `kinds.rs`, `low.rs`, `handoff.rs` (the OSD hand-off) and `settings.rs`.
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -37,6 +37,10 @@ use tokio::time::{sleep_until, Instant};
 use windows::Gaming::Input::RawGameController;
 
 mod airpods;
+/// Device drawings; not shown yet (the views still use Fluent glyphs until the model
+/// mapping lands), so only the tests use it for now.
+#[allow(dead_code)]
+mod art;
 mod bluetooth;
 mod catalog;
 mod controllers;

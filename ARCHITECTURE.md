@@ -76,7 +76,8 @@ modules/
   devices/         Bluetooth connects and batteries (watchers, containers, PnP battery and
                    Device ID reads, AirPods ads with colour and lid), anti-spam gate, low
                    battery, controllers, laptop power and time to full, drives and Eject,
-                   phones, overview, OSD hand-off, settings
+                   phones, overview, OSD hand-off, settings; art.rs looks up ReUI's device
+                   drawings by kind or family (design/assets/devices/, sent as Art::Logo)
     catalog/       exact models, offline: Device ID parsing (ids), Apple/Beats and
                    controller tables with a source per row, chip vendors to refuse, the
                    lookup order (resolve; pure, tested); families and kinds
@@ -134,6 +135,7 @@ render/            drawing only (no behaviour state); where things go is reui_de
   fonts.rs  text.rs  images.rs  elements.rs
   compact.rs  minimal.rs  expanded.rs (strip + header + row layout)
   notch.rs         the Notch style's ears
+  sheet.rs         test-only: the device-drawing contact sheet (target/devices-art/)
   rows/            timeline, controls, slider, lyrics, cards, search, tabs, note,
                    context (session strip), choices, block (scrolling text)
 features/          per-feature island logic

@@ -20,7 +20,7 @@ const IMAGE_MAX_PX: u32 = 256;
 
 pub(super) enum Decoded {
     Bitmap(IWICBitmap),
-    /// Kept as text: it's re-tinted per draw by setting the root `fill`.
+    /// Kept as text: it's re-tinted per draw by setting the root `fill` and `color`.
     Svg(String),
 }
 
@@ -87,7 +87,7 @@ impl Renderer {
                     // primary label colour (OpenAI, OpenCode). An animated compact logo is
                     // drawn by the pill so it can spin.
                     if !(*animated && slot == Slot::Compact) {
-                        let mark = size * opacity::LOGO_BARE;
+                        let mark = mark_size(size, opacity::LOGO_BARE);
                         self.svg(rt, *image, left + (size - mark) / 2.0, top + (size - mark) / 2.0, mark, self.pal().label_primary)?;
                     }
                 }
@@ -158,30 +158,53 @@ impl Renderer {
         Ok(())
     }
 
-    /// Draws a single-colour SVG mark into a `size` square at (`left`, `top`), filled with
-    /// `color`. Missing or non-SVG images draw nothing.
+    /// Draws a single-colour SVG mark into a `size` square at (`left`, `top`), in `color`.
+    /// The square is snapped to whole pixels (size and corner) so line art drawn on a
+    /// whole-unit grid (`design/assets/devices/`) lands its straight edges on pixels.
+    /// Missing or non-SVG images draw nothing.
     pub(super) fn svg(&self, rt: &ID2D1RenderTarget, image: ImageId, left: f32, top: f32, size: f32, color: Color) -> Result<()> {
         let Some(Decoded::Svg(text)) = self.images.get(&image) else { return Ok(()) };
-        let [r, g, b, _] = color.to_rgba8();
-        let tinted = text.replacen("<svg", &format!("<svg fill=\"#{r:02X}{g:02X}{b:02X}\" fill-opacity=\"{}\"", color.a), 1);
         let s = self.scale;
-        unsafe {
-            let Some(stream) = SHCreateMemStream(Some(tinted.as_bytes())) else { return Ok(()) };
-            let dc: ID2D1DeviceContext5 = rt.cast()?;
-            let document = dc.CreateSvgDocument(&stream, D2D_SIZE_F { width: size * s, height: size * s })?;
-            let mut previous = Matrix3x2::default();
-            rt.GetTransform(&mut previous);
-            rt.SetTransform(&Matrix3x2 { M31: previous.M31 + left * s, M32: previous.M32 + top * s, ..previous });
-            dc.DrawSvgDocument(&document);
-            rt.SetTransform(&previous);
-        }
-        Ok(())
+        draw_svg(rt, text, (left * s).round(), (top * s).round(), (size * s).round(), color)
     }
+}
+
+/// A bare mark's side in its `slot`-sized spot (`share` of it): whole DIPs, so at 100 %
+/// and 200 % a mark drawn on a grid of that many units maps one unit to whole pixels.
+pub(super) fn mark_size(slot: f32, share: f32) -> f32 {
+    (slot * share).round()
+}
+
+/// The SVG with `color` as its ink. Marks drawn as shapes take the root `fill` (an
+/// element's own `fill` wins: Claude's orange); line art strokes with `currentColor`, so
+/// it takes the root `color` too. The opacities follow the colour's alpha.
+pub(super) fn tinted(text: &str, color: Color) -> String {
+    let [r, g, b, _] = color.to_rgba8();
+    let hex = format!("#{r:02X}{g:02X}{b:02X}");
+    let a = color.a;
+    text.replacen("<svg", &format!("<svg fill=\"{hex}\" color=\"{hex}\" fill-opacity=\"{a}\" stroke-opacity=\"{a}\""), 1)
+}
+
+/// Draws SVG `text` tinted `color` into a `size` pixel square at pixel (`x`, `y`) of the
+/// render target's current transform.
+pub(super) fn draw_svg(rt: &ID2D1RenderTarget, text: &str, x: f32, y: f32, size: f32, color: Color) -> Result<()> {
+    let tinted = tinted(text, color);
+    unsafe {
+        let Some(stream) = SHCreateMemStream(Some(tinted.as_bytes())) else { return Ok(()) };
+        let dc: ID2D1DeviceContext5 = rt.cast()?;
+        let document = dc.CreateSvgDocument(&stream, D2D_SIZE_F { width: size, height: size })?;
+        let mut previous = Matrix3x2::default();
+        rt.GetTransform(&mut previous);
+        rt.SetTransform(&Matrix3x2 { M31: previous.M31 + x, M32: previous.M32 + y, ..previous });
+        dc.DrawSvgDocument(&document);
+        rt.SetTransform(&previous);
+    }
+    Ok(())
 }
 
 /// Drops `width`/`height` from the root `<svg>` tag so the document fills whatever viewport
 /// it's drawn into (icon sets often say `width="1em"`), scaling by its `viewBox`.
-fn fit_svg(text: &str) -> String {
+pub(super) fn fit_svg(text: &str) -> String {
     let Some(start) = text.find("<svg") else { return text.to_string() };
     let Some(len) = text[start..].find('>') else { return text.to_string() };
     let tag = &text[start..start + len];
@@ -213,12 +236,29 @@ impl Renderer {
 
 #[cfg(test)]
 mod tests {
-    use super::fit_svg;
+    use super::{fit_svg, mark_size, tinted};
+    use reui_design::Color;
 
     #[test]
     fn svg_root_size_is_dropped_so_it_fills_its_slot() {
         let svg = r#"<svg xmlns="http://www.w3.org/2000/svg" width="1em" height='1em' viewBox="0 0 128 128"><path width="5"/></svg>"#;
         assert_eq!(fit_svg(svg), r#"<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128"><path width="5"/></svg>"#);
         assert_eq!(fit_svg("<svg viewBox=\"0 0 24 24\"/>"), "<svg viewBox=\"0 0 24 24\"/>");
+    }
+
+    #[test]
+    fn a_mark_takes_the_ink_as_fill_and_as_current_colour() {
+        let ink = Color { r: 1.0, g: 0.0, b: 0.0, a: 0.5 };
+        let svg = tinted(r#"<svg viewBox="0 0 48 48"><path stroke="currentColor"/></svg>"#, ink);
+        assert!(svg.starts_with(r##"<svg fill="#FF0000" color="#FF0000" fill-opacity="0.5" stroke-opacity="0.5" viewBox"##), "{svg}");
+    }
+
+    #[test]
+    fn bare_marks_are_whole_dips() {
+        // The compact spot and the open card's at `opacity.logo-bare`: the device drawings
+        // (design/assets/devices) are made on these grids, so a token change must redraw them.
+        use reui_design::tokens::{component::art, opacity::LOGO_BARE};
+        assert_eq!(mark_size(art::COMPACT, LOGO_BARE), 21.0);
+        assert_eq!(mark_size(art::EXPANDED, LOGO_BARE), 48.0);
     }
 }
