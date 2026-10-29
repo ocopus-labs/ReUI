@@ -7,7 +7,9 @@
 //! `--page <name>` opens on a page (general, now, clipboard, osd, devices, coding, privacy,
 //! about). `--welcome` opens the three welcome steps instead (first run, or "Replay the
 //! tour"). `--check-updates` opens no window: it asks GitHub for the latest release, notes
-//! what it found in `update.json` and exits (the hub runs it once a day).
+//! what it found in `update.json` and exits (the hub runs it once a day). `--install-update`
+//! opens none either: it downloads, verifies and starts the release `update.json` holds,
+//! printing one line per step (the island's Install).
 //! `REUI_CONFIG_DIR=<dir>` keeps every file it touches in that folder and talks to no
 //! running ReUI (for testing). `--perf` logs frame times to `settings-perf.log` in the local
 //! folder; `--shots <dir>` saves every page as a PNG without showing the window.
@@ -53,6 +55,9 @@ fn main() {
     if args.iter().any(|a| a == "--check-updates") {
         updates::check_quietly(&paths);
         return;
+    }
+    if args.iter().any(|a| a == "--install-update") {
+        std::process::exit(updates::install::install_quietly(&paths));
     }
     let page = args.iter().position(|a| a == "--page").and_then(|i| args.get(i + 1)).and_then(|p| Page::from_arg(p)).unwrap_or(Page::General);
     let page = if args.iter().any(|a| a == "--welcome") { Page::WelcomeFeatures } else { page };
