@@ -62,8 +62,10 @@ pub(super) fn card(moment: &Moment, context: Context, position: (usize, usize), 
         Kind::Question { questions, step, picked, typed, .. } => {
             let step = (*step).min(questions.len().saturating_sub(1));
             let q = questions.get(step);
+            // A secret's question and options are never shown (PRD agent moments §5.9).
+            let shown = q.filter(|q| !q.secret);
             let mut rows = Vec::new();
-            if let Some(q) = q {
+            if let Some(q) = shown.filter(|q| !q.options.is_empty()) {
                 let options = q
                     .options
                     .iter()
@@ -80,26 +82,27 @@ pub(super) fn card(moment: &Moment, context: Context, position: (usize, usize), 
                 rows.push(Row::Choices { options, multi: q.multi });
             }
             let mut buttons = vec![text("terminal", "Answer in terminal", if answerable { ButtonRole::Plain } else { ButtonRole::Secondary })];
-            let mut detail = q.map(|q| q.header.clone()).filter(|h| !h.is_empty());
-            if answerable {
+            let mut detail = shown.map(|q| q.header.clone()).filter(|h| !h.is_empty());
+            if answerable && q.is_some_and(|q| q.custom) {
                 // Claude always takes a typed answer ("Other"); OpenCode when `custom`.
-                if q.is_some_and(|q| q.custom) {
-                    rows.push(field("Type an answer".into()));
-                }
-                if questions.len() > 1 {
-                    match pager {
-                        // The strip's pager is the steps when nothing else waits.
-                        None => pager = Some(Pager { index: step as u32, count: questions.len() as u32, prev: act("back"), next: act("next") }),
-                        // Otherwise the step is a fact, and Back a button.
-                        Some(_) => {
-                            let at = format!("{} of {}", step + 1, questions.len());
-                            detail = Some(detail.map_or(at.clone(), |d| format!("{d} · {at}")));
-                            if step > 0 {
-                                buttons.push(text("back", "Back", ButtonRole::Secondary));
-                            }
+                rows.push(field("Type an answer".into()));
+            }
+            // Several: the steps, to answer or only to read.
+            if questions.len() > 1 {
+                match pager {
+                    // The strip's pager is the steps when nothing else waits.
+                    None => pager = Some(Pager { index: step as u32, count: questions.len() as u32, prev: act("back"), next: act("next") }),
+                    // Otherwise the step is a fact, and Back a button.
+                    Some(_) => {
+                        let at = format!("{} of {}", step + 1, questions.len());
+                        detail = Some(detail.map_or(at.clone(), |d| format!("{d} · {at}")));
+                        if step > 0 && answerable {
+                            buttons.push(text("back", "Back", ButtonRole::Secondary));
                         }
                     }
                 }
+            }
+            if answerable {
                 let answered = picked[step].iter().any(|p| *p) || typed[step].is_some();
                 if q.is_some_and(|q| q.multi) || answered {
                     let last = step + 1 == questions.len();
@@ -107,7 +110,7 @@ pub(super) fn card(moment: &Moment, context: Context, position: (usize, usize), 
                 }
             }
             rows.push(Row::Buttons(buttons));
-            let hero = q.map_or_else(|| "Question".to_string(), |q| secrets::mask(&q.text));
+            let hero = shown.map_or_else(|| "Question".to_string(), |q| secrets::mask(&q.text));
             ("Question", Element::Empty, "Question", Headline::Text(hero), detail, rows)
         }
         Kind::Plan => {
@@ -205,6 +208,25 @@ mod tests {
         assert!(matches!(&view.rows[0], Row::Choices { options, .. } if options[0].action.is_empty()));
         assert!(!view.rows.iter().any(|r| matches!(r, Row::Search { .. })));
         assert_eq!(buttons(&view), [("3:terminal".into(), "Answer in terminal".into())]);
+    }
+
+    #[test]
+    fn codex_questions_show_but_never_a_secret() {
+        let input = json!({ "questions": [
+            { "id": "stack", "header": "Stack", "question": "Which stack?", "options": [{ "label": "Rust", "description": "Fast" }] },
+            { "id": "token", "header": "Token", "question": "Paste the hunter2 token", "isSecret": true }
+        ] });
+        let mut m = Moment::codex_question(5, "s", None, input, Instant::now());
+        let (_, view) = card(&m, context(), (0, 1), "Codex");
+        assert_eq!((view.headline.clone(), view.detail.as_deref()), (Headline::Text("Which stack?".into()), Some("Stack")));
+        assert!(matches!(&view.rows[0], Row::Choices { options, .. } if options[0].action.is_empty()), "not clickable");
+        assert_eq!(view.pager.as_ref().map(|p| p.next.as_str()), Some("5:next"), "readable one by one");
+        assert_eq!(buttons(&view), [("5:terminal".into(), "Answer in terminal".into())]);
+        m.act("next");
+        let (_, view) = card(&m, context(), (0, 1), "Codex");
+        assert_eq!((view.headline, view.detail), (Headline::Text("Question".into()), None));
+        assert_eq!(view.rows.len(), 1, "only the terminal");
+        assert!(!format!("{:?}", view.rows).contains("hunter2"));
     }
 
     #[test]

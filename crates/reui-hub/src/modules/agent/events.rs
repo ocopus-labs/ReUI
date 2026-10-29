@@ -105,6 +105,13 @@ pub(super) async fn on_hook(ctx: &ModuleContext, me: &Agentry, call: HookCall, s
             moments_changed = true;
             Some(Phase::WaitingPermission)
         }
+        // Codex asking you something: shown read-only (no hook can answer it) until its
+        // `PostToolUse` or the turn's end.
+        "PreToolUse" if tool == "request_user_input" => {
+            moments.queue.arrive(Moment::codex_question(call.id, &session_id, tool_use_id.clone(), input(), Instant::now()));
+            moments_changed = true;
+            Some(Phase::WaitingPermission)
+        }
         // OpenCode's question tool runs while its `question.asked` waits; that's the moment.
         "PreToolUse" if tool == "question" => Some(Phase::WaitingPermission),
         "PreToolUse" => Some(Phase::Tool(short_tool_name(tool))),

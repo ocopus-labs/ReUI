@@ -16,6 +16,9 @@ pub(super) const PERMISSION_WAIT: Duration = Duration::from_secs(100);
 /// Questions and plans: hub < bridge (290 s) < hook timeout (300 s). Shorter than a
 /// person might take, because Claude's own dialog may wait for this hook (PRD V1).
 pub(super) const ASK_WAIT: Duration = Duration::from_secs(280);
+/// A Codex question has no bridge waiting: it stays until its tool ran or the turn ended,
+/// and this only clears one whose end never came (a killed session).
+const READ_ONLY_WAIT: Duration = Duration::from_secs(30 * 60);
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Opt {
@@ -31,6 +34,8 @@ pub(super) struct Question {
     pub multi: bool,
     /// A typed answer is allowed (Claude: always; OpenCode: `custom`, true by default).
     pub custom: bool,
+    /// The answer is a secret (Codex's `isSecret`): nothing of it is shown.
+    pub secret: bool,
 }
 
 /// Who asked, which decides how the answers go back.
@@ -40,6 +45,9 @@ pub(super) enum Asker {
     Claude,
     /// OpenCode's `question.asked`: one list of labels per question, in order.
     OpenCode,
+    /// Codex's `request_user_input`, seen through `PreToolUse`: no hook can answer it, so
+    /// it's shown read-only and answered in the terminal.
+    Codex,
 }
 
 #[derive(Debug)]
@@ -104,6 +112,14 @@ impl Moment {
         Self::new(id, session, None, input, kind, waiting, now + ASK_WAIT)
     }
 
+    /// Codex's `request_user_input` from its `PreToolUse` (`questions[]`: `id`, `header`,
+    /// `question`, `options?`; `isSecret` when present): read-only, until its `PostToolUse`
+    /// or the turn's end.
+    pub(super) fn codex_question(id: u64, session: &str, tool_use_id: Option<String>, input: Value, now: Instant) -> Self {
+        let kind = Kind::question(parse_questions(&input, "multiSelect", Some("isOther")), Asker::Codex);
+        Self::new(id, session, tool_use_id, input, kind, false, now + READ_ONLY_WAIT)
+    }
+
     fn new(id: u64, session: &str, tool_use_id: Option<String>, input: Value, kind: Kind, waiting: bool, deadline: Instant) -> Self {
         Self { id, session: session.into(), tool_use_id, input, kind, waiting, explaining: false, text: String::new(), deadline }
     }
@@ -122,6 +138,7 @@ impl Moment {
                 // Answers go by position, so alike texts are fine; each question needs
                 // something to pick or room to type.
                 Kind::Question { questions, asker: Asker::OpenCode, .. } => !questions.is_empty() && questions.iter().all(|q| !q.options.is_empty() || q.custom),
+                Kind::Question { asker: Asker::Codex, .. } => false,
                 _ => true,
             }
     }
@@ -144,6 +161,15 @@ impl Moment {
             return if self.waiting { Outcome::Reply(None) } else { Outcome::Dismissed };
         }
         if !self.answerable() {
+            // Several questions shown read-only can still be read one by one.
+            if let Kind::Question { questions, step, .. } = &mut self.kind {
+                match action {
+                    "back" if *step > 0 => *step -= 1,
+                    "next" if *step + 1 < questions.len() => *step += 1,
+                    _ => return Outcome::Nothing,
+                }
+                return Outcome::Changed;
+            }
             return Outcome::Nothing;
         }
         let text = self.text.trim().to_string();
@@ -211,6 +237,7 @@ impl Moment {
                     Outcome::Reply(Some(match asker {
                         Asker::Claude => answer::questions(&self.input, &each.map(|((q, p), t)| (q.text.clone(), answer_of(q, p, t))).collect::<Vec<_>>()),
                         Asker::OpenCode => answer::opencode_questions(&each.map(|((q, p), t)| labels_of(q, p, t)).collect::<Vec<_>>()),
+                        Asker::Codex => return Outcome::Nothing,
                     }))
                 } else {
                     // A new step's field starts empty.
@@ -262,6 +289,7 @@ fn parse_questions(input: &Value, multi: &str, custom: Option<&str>) -> Vec<Ques
             header: s(q, "header"),
             multi: q.get(multi).and_then(Value::as_bool).unwrap_or(false),
             custom: custom.and_then(|k| q.get(k)).and_then(Value::as_bool).unwrap_or(true),
+            secret: q.get("isSecret").and_then(Value::as_bool).unwrap_or(false),
             options: q
                 .get("options")
                 .and_then(Value::as_array)
@@ -355,6 +383,24 @@ pub(super) mod tests {
         let nothing = Moment::opencode_question(2, "s1", json!({ "questions": [{ "question": "?", "options": [], "custom": false }] }), true, Instant::now());
         assert!(!nothing.answerable());
         assert!(!Moment::opencode_question(3, "s1", json!({ "questions": [] }), true, Instant::now()).answerable());
+    }
+
+    #[test]
+    fn codex_questions_are_read_only_and_page_through() {
+        // `request_user_input`'s tool input as the model sends it (no isOther / isSecret).
+        let input = json!({ "questions": [
+            { "id": "stack", "header": "Stack", "question": "Which stack?", "options": [{ "label": "Rust", "description": "Fast" }] },
+            { "id": "token", "header": "Token", "question": "Paste the token", "isSecret": true }
+        ] });
+        let mut m = Moment::codex_question(1, "s1", Some("call_1".into()), input, Instant::now());
+        assert!(!m.waiting && !m.answerable());
+        assert_eq!(m.act("pick:0"), Outcome::Nothing);
+        assert_eq!(m.act("back"), Outcome::Nothing);
+        assert_eq!(m.act("next"), Outcome::Changed);
+        assert_eq!(m.act("next"), Outcome::Nothing, "the last one");
+        let Kind::Question { questions, step: 1, .. } = &m.kind else { panic!() };
+        assert!(!questions[0].secret && questions[1].secret && questions[1].options.is_empty());
+        assert_eq!(m.act("terminal"), Outcome::Dismissed);
     }
 
     #[test]
