@@ -230,8 +230,8 @@ pub fn note_height(searchable: bool) -> f32 {
 }
 
 /// One app's line in the mixer: its icon in a spot as big as the slider's buttons (so it
-/// sits under the volume's mute), then its name over its bar. Positions are from the
-/// card's left and the line's top.
+/// sits under the volume's mute), then its name over its bar, as long as the volume's.
+/// Positions are from the card's left and the line's top.
 #[derive(Clone, Copy, Debug, PartialEq)]
 pub struct MixerLine {
     /// The icon's left and top, `icon` square.
@@ -253,7 +253,8 @@ pub fn mixer_line(look: &Look, width: f32) -> MixerLine {
     MixerLine {
         icon: (inset + (spot - icon) / 2.0, (h - icon) / 2.0),
         size: icon,
-        bar: (inset + spot + component::slider::GAP, width - inset),
+        // Its ends are the volume bar's (beside the output menu), so the levels read as one column.
+        bar: (inset + spot + component::slider::GAP, width - inset - spot - component::slider::GAP),
         label_top,
         bar_top: label_top + label + component::mixer::LABEL_GAP,
     }
@@ -285,7 +286,7 @@ mod mixer_tests {
         let (line, slider) = (mixer_line(&look, 420.0), slider(&look, 420.0, true));
         // The icon is centred where the mute button is, the bar starts where its bar does.
         assert!((line.icon.0 + line.size / 2.0 - (slider.button + slider.size / 2.0)).abs() < 0.01);
-        assert_eq!(line.bar.0, slider.bar.0);
+        assert_eq!(line.bar, slider.bar);
         assert!(line.bar_top + component::progress::HEIGHT <= component::mixer::HEIGHT);
         assert!(line.label_top >= 0.0);
     }
