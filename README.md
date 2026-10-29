@@ -81,7 +81,7 @@ Press **Win+Ctrl+T** and type how long: `10`, `90s`, `1h30`, `10m tea`. Run seve
 
 <img src="docs/images/agents.png" width="672" alt="Claude Code asking permission to run npm test, with Deny, Always and Allow">
 
-Claude Code, Codex and OpenCode show in the island only when they need you: a permission to allow or deny, a question or a plan from Claude Code, a turn that failed. Answer from the island and stay in your editor. Each card says which session is asking, shows the full command or the changed lines, and hides anything that looks like a secret. A card never takes your keyboard by itself, so a stray Enter can't allow anything. Connect an agent in Settings → Coding agents.
+Claude Code, Codex and OpenCode show in the island only when they need you: a permission to allow or deny, a question, a plan or an MCP server's form, a turn that failed. Answer from the island and stay in your editor, or jump straight to the agent's terminal. Each card says which session is asking, shows the full command or the changed lines, and hides anything that looks like a secret. A card never takes your keyboard by itself, so a stray Enter can't allow anything. Connect an agent in Settings → Coding agents.
 
 ### Appearance
 

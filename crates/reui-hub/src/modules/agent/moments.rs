@@ -1,5 +1,5 @@
-//! The moments waiting for you (agent moments PRD §5): permission requests, Claude's
-//! questions and plans, one at a time. Each keeps its own state: a question's step and the
+//! The moments waiting for you (agent moments PRD §5): permission requests, questions
+//! (Claude's and OpenCode's) and Claude's plans, one at a time. Each keeps its own state: a question's step and the
 //! answers so far, the text typed into its field, and whether that field is open (deny
 //! with a message, a plan's feedback). Pure: `queue.rs` orders them, the module owns the
 //! bridges' reply channels, `answer.rs` the JSON, `card.rs` the look.
@@ -9,13 +9,17 @@ use std::time::Duration;
 use serde_json::Value;
 use tokio::time::Instant;
 
-use super::answer::{self, Permission};
+use super::answer::{self, Elicitation, Permission};
+use super::form::{Form, Step};
 
 /// Hub < bridge (110 s) < hook timeout (120 s): the agent always gets a clean "no decision".
 pub(super) const PERMISSION_WAIT: Duration = Duration::from_secs(100);
 /// Questions and plans: hub < bridge (290 s) < hook timeout (300 s). Shorter than a
 /// person might take, because Claude's own dialog may wait for this hook (PRD V1).
 pub(super) const ASK_WAIT: Duration = Duration::from_secs(280);
+/// A Codex question has no bridge waiting: it stays until its tool ran or the turn ended,
+/// and this only clears one whose end never came (a killed session).
+const READ_ONLY_WAIT: Duration = Duration::from_secs(30 * 60);
 
 #[derive(Clone, Debug, PartialEq)]
 pub(super) struct Opt {
@@ -29,14 +33,34 @@ pub(super) struct Question {
     pub header: String,
     pub options: Vec<Opt>,
     pub multi: bool,
+    /// A typed answer is allowed (Claude: always; OpenCode: `custom`, true by default).
+    pub custom: bool,
+    /// The answer is a secret (Codex's `isSecret`): nothing of it is shown.
+    pub secret: bool,
+}
+
+/// Who asked, which decides how the answers go back.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) enum Asker {
+    /// AskUserQuestion: answers keyed by question text in the tool's input.
+    Claude,
+    /// OpenCode's `question.asked`: one list of labels per question, in order.
+    OpenCode,
+    /// Codex's `request_user_input`, seen through `PreToolUse`: no hook can answer it, so
+    /// it's shown read-only and answered in the terminal.
+    Codex,
 }
 
 #[derive(Debug)]
 pub(super) enum Kind {
     Permission { tool: String, suggestion: Option<Value> },
     /// `picked[step][option]`; `typed[step]` is a typed answer, which wins over picks.
-    Question { questions: Vec<Question>, step: usize, picked: Vec<Vec<bool>>, typed: Vec<Option<String>> },
+    Question { questions: Vec<Question>, step: usize, picked: Vec<Vec<bool>>, typed: Vec<Option<String>>, asker: Asker },
     Plan,
+    /// An MCP server's form (`Elicitation`, form mode); `server` is its name.
+    Form { server: String, message: String, form: Form },
+    /// An MCP server asking you to open a link (`Elicitation`, URL mode).
+    Link { server: String, message: String, url: String },
 }
 
 #[derive(Debug)]
@@ -79,14 +103,42 @@ impl Moment {
     /// blocking hook. `None` for other tools.
     pub(super) fn ask(id: u64, session: &str, tool: &str, tool_use_id: Option<String>, input: Value, waiting: bool, now: Instant) -> Option<Self> {
         let kind = match tool {
-            "AskUserQuestion" => {
-                let questions = parse_questions(&input);
-                Kind::Question { step: 0, picked: questions.iter().map(|q| vec![false; q.options.len()]).collect(), typed: vec![None; questions.len()], questions }
-            }
+            "AskUserQuestion" => Kind::question(parse_questions(&input, "multiSelect", None), Asker::Claude),
             "ExitPlanMode" => Kind::Plan,
             _ => return None,
         };
         Some(Self::new(id, session, tool_use_id, input, kind, waiting, now + ASK_WAIT))
+    }
+
+    /// OpenCode's `question.asked` (`questions[]`: `question`, `header`, `options[]`,
+    /// `multiple`, `custom`); `waiting` when the plugin can send the answer back.
+    pub(super) fn opencode_question(id: u64, session: &str, input: Value, waiting: bool, now: Instant) -> Self {
+        let kind = Kind::question(parse_questions(&input, "multiple", Some("custom")), Asker::OpenCode);
+        Self::new(id, session, None, input, kind, waiting, now + ASK_WAIT)
+    }
+
+    /// Codex's `request_user_input` from its `PreToolUse` (`questions[]`: `id`, `header`,
+    /// `question`, `options?`; `isSecret` when present): read-only, until its `PostToolUse`
+    /// or the turn's end.
+    pub(super) fn codex_question(id: u64, session: &str, tool_use_id: Option<String>, input: Value, now: Instant) -> Self {
+        let kind = Kind::question(parse_questions(&input, "multiSelect", Some("isOther")), Asker::Codex);
+        Self::new(id, session, tool_use_id, input, kind, false, now + READ_ONLY_WAIT)
+    }
+
+    /// Claude's `Elicitation` hook (`mcp_server_name`, `message`, `mode`, `url`,
+    /// `requested_schema`): a form, or a link in URL mode. Always blocking.
+    pub(super) fn elicitation(id: u64, session: &str, event: &Value, now: Instant) -> Self {
+        let s = |k: &str| event.get(k).and_then(Value::as_str).unwrap_or_default().trim().to_string();
+        let (server, message) = (s("mcp_server_name"), s("message"));
+        let kind = match event.get("mode").and_then(Value::as_str) {
+            Some("url") => Kind::Link { server, message, url: s("url") },
+            _ => Kind::Form { server, message, form: Form::new(event.get("requested_schema").unwrap_or(&Value::Null)) },
+        };
+        let mut moment = Self::new(id, session, None, event.clone(), kind, true, now + ASK_WAIT);
+        if let Kind::Form { form, .. } = &moment.kind {
+            moment.text = form.texts.first().cloned().unwrap_or_default();
+        }
+        moment
     }
 
     fn new(id: u64, session: &str, tool_use_id: Option<String>, input: Value, kind: Kind, waiting: bool, deadline: Instant) -> Self {
@@ -98,12 +150,19 @@ impl Moment {
     pub(super) fn answerable(&self) -> bool {
         self.waiting
             && match &self.kind {
-                Kind::Question { questions, .. } => {
+                Kind::Question { questions, asker: Asker::Claude, .. } => {
                     let mut texts: Vec<&str> = questions.iter().map(|q| q.text.as_str()).collect();
                     texts.sort_unstable();
                     texts.dedup();
                     !questions.is_empty() && texts.len() == questions.len() && questions.iter().all(|q| !q.options.is_empty())
                 }
+                // Answers go by position, so alike texts are fine; each question needs
+                // something to pick or room to type.
+                Kind::Question { questions, asker: Asker::OpenCode, .. } => !questions.is_empty() && questions.iter().all(|q| !q.options.is_empty() || q.custom),
+                Kind::Question { asker: Asker::Codex, .. } => false,
+                // A schema the card can't show is answered in the terminal (§5.6).
+                Kind::Form { form, .. } => form.fields.is_some(),
+                Kind::Link { url, .. } => !url.is_empty(),
                 _ => true,
             }
     }
@@ -111,6 +170,14 @@ impl Moment {
     /// The plan, for ExitPlanMode (`plan` as Claude Code injects it).
     pub(super) fn plan(&self) -> &str {
         self.input.get("plan").and_then(Value::as_str).unwrap_or_default()
+    }
+
+    /// What's typed in the field, as the island sends it.
+    pub(super) fn set_text(&mut self, text: &str) {
+        self.text = text.to_string();
+        if let Kind::Form { form, .. } = &mut self.kind {
+            form.typed(text);
+        }
     }
 
     /// Applies an action (the part after the moment's id: `allow`, `pick:2`, `alt:deny`…;
@@ -126,6 +193,15 @@ impl Moment {
             return if self.waiting { Outcome::Reply(None) } else { Outcome::Dismissed };
         }
         if !self.answerable() {
+            // Several questions shown read-only can still be read one by one.
+            if let Kind::Question { questions, step, .. } = &mut self.kind {
+                match action {
+                    "back" if *step > 0 => *step -= 1,
+                    "next" if *step + 1 < questions.len() => *step += 1,
+                    _ => return Outcome::Nothing,
+                }
+                return Outcome::Changed;
+            }
             return Outcome::Nothing;
         }
         let text = self.text.trim().to_string();
@@ -156,7 +232,16 @@ impl Moment {
                 false => Outcome::Reply(Some(answer::plan_revised(&text))),
             },
             (Kind::Plan, "approve") if !self.explaining => Outcome::Reply(Some(answer::plan_approved(&self.input))),
-            (Kind::Question { questions, step, picked, typed }, action) => {
+            (Kind::Form { form, .. }, action) => match form.act(action, &mut self.text) {
+                Step::Nothing => Outcome::Nothing,
+                Step::Changed => Outcome::Changed,
+                Step::Submit(content) => Outcome::Reply(Some(answer::elicitation(Elicitation::Accept(Some(content))))),
+                Step::Decline => Outcome::Reply(Some(answer::elicitation(Elicitation::Decline))),
+            },
+            // The module opens the link; Claude, told it's accepted, doesn't open it again.
+            (Kind::Link { .. }, "open") => Outcome::Reply(Some(answer::elicitation(Elicitation::Accept(None)))),
+            (Kind::Link { .. }, "decline") => Outcome::Reply(Some(answer::elicitation(Elicitation::Decline))),
+            (Kind::Question { questions, step, picked, typed, asker }, action) => {
                 let s = *step;
                 let advance = |step: &mut usize| {
                     *step += 1;
@@ -168,7 +253,7 @@ impl Moment {
                         false
                     }
                     "next" | "send" if picked[s].iter().any(|p| *p) || typed[s].is_some() => advance(step),
-                    "submit" if !text.is_empty() => {
+                    "submit" if !text.is_empty() && questions[s].custom => {
                         typed[s] = Some(text);
                         picked[s].iter_mut().for_each(|p| *p = false);
                         self.text.clear();
@@ -189,8 +274,12 @@ impl Moment {
                     },
                 };
                 if done {
-                    let answers: Vec<(String, String)> = questions.iter().zip(picked.iter()).zip(typed.iter()).map(|((q, p), t)| (q.text.clone(), answer_of(q, p, t))).collect();
-                    Outcome::Reply(Some(answer::questions(&self.input, &answers)))
+                    let each = questions.iter().zip(picked.iter()).zip(typed.iter());
+                    Outcome::Reply(Some(match asker {
+                        Asker::Claude => answer::questions(&self.input, &each.map(|((q, p), t)| (q.text.clone(), answer_of(q, p, t))).collect::<Vec<_>>()),
+                        Asker::OpenCode => answer::opencode_questions(&each.map(|((q, p), t)| labels_of(q, p, t)).collect::<Vec<_>>()),
+                        Asker::Codex => return Outcome::Nothing,
+                    }))
                 } else {
                     // A new step's field starts empty.
                     if *step != s {
@@ -213,17 +302,35 @@ fn answer_of(q: &Question, picked: &[bool], typed: &Option<String>) -> String {
     }
 }
 
-/// AskUserQuestion's `questions[]`: `question`, `header`, `options[]` (`label`,
-/// `description`), `multiSelect`. What's missing reads as empty, so a malformed input is a
-/// question we can't answer rather than an error.
-fn parse_questions(input: &Value) -> Vec<Question> {
+/// One question's answer for OpenCode: the picked labels, or what was typed.
+fn labels_of(q: &Question, picked: &[bool], typed: &Option<String>) -> Vec<String> {
+    match typed {
+        Some(t) => vec![t.clone()],
+        None => q.options.iter().zip(picked).filter(|(_, on)| **on).map(|(o, _)| o.label.clone()).collect(),
+    }
+}
+
+impl Kind {
+    fn question(questions: Vec<Question>, asker: Asker) -> Self {
+        Kind::Question { step: 0, picked: questions.iter().map(|q| vec![false; q.options.len()]).collect(), typed: vec![None; questions.len()], questions, asker }
+    }
+}
+
+/// `questions[]`: `question`, `header`, `options[]` (`label`, `description`), whether
+/// several may be picked (`multi`: Claude's `multiSelect`, OpenCode's `multiple`) and
+/// whether one may be typed (`custom`: OpenCode's flag, true when absent; Claude always
+/// takes one). What's missing reads as empty, so a malformed input is a question we can't
+/// answer rather than an error.
+fn parse_questions(input: &Value, multi: &str, custom: Option<&str>) -> Vec<Question> {
     let s = |v: &Value, k: &str| v.get(k).and_then(Value::as_str).unwrap_or_default().trim().to_string();
     let Some(list) = input.get("questions").and_then(Value::as_array) else { return Vec::new() };
     list.iter()
         .map(|q| Question {
             text: s(q, "question"),
             header: s(q, "header"),
-            multi: q.get("multiSelect").and_then(Value::as_bool).unwrap_or(false),
+            multi: q.get(multi).and_then(Value::as_bool).unwrap_or(false),
+            custom: custom.and_then(|k| q.get(k)).and_then(Value::as_bool).unwrap_or(true),
+            secret: q.get("isSecret").and_then(Value::as_bool).unwrap_or(false),
             options: q
                 .get("options")
                 .and_then(Value::as_array)
@@ -292,6 +399,74 @@ pub(super) mod tests {
         assert_eq!(m.act("pick:0"), Outcome::Nothing);
         assert_eq!(m.act("terminal"), Outcome::Reply(None));
         assert!(!Moment::ask(1, "s1", "AskUserQuestion", None, json!({}), true, Instant::now()).unwrap().answerable());
+    }
+
+    #[test]
+    fn opencode_questions_answer_by_position() {
+        let input = json!({ "questions": [
+            { "question": "Which?", "header": "Pick", "options": [{ "label": "A", "description": "first" }, { "label": "B", "description": "" }] },
+            { "question": "Which?", "header": "Several", "options": [{ "label": "X", "description": "" }, { "label": "Y", "description": "" }], "multiple": true },
+            { "question": "Name it", "header": "Name", "options": [], "custom": true },
+            { "question": "Sure?", "header": "Confirm", "options": [{ "label": "Yes", "description": "" }], "custom": false }
+        ] });
+        let mut m = Moment::opencode_question(1, "s1", input, true, Instant::now());
+        assert!(m.answerable(), "alike texts are fine: answers go by position");
+        assert_eq!(m.act("pick:1"), Outcome::Changed);
+        m.act("pick:0");
+        m.act("pick:1");
+        assert_eq!(m.act("next"), Outcome::Changed);
+        m.text = "Island".into();
+        assert_eq!(m.act("submit"), Outcome::Changed);
+        m.text = "maybe".into();
+        assert_eq!(m.act("submit"), Outcome::Nothing, "no typed answer here");
+        let Outcome::Reply(Some(out)) = m.act("pick:0") else { panic!() };
+        assert_eq!(serde_json::from_str::<Value>(&out).unwrap()["hookSpecificOutput"]["answers"], json!([["B"], ["X", "Y"], ["Island"], ["Yes"]]));
+        let nothing = Moment::opencode_question(2, "s1", json!({ "questions": [{ "question": "?", "options": [], "custom": false }] }), true, Instant::now());
+        assert!(!nothing.answerable());
+        assert!(!Moment::opencode_question(3, "s1", json!({ "questions": [] }), true, Instant::now()).answerable());
+    }
+
+    #[test]
+    fn codex_questions_are_read_only_and_page_through() {
+        // `request_user_input`'s tool input as the model sends it (no isOther / isSecret).
+        let input = json!({ "questions": [
+            { "id": "stack", "header": "Stack", "question": "Which stack?", "options": [{ "label": "Rust", "description": "Fast" }] },
+            { "id": "token", "header": "Token", "question": "Paste the token", "isSecret": true }
+        ] });
+        let mut m = Moment::codex_question(1, "s1", Some("call_1".into()), input, Instant::now());
+        assert!(!m.waiting && !m.answerable());
+        assert_eq!(m.act("pick:0"), Outcome::Nothing);
+        assert_eq!(m.act("back"), Outcome::Nothing);
+        assert_eq!(m.act("next"), Outcome::Changed);
+        assert_eq!(m.act("next"), Outcome::Nothing, "the last one");
+        let Kind::Question { questions, step: 1, .. } = &m.kind else { panic!() };
+        assert!(!questions[0].secret && questions[1].secret && questions[1].options.is_empty());
+        assert_eq!(m.act("terminal"), Outcome::Dismissed);
+    }
+
+    #[test]
+    fn mcp_forms_and_links_answer_in_the_hooks_shape() {
+        // The hooks reference's form-mode example.
+        let event = json!({ "hook_event_name": "Elicitation", "mcp_server_name": "my-mcp-server", "message": "Please provide your credentials", "mode": "form",
+            "requested_schema": { "type": "object", "properties": { "username": { "type": "string", "title": "Username" } } } });
+        let mut m = Moment::elicitation(1, "s1", &event, Instant::now());
+        assert!(m.answerable());
+        m.text = "alice".into();
+        let Outcome::Reply(Some(out)) = m.act("submit") else { panic!() };
+        assert_eq!(serde_json::from_str::<Value>(&out).unwrap(), json!({ "hookSpecificOutput": { "hookEventName": "Elicitation", "action": "accept", "content": { "username": "alice" } } }));
+
+        let link = json!({ "mcp_server_name": "my-mcp-server", "message": "Please authenticate", "mode": "url", "url": "https://auth.example.com/login" });
+        let mut m = Moment::elicitation(2, "s1", &link, Instant::now());
+        assert!(matches!(m.act("open"), Outcome::Reply(Some(s)) if s.contains("\"accept\"") && !s.contains("content")));
+        let mut m = Moment::elicitation(3, "s1", &link, Instant::now());
+        assert!(matches!(m.act("decline"), Outcome::Reply(Some(s)) if s.contains("\"decline\"")));
+
+        // Beyond a card: the terminal only.
+        let nested = json!({ "mcp_server_name": "x", "message": "m", "requested_schema": { "type": "object", "properties": { "a": { "type": "array" } } } });
+        let mut m = Moment::elicitation(4, "s1", &nested, Instant::now());
+        assert!(!m.answerable());
+        assert_eq!(m.act("decline"), Outcome::Nothing);
+        assert_eq!(m.act("terminal"), Outcome::Reply(None));
     }
 
     #[test]

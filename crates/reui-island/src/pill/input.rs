@@ -179,6 +179,13 @@ impl Pill {
             if alt && moment && !hit.pager && hit.choice.is_none() && !action.is_empty() {
                 action = format!("{ACTION_ALT}{action}");
             }
+            // A moment's button may bring the agent's terminal forward (Open terminal,
+            // Answer in terminal). Windows lets only the process that got the click hand
+            // the foreground on, so the hub may set it now; the island itself stays
+            // unfocusable.
+            if moment && !action.is_empty() {
+                unsafe { _ = AllowSetForegroundWindow(ASFW_ANY) };
+            }
             // The switcher's middle ("1/2") is only a wheel target.
             if !action.is_empty() {
                 self.act(action, card);

@@ -1,13 +1,15 @@
 //! One hook event into the module's state: the session's phase (thinking, a tool, done…)
-//! and the moments that need you (a permission, Claude's questions and plans).
+//! and the moments that need you (a permission, Claude's questions and plans, OpenCode's
+//! questions from its plugin's `Question` event).
 //!
 //! Claude's AskUserQuestion and ExitPlanMode come through `PreToolUse` twice: the blocking
 //! entry (`reui-bridge claude ask`, which waits for the answer) and the async `*` one;
 //! `moments::Queue::arrive` makes them one moment. A `PermissionRequest` for either tool is
 //! answered "no decision" at once: allowing it wouldn't carry an answer, and the island
-//! already offered it through `PreToolUse`. MCP elicitation (`Elicitation`, blocking) also
-//! gets "no decision" at once until the island can answer forms (agent moments M4), so
-//! Claude shows its own dialog without waiting.
+//! already offered it through `PreToolUse`. An MCP server's form or link (`Elicitation`,
+//! blocking) is a moment of its own; Claude's `elicitation_dialog` notification only comes
+//! once that's left to the terminal, so it shows nothing more. Codex's questions
+//! (`request_user_input`) show read-only.
 
 use std::path::{Path, PathBuf};
 
@@ -15,6 +17,7 @@ use serde_json::Value;
 use tokio::time::Instant;
 
 use super::describe::short_tool_name;
+use super::terminal::Origin;
 use super::moments::Moment;
 use super::view::publish_moments;
 use super::{read_usage, set_phase, Agentry, Moments, Phase, Session, PROMPT_CHARS};
@@ -35,9 +38,6 @@ pub(super) async fn on_hook(ctx: &ModuleContext, me: &Agentry, call: HookCall, s
     let name = str_field("hook_event_name");
     let tool = str_field("tool_name");
     match name {
-        // Not answerable here yet: Claude's own dialog, at once (dropping the reply is "no
-        // decision").
-        "Elicitation" => return,
         "PermissionRequest" if asks(tool) => return,
         "SessionEnd" => {
             sessions.remove(&session_id);
@@ -59,8 +59,12 @@ pub(super) async fn on_hook(ctx: &ModuleContext, me: &Agentry, call: HookCall, s
         usage: None,
         retract_at: None,
         last_event: Instant::now(),
+        origin: None,
     });
     session.last_event = Instant::now();
+    if let Some(origin) = Origin::of(&event) {
+        session.origin = Some(origin);
+    }
     if let Some(path) = event.get("transcript_path").and_then(Value::as_str) {
         session.transcript = Some(PathBuf::from(path));
     }
@@ -93,8 +97,34 @@ pub(super) async fn on_hook(ctx: &ModuleContext, me: &Agentry, call: HookCall, s
             moments_changed = true;
             Some(Phase::WaitingPermission)
         }
-        // Other agents' questions are read-only for now (agent moments M5).
-        "PreToolUse" if matches!(tool, "AskUserQuestion" | "question") => Some(Phase::NeedsInput(question(&event))),
+        // OpenCode's question, through its `question.asked` event (the plugin's own
+        // "Question"): answerable when the plugin can post the answer back.
+        "Question" => {
+            let waiting = call.reply.is_some();
+            moments.queue.arrive(Moment::opencode_question(call.id, &session_id, event.clone(), waiting, Instant::now()));
+            if let Some(reply) = call.reply {
+                moments.replies.insert(call.id, reply);
+            }
+            moments_changed = true;
+            Some(Phase::WaitingPermission)
+        }
+        // An MCP server asking for input (Claude): a form or a link, answered from here.
+        "Elicitation" => {
+            let Some(reply) = call.reply else { return };
+            moments.queue.arrive(Moment::elicitation(call.id, &session_id, &event, Instant::now()));
+            moments.replies.insert(call.id, reply);
+            moments_changed = true;
+            Some(Phase::WaitingPermission)
+        }
+        // Codex asking you something: shown read-only (no hook can answer it) until its
+        // `PostToolUse` or the turn's end.
+        "PreToolUse" if tool == "request_user_input" => {
+            moments.queue.arrive(Moment::codex_question(call.id, &session_id, tool_use_id.clone(), input(), Instant::now()));
+            moments_changed = true;
+            Some(Phase::WaitingPermission)
+        }
+        // OpenCode's question tool runs while its `question.asked` waits; that's the moment.
+        "PreToolUse" if tool == "question" => Some(Phase::WaitingPermission),
         "PreToolUse" => Some(Phase::Tool(short_tool_name(tool))),
         "PostToolUse" => Some(Phase::Thinking),
         "PreCompact" => Some(Phase::Compacting),
@@ -109,7 +139,7 @@ pub(super) async fn on_hook(ctx: &ModuleContext, me: &Agentry, call: HookCall, s
         }
         // A moment already shows what the agent needs.
         "Notification" if moments.queue.has_session(&session_id) => None,
-        "Notification" if matches!(str_field("notification_type"), "agent_needs_input" | "elicitation_dialog") => match &session.phase {
+        "Notification" if str_field("notification_type") == "agent_needs_input" => match &session.phase {
             // The question the agent asked already says more than the notification.
             Some(Phase::NeedsInput(Some(q))) => Some(Phase::NeedsInput(Some(q.clone()))),
             _ => Some(Phase::NeedsInput(None)),
@@ -147,13 +177,6 @@ pub(super) async fn on_hook(ctx: &ModuleContext, me: &Agentry, call: HookCall, s
     }
 }
 
-/// The first question of an AskUserQuestion (Claude: `questions[].question`; OpenCode's
-/// `question` tool the same shape), as one line.
-pub(super) fn question(event: &Value) -> Option<String> {
-    let questions = event.get("tool_input")?.get("questions")?.as_array()?;
-    questions.first()?.get("question")?.as_str().and_then(first_line)
-}
-
 /// First non-empty line, without paste markers, cut to a readable length.
 pub(super) fn first_line(text: &str) -> Option<String> {
     let line = text.lines().map(str::trim).find(|l| !l.is_empty() && !l.starts_with("<pasted_content"))?;
@@ -171,8 +194,6 @@ pub(super) fn project_name(cwd: &str, fallback: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
-
     use super::*;
 
     #[test]
@@ -180,13 +201,6 @@ mod tests {
         assert_eq!(project_name(r"\\?\D:\ocopus", "Codex"), "ocopus");
         assert_eq!(project_name("D:/fusion-proxy/", "OpenCode"), "fusion-proxy");
         assert_eq!(project_name("", "Codex"), "Codex");
-    }
-
-    #[test]
-    fn questions_are_read_from_the_tool_input() {
-        let event = json!({ "tool_input": { "questions": [{ "question": "Which framework?\nmore", "header": "Framework" }] } });
-        assert_eq!(question(&event), Some("Which framework?".into()));
-        assert_eq!(question(&json!({ "tool_input": {} })), None);
     }
 
     #[test]

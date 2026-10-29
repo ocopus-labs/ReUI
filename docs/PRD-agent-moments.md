@@ -1,21 +1,22 @@
 # PRD: Agent moments (the island only when an agent needs you)
 
-Status: M0–M3 built (see §9; real-session checks V1–V3 pending), M4–M5 open · Owner: Rohit · Revises the Agents feature in [PLAN.md](../PLAN.md) · Oct 29, 2026
+Status: M0–M5 built (see §9); real-session checks pending (V1–V3, V5; V4 and V6 answered from source, §10) · Owner: Rohit · Revises the Agents feature in [PLAN.md](../PLAN.md) · Oct 29, 2026
 
 **References** (checked Oct 29, 2026; sources in the appendix):
 - **Claude Code hooks:**
   - `PermissionRequest` blocks and is answered with allow / deny (+ `message`, `interrupt`) / allow + `updatedPermissions` / allow + `updatedInput`.
   - **AskUserQuestion and ExitPlanMode are answered from a blocking `PreToolUse` hook:** `permissionDecision: "allow"` plus `updatedInput` (the original `questions` plus `answers`, keyed by question text, multi-select labels joined with ", "). "allow" alone isn't enough.
-  - **MCP elicitation** has its own blocking `Elicitation` hook: `action` accept (with `content` keyed by the schema's properties) / decline / cancel; form and URL modes.
+  - **MCP elicitation** has its own blocking `Elicitation` hook: `action` accept (with `content` keyed by the schema's properties) / decline / cancel; form and URL modes. Input: `mcp_server_name`, `message`, and optional `mode`, `url`, `elicitation_id`, `requested_schema`. No output leaves it to Claude's dialog. **A URL-mode `accept` skips the dialog and Claude never opens the URL** (checked Oct 30, 2026), so the island opens it itself before accepting.
   - `Notification` (`permission_prompt`, `idle_prompt`, `elicitation_dialog`, `agent_needs_input`, …) can't answer anything.
   - Command hooks time out at 600 s by default; a timed-out hook's output is dropped and Claude carries on with its own flow.
 - **Codex:**
   - `PermissionRequest` works as today and a deny can carry `message`. `updatedInput` / `updatedPermissions` fail closed.
-  - Its question tool (`request_user_input`: `questions[]` with `id`, `header`, `question`, `options`, `isOther`, `isSecret`) is visible through `PreToolUse` but **no hook can answer it**, and there's no hook for plan approval or elicitation (openai/codex#12524 closed as not planned).
+  - Its question tool (`request_user_input`: `questions[]` with `id`, `header`, `question`, `options`, `isOther`, `isSecret`) is visible through `PreToolUse` but **no hook can answer it**, and there's no hook for plan approval or elicitation (openai/codex#12524 closed as not planned). What `PreToolUse` sees is the model's raw arguments (`tool_name` `request_user_input`, `tool_input.questions[]` with `id`, `header`, `question`, `options`): `isOther` and `isSecret` are set by Codex only after the hooks ran, so they're usually absent. `PostToolUse` fires only when it was answered (a cancelled one ends with the turn).
 - **OpenCode:**
-  - **The `permission.ask` plugin hook our plugin uses has not been called since v1.3.0 (March 2026), so permission answers from the island don't work for OpenCode today.**
-  - The live path: the plugin's `event` handler gets `permission.asked` (`id`, `sessionID`, `permission`, `patterns`, `metadata`, `always`) and `question.asked` (`id`, `sessionID`, `questions[]` with `question`, `header`, `options`, `multiple`, `custom`). Replies go through the server: `POST /permission/{id}/reply` `{reply: once|always|reject, message}` and `POST /question/{id}/reply` `{answers: [[label…]…]}` / `/reject`.
+  - **The `permission.ask` plugin hook has not been called since v1.3.0 (March 2026)** (still declared in v1.19.5, never triggered); the plugin was rewritten to the event path in M5.
+  - The live path: the plugin's `event` handler gets `permission.asked` (`id`, `sessionID`, `permission`, `patterns`, `metadata`, `always`) and `question.asked` (`id`, `sessionID`, `questions[]` with `question`, `header`, `options`, `multiple`, `custom`), then `permission.replied` (`sessionID`, `requestID`, `reply`), `question.replied` (`requestID`, `answers`) or `question.rejected` (`requestID`). The handler is called without being awaited and only for the plugin's own directory. The v1 SDK's event *types* are stale (they still say `permission.updated`); the shapes above are the server's. Replies go through the server: `POST /permission/{id}/reply` `{reply: once|always|reject, message?}` (the v1 client's `postSessionIdPermissionsPermissionId` reaches the deprecated `POST /session/{id}/permissions/{permissionID}` `{response}`), `POST /question/{id}/reply` `{answers: [[label…]…]}` / `/reject`; an unknown or already answered id is a 404. A `reject` also rejects the session's other pending permissions.
   - OpenCode's own prompt stays up meanwhile; whichever answers first wins.
+  - Plugins get the **v1** client (no question methods); without a server port it routes requests in-process (`Server.Default().app.fetch`), and its hey-api `_client` (protected in TypeScript, there at run time) posts to any route.
 
 **Inputs:** the agent module today (`modules/agent`), the bridge and installer, and ReUI's existing building blocks:
 - `Priority::Decision` already expands the island by itself;
@@ -117,7 +118,7 @@ Every moment uses the same anatomy, in the **roomy** width (wider than a timer c
 - Several questions: the strip's pager becomes the step ("1 of 3"), ‹ goes back with answers kept; the answer goes to the agent only after the last step. When other moments also wait, the pager pages them instead, the step moves into the detail ("Features · 2 of 3") and Back becomes a button.
 - Long lists (E-A6): the list stops at `choice.max-height` (184, about three options with descriptions, which is what `roomy-max-height` 440 leaves after the strip, header, field and buttons; the earlier "four two-line choices" estimate didn't count the field) and scrolls; the keyboard cursor scrolls its option into view.
 - **Answer in terminal** (quiet, at the end of the list): replies "no decision" right away, so the agent shows its own prompt.
-- `isSecret` (Codex) and anything that looks like a password prompt: never shown, only "Answer in terminal". (Built so far: question text, labels and descriptions go through the secret mask; Codex questions arrive with M5.)
+- `isSecret` (Codex) and anything that looks like a password prompt: never shown, only "Answer in terminal". (Built: question text, labels and descriptions go through the secret mask; a Codex `isSecret` question shows only its header as the hero, no text or options.)
 - Questions whose texts aren't distinct (E-A7), or that came without a waiting bridge (older hooks, E-A13): the options show without actions and the only button is "Answer in terminal".
 
 ### 5.5 Plan approval (Claude)
@@ -132,7 +133,8 @@ Every moment uses the same anatomy, in the **roomy** width (wider than a timer c
 - Eyebrow: the server's name + "(MCP)"; hero: the server's `message`.
 - Form fields, one step per field when there's more than one: `enum` → choice list, `boolean` → Yes / No choices, `string` / `number` / `integer` → the field (with the schema's `title` as placeholder). Required fields block Submit; a number that doesn't parse shows a quiet note.
 - Schemas we can't show (nested objects, arrays, more than 6 fields): only "Answer in terminal".
-- URL mode: the host in the detail; Decline / Open link (opens the default browser, then the card waits for `elicitation_complete` or the hook's end).
+- URL mode: the host in the detail; Decline / Open link (opens the default browser, http(s) only, and accepts at once: Claude doesn't open a URL a hook accepted, and the server's own completion follows without us).
+- As built: a choice step's pick moves on, except on the last step, which waits for Submit; Next shows once the step may be left (filled, or optional); a number that doesn't parse says "Not a number" / "Not a whole number" in the detail; the compact pill says "Input". "cancel" is never sent: leaving a form to the terminal is no output (Claude's own dialog).
 
 ### 5.7 Keyboard
 
@@ -170,7 +172,7 @@ Differences we keep: the session strip (iOS alerts don't need to say which app i
 | Claude answers | `{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"allow","updatedInput":{"questions":[…as received…],"answers":{"<question>":"<label>, <label>"}}}}`. Plans: `allow` + `updatedInput` echoing `plan`, or `deny` + `permissionDecisionReason` | Typed answers go in as the answer text (*V2*) |
 | Claude elicitation | Blocking `Elicitation` hook (matcher `*`, 300 s); reply `{"hookSpecificOutput":{"hookEventName":"Elicitation","action":"accept","content":{…}}}` or `decline` | `ElicitationResult` isn't needed. Installed since M2; until M4 the hub answers "no decision" at once (no output: Claude's own dialog, per the hooks reference) |
 | Codex | `PermissionRequest` as today, plus `message` on deny. A `PreToolUse` with `tool_name` `request_user_input` publishes the read-only question; its `PostToolUse` (or `Stop`) retracts it | Matching `^request_user_input$` in the existing async `*` hook is enough; nothing new to install |
-| OpenCode | The plugin drops `permission.ask` and listens to `permission.asked`, `question.asked`, `permission.replied`, `question.replied`, `question.rejected`. It forwards the first two as `PermissionRequest` / a new `Question` event and waits for the bridge; it answers with the plugin's `client` (`postSessionIdPermissionsPermissionId` with `once`/`always`/`reject`; questions through `client._client.post` to `/question/{id}/reply`, *V4*) | The `*.replied` events retract the card when you answer in OpenCode. A reply that loses the race gets NotFound, which is ignored |
+| OpenCode | The plugin drops `permission.ask` and listens to `permission.asked`, `question.asked`, `permission.replied`, `question.replied`, `question.rejected`. It forwards the first two as `PermissionRequest` / a new `Question` event and waits for the bridge; it answers with the plugin's `client` (`postSessionIdPermissionsPermissionId` with `once`/`always`/`reject`; a deny with the user's message through `_client.post` to `/permission/{id}/reply`; questions through `client._client.post` to `/question/{id}/reply`, *V4*). Without `_client`, `fetch` to the server's port when it has one; else the question shows read-only | The `*.replied` / `question.rejected` events stop the waiting bridge, so `HookGone` retracts the card. A reply that loses the race gets NotFound, which is ignored. The hub rewrites an older installed plugin (user scope) on start (`reui-plugin: 2` marker) |
 | Waits | Hub deadline < bridge deadline < hook timeout, per kind: permissions 100 / 110 / 120 s (today), questions, plans and forms 280 / 290 / 300 s | Codex and OpenCode keep their current limits |
 | Answer in terminal | The hub replies `None` at once; the card goes | |
 | Open terminal (finished, failed, Codex questions) | The bridge sends its parent process chain with the event; the hub walks it to the first process with a visible top-level window (Windows Terminal, the VS Code window, conhost) and activates it with `AllowSetForegroundWindow` from the island's click | Can reach the window, not the tab (*V5*) |
@@ -228,19 +230,19 @@ New pieces, all semantic:
 | M1 | Quiet sessions: nothing published while working; Show sessions / Show finished settings; the permission card rebuilt with the strip and the body block; deny with a message | Two real Claude sessions in this repo: nothing shows until a permission | Built; deny with a message, several moments paged (S10), long choice lists and secret masking added with M2 |
 | M2 | Claude questions: the blocking `PreToolUse` hook, steps, multi-select, typed answers, Answer in terminal; installer and bridge sync | *V1*, *V2* answered; a real AskUserQuestion answered from the island lands in Claude | Built; the bridge's output checked against the documented shape with a recorded-shape event through a sandboxed hub. Pending: V1, V2 and a real session |
 | M3 | Plan approval with feedback | A real plan approved, and one sent back with feedback, from the island | Built (Approve echoes the input; Keep planning denies with the reason; no permission mode set). Pending: a real plan, V3 |
-| M4 | MCP forms and URLs | A test MCP server's form (enum, boolean, string) and URL request answered | Open (the blocking `Elicitation` hook is installed and answered "no decision" at once) |
-| M5 | OpenCode rewrite (permissions work again, questions), Codex read-only questions, Open terminal | Real OpenCode 1.18 permission and question answered; Codex question shown and retracted | Open |
+| M4 | MCP forms and URLs | A test MCP server's form (enum, boolean, string) and URL request answered | Built (`schema.rs`, `form.rs`, `link.rs`); a form (enum, boolean, string, integer) and a URL request in the documented shapes answered through a sandboxed hub and island, the bridge's output exactly the hooks reference's. Pending: a real MCP server's elicitation in Claude Code, Open link in a real session |
+| M5 | OpenCode rewrite (permissions work again, questions), Codex read-only questions, Open terminal | Real OpenCode 1.18 permission and question answered; Codex question shown and retracted | Built. The real plugin ran against a fake OpenCode client through the real bridge, sandboxed hub and island (permission → `always` on the v1 route, question → `/question/{id}/reply`, `permission.replied` retracts); Codex's question shown, paged and retracted by its `PostToolUse` with recorded-shape events. Pending: real OpenCode 1.18+ and Codex sessions, Open terminal in Windows Terminal / VS Code / conhost (*V5*) |
 
 ## 10. To verify
 
-| ID | Question | How |
-|---|---|---|
-| V1 | Does Claude show its own question / plan dialog while a blocking `PreToolUse` hook waits, or only after? Same for `PermissionRequest` (open in PLAN.md) | `claude --debug` with a hook that sleeps 30 s |
-| V2 | How a typed ("Other") answer is passed in `answers`: as plain text? | Try it; read the transcript entry Claude writes |
-| V3 | What permission mode Claude continues in after a hook approves ExitPlanMode; whether `updatedPermissions` `setMode` is honoured there | Try it, compare `permission_mode` on the next event |
-| V4 | Whether the OpenCode v1 plugin client reaches `/question/{id}/reply` through `_client.post` without a server port | Try in the TUI; fall back to `fetch` when a server port is up, else read-only |
-| V5 | Finding the terminal window from the bridge's parent chain for Windows Terminal, VS Code's terminal and conhost | Spike |
-| V6 | Whether Codex's `PreToolUse` fires for `request_user_input` in the released build (it does on `main`) | Real Codex session in plan mode |
+| ID | Question | How | Found |
+|---|---|---|---|
+| V1 | Does Claude show its own question / plan dialog while a blocking `PreToolUse` hook waits, or only after? Same for `PermissionRequest` (open in PLAN.md) | `claude --debug` with a hook that sleeps 30 s | Open |
+| V2 | How a typed ("Other") answer is passed in `answers`: as plain text? | Try it; read the transcript entry Claude writes | Open |
+| V3 | What permission mode Claude continues in after a hook approves ExitPlanMode; whether `updatedPermissions` `setMode` is honoured there | Try it, compare `permission_mode` on the next event | Open |
+| V4 | Whether the OpenCode v1 plugin client reaches `/question/{id}/reply` through `_client.post` without a server port | Try in the TUI; fall back to `fetch` when a server port is up, else read-only | From v1.19.5's source (Oct 30): yes, by reading. The plugin's client is the v1 SDK built with `fetch: Server.Default().app.fetch` when no port is up, so every request runs in-process; `_client` is hey-api's client (`post` fills `{requestID}` from `path`, JSON body). Still to see in a real TUI |
+| V5 | Finding the terminal window from the bridge's parent chain for Windows Terminal, VS Code's terminal and conhost | Spike | Built as: nearest ancestor with a visible, unowned top-level window, Explorer skipped; else a visible console the bridge shares. Untried with real terminals |
+| V6 | Whether Codex's `PreToolUse` fires for `request_user_input` in the released build (it does on `main`) | Real Codex session in plan mode | On `main` (Oct 30): yes, `tool_name` `request_user_input`, the model's raw arguments as `tool_input` (no `isOther` / `isSecret`); the handler only runs in plan mode for the root agent. Still to see in a released build |
 
 ## 11. Open questions
 
@@ -251,5 +253,5 @@ New pieces, all semantic:
 ## Appendix: sources
 
 - Claude Code hooks reference: https://code.claude.com/docs/en/hooks (PermissionRequest, PreToolUse "Tools that require user interaction", Elicitation, Notification, timeouts); MCP elicitation: https://code.claude.com/docs/en/mcp; permission modes: https://code.claude.com/docs/en/permission-modes
-- Codex hooks: https://learn.chatgpt.com/docs/hooks; `codex-rs/hooks/src/events/permission_request.rs`, `codex-rs/protocol/src/request_user_input.rs`; openai/codex#12524
-- OpenCode (anomalyco/opencode v1.19.5): `packages/schema/src/v1/question.ts`, `packages/schema/src/v1/permission.ts`, `packages/opencode/src/server/routes/instance/httpapi/groups/{question,permission,session}.ts`, `packages/opencode/src/plugin/index.ts`; issues #47654, #47674
+- Codex hooks: https://learn.chatgpt.com/docs/hooks; `codex-rs/hooks/src/events/permission_request.rs`, `codex-rs/protocol/src/request_user_input.rs`, `codex-rs/core/src/tools/handlers/request_user_input_spec.rs`, `codex-rs/core/src/tools/registry.rs` (main @184c9c5, read Oct 30, 2026); openai/codex#12524
+- OpenCode (anomalyco/opencode v1.19.5, commit 810c0eba; sst/opencode redirects there): `packages/schema/src/v1/question.ts`, `packages/schema/src/v1/permission.ts`, `packages/opencode/src/server/routes/instance/httpapi/groups/{question,permission,session}.ts`, `packages/opencode/src/plugin/index.ts`, `packages/opencode/src/tool/edit.ts` (edit permissions: `metadata.filepath`, `metadata.diff`), `packages/sdk/js/src/gen/sdk.gen.ts` (v1 client); issues #47654, #47674

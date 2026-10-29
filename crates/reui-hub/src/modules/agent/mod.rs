@@ -11,11 +11,12 @@
 //! `coding.json` asks for them (`settings.rs`, PRD agent moments M1), so a busy agent costs
 //! the island nothing.
 //!
-//! The moments (permission requests, Claude's questions and plans) wait in one queue and
-//! show as one decision card with the session's strip (project, prompt, time in turn), so
-//! two sessions never get confused; several page on the strip, oldest first. Answering one
-//! replies to its waiting bridge; if the bridge goes away (answered in the agent's own UI,
-//! timed out) the moment goes too. Every wait ends before the agent's hook timeout.
+//! The moments (permission requests, questions, Claude's plans and MCP forms and links)
+//! wait in one queue and show as one decision card with the session's strip (project,
+//! prompt, time in turn), so two sessions never get confused; several page on the strip,
+//! oldest first. Answering one replies to its waiting bridge; if the bridge goes away
+//! (answered in the agent's own UI, timed out) the moment goes too. Every wait ends before
+//! the agent's hook timeout. Codex's questions show read-only: no hook can answer them.
 //!
 //! Each hook event is also noted (throttled) in `agents.json` for Settings' status line,
 //! and `reui-bridge test <agent>` (Settings' "Send test event") gets a short "connected"
@@ -23,9 +24,11 @@
 //!
 //! Files: `events.rs` (a hook event into sessions and moments), `queue.rs` (the moments
 //! in line, the async and blocking duplicates made one), `moments.rs` (each moment's steps
-//! and answers), `answer.rs` (the reply JSON), `card.rs` (a moment's card), `plan.rs` (a plan read for its card), `view.rs` (what shows), `describe.rs` (a
-//! tool request for humans), `settings.rs` (`coding.json`), `usage.rs` (token usage),
-//! `status.rs` (`agents.json`, the test event).
+//! and answers), `form.rs` (an MCP form being filled in), `schema.rs` (its schema read as
+//! fields), `link.rs` (an MCP link opened), `answer.rs` (the reply JSON), `card.rs` (a
+//! moment's card), `plan.rs` (a plan read for its card), `view.rs` (what shows),
+//! `describe.rs` (a tool request for humans), `settings.rs` (`coding.json`), `usage.rs`
+//! (token usage), `status.rs` (`agents.json`, the test event).
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -42,11 +45,15 @@ mod answer;
 mod card;
 mod describe;
 mod events;
+mod form;
+mod link;
 mod moments;
 mod plan;
 mod queue;
+mod schema;
 mod settings;
 mod status;
+mod terminal;
 mod usage;
 mod view;
 
@@ -56,6 +63,7 @@ use self::moments::{Kind, Outcome};
 use self::queue::Queue;
 use self::settings::Settings;
 use self::status::Throttle;
+use self::terminal::Origin;
 use self::usage::Ledger;
 use self::view::{publish_moments, publish_session, publish_test, TEST_KEY};
 use super::Module;
@@ -83,7 +91,8 @@ pub struct Profile {
     pub logo: Option<&'static [u8]>,
     /// Tile glyph when there's no logo.
     pub glyph: char,
-    /// Whether the agent accepts "always allow" (Claude Code's `updatedPermissions`).
+    /// Whether the agent accepts "always allow" (Claude Code's `updatedPermissions`,
+    /// OpenCode's `always` reply).
     pub can_always: bool,
     pub usage: UsageSource,
 }
@@ -118,8 +127,9 @@ pub const OPENCODE: Profile = Profile {
     accent: Rgb(130, 170, 255),
     logo: Some(include_bytes!("../../../../../design/assets/agents/opencode.svg")),
     glyph: GLYPH_TERMINAL,
-    // `permission.ask` only takes allow / deny / ask.
-    can_always: false,
+    // Replies take "always" for the patterns `permission.asked` offers (the plugin sends
+    // them as the suggestion).
+    can_always: true,
     usage: UsageSource::OpenCodeSessions,
 };
 
@@ -170,6 +180,8 @@ struct Session {
     usage: Option<Usage>,
     retract_at: Option<Instant>,
     last_event: Instant,
+    /// Where its terminal is (the bridge's last parent chain), for "Open terminal".
+    origin: Option<Origin>,
 }
 
 /// Fresh tokens (cache reads left out where the agent reports them).
@@ -258,6 +270,16 @@ async fn run(profile: &'static Profile, mut ctx: ModuleContext) {
                 Some(ModuleInput::Action(action)) if action.key.starts_with(view::MOMENT_PREFIX) => {
                     on_moment_action(&ctx, &me, &action.action, &mut sessions, &mut moments);
                 }
+                // A failed turn's Open terminal: there, and the alert goes.
+                Some(ModuleInput::Action(action)) if action.action == view::ACTION_TERMINAL => {
+                    let id = action.key.strip_prefix("session-").unwrap_or_default();
+                    if let Some(session) = sessions.get_mut(id) {
+                        open_terminal(session);
+                        session.phase = None;
+                        session.retract_at = None;
+                        ctx.retract(&action.key);
+                    }
+                }
                 Some(ModuleInput::Action(_)) => {}
                 None => break,
             },
@@ -312,7 +334,7 @@ fn on_moment_action(ctx: &ModuleContext, me: &Agentry, action: &str, sessions: &
     } else if let Some(text) = action.strip_prefix(ACTION_SEARCH) {
         // Echoed back as the field's query, so the island knows the module has it.
         let Some(m) = moments.queue.current_mut() else { return };
-        m.text = text.to_string();
+        m.set_text(text);
         (m.id, Outcome::Changed)
     } else if action == ACTION_SUBMIT {
         let Some(m) = moments.queue.current_mut() else { return };
@@ -320,7 +342,21 @@ fn on_moment_action(ctx: &ModuleContext, me: &Agentry, action: &str, sessions: &
     } else {
         let Some((id, verb)) = Queue::parse(action) else { return };
         let Some(m) = moments.queue.get_mut(id) else { return };
-        (id, m.act(&verb))
+        let outcome = m.act(&verb);
+        // Answer in terminal: the agent's own prompt comes, so bring its window forward.
+        if verb.trim_start_matches("alt:") == view::ACTION_TERMINAL && outcome != Outcome::Nothing {
+            if let Some(session) = sessions.get(&m.session) {
+                open_terminal(session);
+            }
+        }
+        // Open link: the browser first, then the accept (Claude won't open it itself).
+        if let (Kind::Link { url, .. }, Outcome::Reply(Some(_))) = (&m.kind, &outcome) {
+            if verb == "open" {
+                let url = url.clone();
+                tokio::task::spawn_blocking(move || link::open(&url));
+            }
+        }
+        (id, outcome)
     };
     match outcome {
         Outcome::Nothing => return,
@@ -365,6 +401,14 @@ async fn read_usage(me: &Agentry, session_id: &str, transcript: Option<PathBuf>)
     .await
     .ok()
     .flatten()
+}
+
+/// Brings the window the session's agent runs in forward, when the bridge told us where.
+/// The island allowed it with the click (`AllowSetForegroundWindow`).
+fn open_terminal(session: &Session) {
+    if let Some(origin) = session.origin.clone() {
+        tokio::task::spawn_blocking(move || terminal::open(&origin));
+    }
 }
 
 /// Moves a session on after its moment is settled.

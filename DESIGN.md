@@ -67,6 +67,7 @@ Layout templates fall out of the content, so modules don't pick them:
 | Progress and/or transport | Header, then full-width rows | Music |
 | Text buttons | Header, then equal-width capsules | Agent permission |
 | A session strip (`context`) | One quiet line above the header; the pager moves onto it | Agent moments |
+| A moment's one text button, alone | A capsule beside the hero (`inline` tall, `inline-text-padding` each side) when the hero fits beside it, else full width under the text | A failed turn's Open terminal |
 
 ## Behaviour
 

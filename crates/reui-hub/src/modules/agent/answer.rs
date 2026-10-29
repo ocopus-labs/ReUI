@@ -1,8 +1,10 @@
 //! The JSON the bridge prints back to the agent for each kind of moment, exactly in the
 //! shapes Claude Code documents (code.claude.com/docs/en/hooks): `PermissionRequest`'s
 //! `decision`, and `PreToolUse`'s `permissionDecision` + `updatedInput` for the tools that
-//! need you (AskUserQuestion, ExitPlanMode). Codex reads the permission shape as-is; the
-//! OpenCode plugin reads `decision.behavior` from it. "No decision" is no JSON at all
+//! need you (AskUserQuestion, ExitPlanMode), and `Elicitation`'s `action` / `content` for
+//! MCP forms and links. Codex reads the permission shape as-is; the
+//! OpenCode plugin reads `decision` from it (allow, allow with `updatedPermissions` for
+//! "always", deny with its `message`) and its questions' answers from our own shape. "No decision" is no JSON at all
 //! (`None` to the bridge), so it isn't here. Pure.
 
 use serde_json::{json, Map, Value};
@@ -37,6 +39,34 @@ pub(super) fn questions(input: &Value, answers: &[(String, String)]) -> String {
     let answers: Map<String, Value> = answers.iter().map(|(q, a)| (q.clone(), Value::String(a.clone()))).collect();
     updated.insert("answers".into(), Value::Object(answers));
     allow(Value::Object(updated))
+}
+
+/// An MCP elicitation (`Elicitation` hook) answered from the island.
+#[derive(Debug, PartialEq)]
+pub(super) enum Elicitation {
+    /// The form's values keyed by the schema's property names; `None` for a URL the island
+    /// opened (which Claude then doesn't open again).
+    Accept(Option<Map<String, Value>>),
+    Decline,
+}
+
+/// The `Elicitation` hook's answer: `action` and, when accepting a form, its `content`.
+/// ("cancel", Claude's Esc, isn't sent: leaving a request is "Answer in terminal", which
+/// is no output and Claude's own dialog.)
+pub(super) fn elicitation(answer: Elicitation) -> String {
+    let out = match answer {
+        Elicitation::Accept(Some(content)) => json!({ "hookEventName": "Elicitation", "action": "accept", "content": content }),
+        Elicitation::Accept(None) => json!({ "hookEventName": "Elicitation", "action": "accept" }),
+        Elicitation::Decline => json!({ "hookEventName": "Elicitation", "action": "decline" }),
+    };
+    json!({ "hookSpecificOutput": out }).to_string()
+}
+
+/// OpenCode's questions answered: one list per question, in order (the picked labels, or
+/// the typed text alone), as the plugin posts them to `/question/{id}/reply`. ReUI's own
+/// shape, in the same envelope as the rest; only our plugin reads it.
+pub(super) fn opencode_questions(answers: &[Vec<String>]) -> String {
+    json!({ "hookSpecificOutput": { "hookEventName": "Question", "answers": answers } }).to_string()
 }
 
 /// ExitPlanMode approved: allow, echoing the input (the plan Claude Code injected). Which
@@ -90,6 +120,22 @@ mod tests {
                 "answers": { "Which framework?": "React", "Which features?": "Blog, Search" }
             } } })
         );
+    }
+
+    #[test]
+    fn elicitations_match_the_hook_schema() {
+        // The hooks reference's examples, verbatim.
+        let content = json!({ "username": "alice" }).as_object().unwrap().clone();
+        assert_eq!(parse(&elicitation(Elicitation::Accept(Some(content)))), json!({ "hookSpecificOutput": { "hookEventName": "Elicitation", "action": "accept", "content": { "username": "alice" } } }));
+        assert_eq!(parse(&elicitation(Elicitation::Decline)), json!({ "hookSpecificOutput": { "hookEventName": "Elicitation", "action": "decline" } }));
+        assert_eq!(parse(&elicitation(Elicitation::Accept(None))), json!({ "hookSpecificOutput": { "hookEventName": "Elicitation", "action": "accept" } }));
+    }
+
+    #[test]
+    fn opencode_answers_are_one_list_per_question() {
+        // `POST /question/{requestID}/reply` takes `{ answers: string[][] }` (OpenCode 1.19).
+        let out = parse(&opencode_questions(&[vec!["Astro".into()], vec!["Blog".into(), "Search".into()], vec!["typed".into()]]));
+        assert_eq!(out, json!({ "hookSpecificOutput": { "hookEventName": "Question", "answers": [["Astro"], ["Blog", "Search"], ["typed"]] } }));
     }
 
     #[test]

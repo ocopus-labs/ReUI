@@ -226,27 +226,46 @@ fn entropy(t: &str) -> f64 {
 }
 
 #[cfg(test)]
-mod tests {
+pub(crate) mod tests {
     use super::*;
+
+    // Credentials in these tests are put together at run time, so the source never holds a
+    // token-shaped literal for a secret scanner to flag (the repository is public).
+
+    /// `parts` joined: each credential is split where a scanner's pattern would match.
+    pub(crate) fn fake(parts: &[&str]) -> String {
+        parts.concat()
+    }
+
+    /// A GitHub personal access token's shape (`ghp_` and 36 more).
+    pub(crate) fn github_token() -> String {
+        fake(&["gh", "p_wWPw5k4aXcaT4fNP0UcnZwJUVFk6LO0pINUx"])
+    }
+
+    /// A PEM key's marker line ("BEGIN RSA", "END RSA" and so on, as the PEM writes them).
+    fn pem_line(what: &str) -> String {
+        format!("-----{what} PRIVATE {}-----", "KEY")
+    }
+
+    const PEM_BODY: &str = "MIIEpAIBAAKCAQEA3Tz2mr7SZiAMfQyuvBjM9Oi7m2uR6vOFcVQhXZ1bXtq8+K4l";
 
     #[test]
     fn credentials_are_detected() {
-        let pem = "-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA3Tz2mr7SZiAMfQyuvBjM9Oi7m2uR6vOFcVQhXZ1bXtq8+K4l\nWQ8xUkMjB0xZHjE=\n-----END RSA PRIVATE KEY-----";
         let secrets = [
-            pem.to_string(),
-            "-----BEGIN OPENSSH PRIVATE KEY-----\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\n".into(),
-            "AKIAIOSFODNN7EXAMPLE".into(),
-            "aws_access_key_id = ASIAY34FZKBOKMUTVV7A".into(),
-            "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".into(),
-            "token: gho_16C7e42F292c6912E7710c838347Ae178B4a.".into(),
-            "github_pat_11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ012345".into(),
-            "xoxb-2048-123456789012-AbCdEfGhIjKlMnOpQrStUvWx".into(),
-            "sk_live_4eC39HqLyjWDarjtT1zdp7dc".into(),
-            "rk_live_51H8bXYZabc123DEF456ghi".into(),
-            "AIzaSyD-9tSrke72PouQMnMX-a7eZSW0jkFMBWY".into(),
-            "Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4ifQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c".into(),
-            "Zx8Qk2LmN4pR7sT9vW1yB3dF6hJ0aC5e".into(),
-            "q7Hc9Kd2Lp/Xw4Rt+Vb8Nm3Js6Fg1Za0".into(),
+            format!("{}\n{PEM_BODY}\nWQ8xUkMjB0xZHjE=\n{}", pem_line("BEGIN RSA"), pem_line("END RSA")),
+            format!("{}\nb3BlbnNzaC1rZXktdjEAAAAABG5vbmUAAAAEbm9uZQAAAAAAAAABAAAAMwAAAAtzc2gtZW\n", pem_line("BEGIN OPENSSH")),
+            fake(&["AKIA", "IOSFODNN7EXAMPLE"]),
+            fake(&["aws_access_key_id = ASIA", "Y34FZKBOKMUTVV7A"]),
+            github_token(),
+            fake(&["token: gh", "o_16C7e42F292c6912E7710c838347Ae178B4a."]),
+            fake(&["github_", "pat_11ABCDEFG0123456789_abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ012345"]),
+            fake(&["xo", "xb-2048-123456789012-AbCdEfGhIjKlMnOpQrStUvWx"]),
+            fake(&["sk_", "live_4eC39HqLyjWDarjtT1zdp7dc"]),
+            fake(&["rk_", "live_51H8bXYZabc123DEF456ghi"]),
+            fake(&["AIza", "SyD-9tSrke72PouQMnMX-a7eZSW0jkFMBWY"]),
+            fake(&["Authorization: Bearer ey", "JhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.ey", "JzdWIiOiIxMjM0NTY3ODkwIiwibmFtZSI6IkpvaG4ifQ.SflKxwRJSMeKKF2QT4fwpMeJf36POk6yJV_adQssw5c"]),
+            "Zx8Qk2LmN4pR7sT9vW1yB3dF6hJ0aC5e".to_string(),
+            "q7Hc9Kd2Lp/Xw4Rt+Vb8Nm3Js6Fg1Za0".to_string(),
         ];
         for s in &secrets {
             assert!(looks_secret(s), "missed: {s}");
@@ -276,7 +295,6 @@ mod tests {
             "my-very-long-file-name-for-the-report-final-v2.docx",
             "AKIA is the prefix of AWS keys",
             "ASIAPACIFICCOMPANIES",
-            "-----BEGIN RSA PRIVATE KEY-----",
             "eyJhbGciOiJIUzI1NiJ9 is a JWT header",
             "eyJub3QiOiJhIGp3dCJ9.eyJzdWIiOiIxIn0.c2ln",
             "Settings_Version_2_Final_Draft_Copy_3",
@@ -290,19 +308,20 @@ mod tests {
         for s in ordinary {
             assert!(!looks_secret(s), "false positive: {s}");
         }
+        assert!(!looks_secret(&pem_line("BEGIN RSA")), "a key's marker alone");
     }
 
     #[test]
     fn masking_keeps_the_text_and_hides_the_secret() {
         assert_eq!(mask("cargo test --workspace"), "cargo test --workspace");
         assert_eq!(
-            mask("curl -H \"Authorization: token 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\" https://api.github.com"),
+            mask(&format!("curl -H \"Authorization: token {}\" https://api.github.com", github_token())),
             format!("curl -H \"Authorization: token {MASK}\" https://api.github.com")
         );
-        assert_eq!(mask("export AWS_ACCESS_KEY_ID=AKIAIOSFODNN7EXAMPLE\nset KEY=q7Hc9Kd2Lp/Xw4Rt+Vb8Nm3Js6Fg1Za0"), format!("export AWS_ACCESS_KEY_ID={MASK}\nset KEY={MASK}"));
+        assert_eq!(mask(&fake(&["export AWS_ACCESS_KEY_ID=AKIA", "IOSFODNN7EXAMPLE\nset KEY=q7Hc9Kd2Lp/Xw4Rt+Vb8Nm3Js6Fg1Za0"])), format!("export AWS_ACCESS_KEY_ID={MASK}\nset KEY={MASK}"));
         assert_eq!(mask("deploy --key q7Hc9Kd2Lp/Xw4Rt+Vb8Nm3Js6Fg1Za0"), format!("deploy --key {MASK}"));
-        let pem = "echo '-----BEGIN RSA PRIVATE KEY-----\nMIIEpAIBAAKCAQEA3Tz2mr7SZiAMfQyuvBjM9Oi7m2uR6vOFcVQhXZ1bXtq8+K4l\n-----END RSA PRIVATE KEY-----' > key.pem";
-        assert_eq!(mask(pem), format!("echo '-----BEGIN RSA PRIVATE KEY-----\n{MASK}\n-----END RSA PRIVATE KEY-----' > key.pem"));
+        let (begin, end) = (pem_line("BEGIN RSA"), pem_line("END RSA"));
+        assert_eq!(mask(&format!("echo '{begin}\n{PEM_BODY}\n{end}' > key.pem")), format!("echo '{begin}\n{MASK}\n{end}' > key.pem"));
         // What isn't a secret on its own stays readable.
         let ordinary = "git commit -m \"fix the build\" && git push origin 3f786850e387550fdab836ed7e6dc881de23001b";
         assert_eq!(mask(ordinary), ordinary);

@@ -23,8 +23,21 @@ const MAX_FRAME: usize = 16 * 1024 * 1024;
 /// real ReUI without either seeing the other's surfaces.
 pub fn pipe_name() -> String {
     let user = std::env::var("USERNAME").unwrap_or_else(|_| "default".into());
-    let sandbox = std::env::var_os("REUI_CONFIG_DIR").is_some_and(|v| !v.is_empty());
-    format!(r"\\.\pipe\reui-hub-{user}{}", if sandbox { "-sandbox" } else { "" })
+    format!(r"\\.\pipe\reui-hub-{user}{}", sandbox_suffix())
+}
+
+/// What sets a test hub's pipe and single-instance lock apart: empty for the real ReUI,
+/// else "-sandbox-" and a hash of its `REUI_CONFIG_DIR`, so test hubs in different folders
+/// run side by side too.
+pub fn sandbox_suffix() -> String {
+    match std::env::var("REUI_CONFIG_DIR") {
+        Ok(dir) if !dir.is_empty() => {
+            // FNV-1a over the folder as typed, case-folded (Windows paths).
+            let hash = dir.to_lowercase().bytes().fold(0xcbf2_9ce4_8422_2325_u64, |h, b| (h ^ u64::from(b)).wrapping_mul(0x100_0000_01b3));
+            format!("-sandbox-{:08x}", hash as u32)
+        }
+        _ => String::new(),
+    }
 }
 
 /// What decides which activity is in front. Higher wins; ties go to the newest.

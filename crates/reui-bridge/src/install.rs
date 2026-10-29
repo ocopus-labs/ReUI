@@ -28,8 +28,7 @@ const CLAUDE_EVENTS: [Event; 15] = [
     ("PreToolUse", Some(ASK_MATCHER), Some(300), false, Some(ASK)),
     ("PostToolUse", Some("*"), None, true, None),
     ("PermissionRequest", Some("*"), Some(120), false, None),
-    // MCP forms: the hub answers "no decision" at once until the island can show them
-    // (agent moments M4), so Claude's own dialog comes without waiting.
+    // MCP forms and links (agent moments §5.6), answered from the island.
     ("Elicitation", Some("*"), Some(300), false, None),
     ("Notification", None, None, true, None),
     ("PreCompact", None, None, true, None),
