@@ -5,7 +5,7 @@
 //!
 //! In a sandbox (`REUI_CONFIG_DIR`) nothing is ever installed, as on the About page.
 //! `REUI_UPDATE_SIMULATE=ok|fail` there plays the steps out instead, with no network: it
-//! is how the island's card is tested while the repository is a placeholder.
+//! is how the island's card is tested without a published release.
 
 use std::io::Write;
 use std::time::Duration;

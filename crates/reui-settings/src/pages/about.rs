@@ -135,14 +135,14 @@ mod tests {
     }
 
     #[test]
-    fn without_a_repository_updates_say_so_and_never_check() {
+    fn with_the_repository_set_updates_offer_a_check() {
         let (mut state, dir) = state("about-updates");
         let blocks = build(&state);
         let rows: Vec<&Row> = blocks.iter().flat_map(|b| if let Block::Group { rows, .. } = b { rows.iter().collect() } else { Vec::new() }).collect();
         let update = rows.iter().find(|r| r.id == "update").unwrap();
-        assert_eq!(update.detail.as_deref(), Some("Update checks start once the GitHub repository is set"));
-        assert!(update.parts.is_empty());
-        assert!(!rows.iter().find(|r| r.id == "guide").unwrap().enabled);
+        assert_eq!(update.detail.as_deref(), Some("Not checked yet"));
+        assert!(!update.parts.is_empty(), "a Check button");
+        assert!(rows.iter().find(|r| r.id == "guide").unwrap().enabled);
         assert_eq!(act(&mut state, &Target::new("tour", 0), Act::Press), Effect::Navigate(Page::WelcomeFeatures));
         _ = std::fs::remove_dir_all(&dir);
     }

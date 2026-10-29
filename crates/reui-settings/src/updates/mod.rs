@@ -29,10 +29,9 @@ use crate::model::doc::write_atomic;
 use crate::pages::VERSION;
 use crate::paths::Paths;
 
-/// The GitHub repository releases come from, as `owner/name`. TODO: set it once the
-/// repository is public; until then update checks are skipped and "Report a bug" lets
-/// GitHub ask for the repository.
-pub const REPOSITORY: &str = "OWNER/REPO";
+/// The GitHub repository releases come from, as `owner/name`. Checks and downloads are
+/// anonymous, so they only find releases once the repository is public.
+pub const REPOSITORY: &str = "ocopus-labs/ReUI";
 
 pub const STATE_FILE: &str = "update.json";
 /// The window hears about progress through this message.
@@ -40,9 +39,14 @@ pub const WM_UPDATES: u32 = WM_APP + 3;
 
 /// Whether [`REPOSITORY`] has been filled in.
 pub fn repository_set() -> bool {
-    let mut parts = REPOSITORY.split('/');
+    is_repository(REPOSITORY)
+}
+
+/// `owner/name`, and not the placeholder.
+fn is_repository(text: &str) -> bool {
+    let mut parts = text.split('/');
     let (owner, name) = (parts.next().unwrap_or_default(), parts.next().unwrap_or_default());
-    !owner.is_empty() && !name.is_empty() && parts.next().is_none() && REPOSITORY != "OWNER/REPO"
+    !owner.is_empty() && !name.is_empty() && parts.next().is_none() && text != "OWNER/REPO"
 }
 
 /// `https://github.com/owner/name/`, or GitHub itself while the repository isn't set.
@@ -308,13 +312,11 @@ mod tests {
     }
 
     #[test]
-    fn the_placeholder_repository_skips_checks() {
-        assert!(!repository_set());
-        assert_eq!(repository_url(), "https://github.com/");
-        let dir = crate::model::doc::tests::temp_dir("updates-skip");
-        assert!(check(&paths(&dir)).unwrap_err().contains("repository"));
-        assert!(!dir.join("l").join(STATE_FILE).exists(), "nothing recorded, nothing fetched");
-        _ = std::fs::remove_dir_all(&dir);
+    fn the_repository_is_set_and_placeholders_are_not() {
+        assert!(repository_set());
+        assert_eq!(repository_url(), "https://github.com/ocopus-labs/ReUI/");
+        assert!(is_repository("owner/name"));
+        assert!(!is_repository("OWNER/REPO") && !is_repository("ocopus-labs") && !is_repository("a/b/c") && !is_repository("/name"));
     }
 
     #[test]
