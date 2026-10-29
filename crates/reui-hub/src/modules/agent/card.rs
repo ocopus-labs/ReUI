@@ -9,8 +9,11 @@ use reui_protocol::{BlockKind, Button, ButtonContent, ButtonRole, CardSize, Choi
 use std::path::Path;
 
 use super::describe::describe_tool;
+use super::form::BOOL_LABELS;
+use super::link;
 use super::moments::{Kind, Moment};
 use super::plan;
+use super::schema::{self, Input};
 use crate::modules::clipboard::secrets;
 
 pub(super) const GLYPH_DONE: char = '\u{E73E}';
@@ -57,7 +60,7 @@ pub(super) fn card(moment: &Moment, context: Context, position: (usize, usize), 
                 b.push(text("allow", "Allow", ButtonRole::Accent));
                 rows.push(Row::Buttons(b));
             }
-            ("Allow?", accent(described.glyph), "Permission", described.headline, described.detail, rows)
+            ("Allow?", accent(described.glyph), "Permission".to_string(), described.headline, described.detail, rows)
         }
         Kind::Question { questions, step, picked, typed, .. } => {
             let step = (*step).min(questions.len().saturating_sub(1));
@@ -111,7 +114,7 @@ pub(super) fn card(moment: &Moment, context: Context, position: (usize, usize), 
             }
             rows.push(Row::Buttons(buttons));
             let hero = shown.map_or_else(|| "Question".to_string(), |q| secrets::mask(&q.text));
-            ("Question", Element::Empty, "Question", Headline::Text(hero), detail, rows)
+            ("Question", Element::Empty, "Question".to_string(), Headline::Text(hero), detail, rows)
         }
         Kind::Plan => {
             let plan = secrets::mask(moment.plan());
@@ -135,12 +138,73 @@ pub(super) fn card(moment: &Moment, context: Context, position: (usize, usize), 
             } else {
                 rows.push(Row::Buttons(vec![text("keep", "Keep planning", ButtonRole::Secondary), text("approve", "Approve", ButtonRole::Accent)]));
             }
-            ("Plan", accent(GLYPH_PLAN), "Plan", Headline::Text(plan::title(&plan).unwrap_or_else(|| "Plan".into())), detail, rows)
+            ("Plan", accent(GLYPH_PLAN), "Plan".to_string(), Headline::Text(plan::title(&plan).unwrap_or_else(|| "Plan".into())), detail, rows)
+        }
+        Kind::Form { server, message, form } => {
+            let mut rows = Vec::new();
+            let mut detail = None;
+            let mut buttons = Vec::new();
+            match form.field().filter(|_| answerable) {
+                Some(f) => {
+                    match &f.input {
+                        Input::Choice(_) | Input::Bool => {
+                            let labels: Vec<String> = match &f.input {
+                                Input::Choice(options) => options.iter().map(|(_, label)| secrets::mask(label)).collect(),
+                                _ => BOOL_LABELS.iter().map(|l| l.to_string()).collect(),
+                            };
+                            let chosen = form.chosen[form.step];
+                            let options = labels.into_iter().enumerate().map(|(i, label)| Choice { label, detail: None, selected: chosen == Some(i), action: act(&format!("pick:{i}")) }).collect();
+                            rows.push(Row::Choices { options, multi: false });
+                            detail = Some(f.title.clone());
+                        }
+                        Input::Text | Input::Number { .. } => {
+                            detail = f.description.clone();
+                            rows.push(field(f.title.clone()));
+                            if let Input::Number { integer } = f.input {
+                                if schema::parse(&f.input, &moment.text).is_err() {
+                                    rows.push(Row::Note(if integer { "Not a whole number" } else { "Not a number" }.into()));
+                                }
+                            }
+                        }
+                    }
+                    if form.count() > 1 {
+                        match pager {
+                            None => pager = Some(Pager { index: form.step as u32, count: form.count() as u32, prev: act("back"), next: act("next") }),
+                            Some(_) => {
+                                let at = format!("{} of {}", form.step + 1, form.count());
+                                detail = Some(detail.map_or(at.clone(), |d| format!("{d} · {at}")));
+                            }
+                        }
+                    }
+                }
+                // Nothing to fill in, or a form beyond a card.
+                None if answerable => {}
+                None => buttons.push(text("terminal", "Answer in terminal", ButtonRole::Secondary)),
+            }
+            if answerable {
+                buttons.push(text("decline", "Decline", ButtonRole::Secondary));
+                if form.step > 0 && pager.as_ref().is_none_or(|p| p.prev != act("back")) {
+                    buttons.push(text("back", "Back", ButtonRole::Secondary));
+                }
+                if let Some(label) = form.forward() {
+                    buttons.push(text("next", label, ButtonRole::Accent));
+                }
+            }
+            rows.push(Row::Buttons(buttons));
+            ("Input", Element::Empty, format!("{server} (MCP)"), Headline::Text(secrets::mask(message)), detail.map(|d| secrets::mask(&d)), rows)
+        }
+        Kind::Link { server, message, url } => {
+            let host = link::host(url);
+            let buttons = match answerable {
+                true => vec![text("decline", "Decline", ButtonRole::Secondary), text("open", "Open link", ButtonRole::Accent)],
+                false => vec![text("terminal", "Answer in terminal", ButtonRole::Secondary)],
+            };
+            ("Input", Element::Empty, format!("{server} (MCP)"), Headline::Text(secrets::mask(message)), host, vec![Row::Buttons(buttons)])
         }
     };
     // Several waiting: how many, beside the logo; one: what it is.
     let trailing = Element::Text { text: if count > 1 { count.to_string() } else { kind.into() }, tone: Tone::Accent };
-    let view = ExpandedView { context: Some(context), leading, eyebrow: Some(eyebrow.into()), headline, detail, trailing: Element::Empty, rows, size: CardSize::Roomy, tint: false, pager, open: None };
+    let view = ExpandedView { context: Some(context), leading, eyebrow: Some(eyebrow), headline, detail, trailing: Element::Empty, rows, size: CardSize::Roomy, tint: false, pager, open: None };
     (trailing, view)
 }
 
@@ -227,6 +291,39 @@ mod tests {
         assert_eq!((view.headline, view.detail), (Headline::Text("Question".into()), None));
         assert_eq!(view.rows.len(), 1, "only the terminal");
         assert!(!format!("{:?}", view.rows).contains("hunter2"));
+    }
+
+    #[test]
+    fn an_mcp_form_asks_one_field_at_a_time() {
+        let event = json!({ "mcp_server_name": "Jira", "message": "Create the issue", "requested_schema": { "type": "object", "properties": {
+            "kind": { "type": "string", "title": "Kind", "enum": ["bug", "task"], "enumNames": ["Bug", "Task"] },
+            "points": { "type": "integer", "title": "Points", "description": "Story points" }
+        }, "required": ["kind"] } });
+        let mut m = Moment::elicitation(6, "s", &event, Instant::now());
+        let (trailing, view) = card(&m, context(), (0, 1), "Claude");
+        assert_eq!(trailing, Element::Text { text: "Input".into(), tone: Tone::Accent });
+        assert_eq!((view.eyebrow.as_deref(), view.headline.clone(), view.detail.as_deref()), (Some("Jira (MCP)"), Headline::Text("Create the issue".into()), Some("Kind")));
+        assert!(matches!(&view.rows[0], Row::Choices { options, multi: false } if options[1].label == "Task" && options[1].action == "6:pick:1"));
+        assert_eq!(buttons(&view), [("6:decline".into(), "Decline".into())], "required: no Next yet");
+        m.act("pick:1");
+        m.set_text("lots");
+        let (_, view) = card(&m, context(), (0, 1), "Claude");
+        assert_eq!(view.detail.as_deref(), Some("Story points"));
+        assert!(matches!(&view.rows[0], Row::Search { placeholder: Some(p), .. } if p == "Points"));
+        assert_eq!(view.rows[1], Row::Note("Not a whole number".into()));
+        assert_eq!(buttons(&view).len(), 1, "a number that doesn't parse holds Submit back");
+        m.set_text("3");
+        let (_, view) = card(&m, context(), (0, 1), "Claude");
+        assert_eq!(buttons(&view).last().unwrap(), &("6:next".to_string(), "Submit".to_string()));
+
+        let link = json!({ "mcp_server_name": "GitHub", "message": "Sign in", "mode": "url", "url": "https://github.com/login/device" });
+        let (_, view) = card(&Moment::elicitation(7, "s", &link, Instant::now()), context(), (0, 1), "Claude");
+        assert_eq!(view.detail.as_deref(), Some("github.com"));
+        assert_eq!(buttons(&view), [("7:decline".into(), "Decline".into()), ("7:open".into(), "Open link".into())]);
+
+        let nested = json!({ "mcp_server_name": "X", "message": "m", "requested_schema": { "type": "object", "properties": { "a": { "type": "object" } } } });
+        let (_, view) = card(&Moment::elicitation(8, "s", &nested, Instant::now()), context(), (0, 1), "Claude");
+        assert_eq!(buttons(&view), [("8:terminal".into(), "Answer in terminal".into())]);
     }
 
     #[test]

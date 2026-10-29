@@ -15,7 +15,8 @@ encoding_rs = "0.8"
 rusqlite = { version = "0.40", features = ["bundled"] }
 reqwest = { version = "0.13", default-features = false, features = ["native-tls", "charset"] }
 serde.workspace = true
-serde_json = "1.0"
+# `preserve_order`: an MCP form's fields are asked in its schema's order.
+serde_json = { version = "1.0", features = ["preserve_order"] }
 windows-future = "0.3.2"
 # `IIterable<HSTRING>` from a Vec (device watcher properties).
 windows-collections = "0.3.2"

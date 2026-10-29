@@ -9,7 +9,8 @@ use std::time::Duration;
 use serde_json::Value;
 use tokio::time::Instant;
 
-use super::answer::{self, Permission};
+use super::answer::{self, Elicitation, Permission};
+use super::form::{Form, Step};
 
 /// Hub < bridge (110 s) < hook timeout (120 s): the agent always gets a clean "no decision".
 pub(super) const PERMISSION_WAIT: Duration = Duration::from_secs(100);
@@ -56,6 +57,10 @@ pub(super) enum Kind {
     /// `picked[step][option]`; `typed[step]` is a typed answer, which wins over picks.
     Question { questions: Vec<Question>, step: usize, picked: Vec<Vec<bool>>, typed: Vec<Option<String>>, asker: Asker },
     Plan,
+    /// An MCP server's form (`Elicitation`, form mode); `server` is its name.
+    Form { server: String, message: String, form: Form },
+    /// An MCP server asking you to open a link (`Elicitation`, URL mode).
+    Link { server: String, message: String, url: String },
 }
 
 #[derive(Debug)]
@@ -120,6 +125,22 @@ impl Moment {
         Self::new(id, session, tool_use_id, input, kind, false, now + READ_ONLY_WAIT)
     }
 
+    /// Claude's `Elicitation` hook (`mcp_server_name`, `message`, `mode`, `url`,
+    /// `requested_schema`): a form, or a link in URL mode. Always blocking.
+    pub(super) fn elicitation(id: u64, session: &str, event: &Value, now: Instant) -> Self {
+        let s = |k: &str| event.get(k).and_then(Value::as_str).unwrap_or_default().trim().to_string();
+        let (server, message) = (s("mcp_server_name"), s("message"));
+        let kind = match event.get("mode").and_then(Value::as_str) {
+            Some("url") => Kind::Link { server, message, url: s("url") },
+            _ => Kind::Form { server, message, form: Form::new(event.get("requested_schema").unwrap_or(&Value::Null)) },
+        };
+        let mut moment = Self::new(id, session, None, event.clone(), kind, true, now + ASK_WAIT);
+        if let Kind::Form { form, .. } = &moment.kind {
+            moment.text = form.texts.first().cloned().unwrap_or_default();
+        }
+        moment
+    }
+
     fn new(id: u64, session: &str, tool_use_id: Option<String>, input: Value, kind: Kind, waiting: bool, deadline: Instant) -> Self {
         Self { id, session: session.into(), tool_use_id, input, kind, waiting, explaining: false, text: String::new(), deadline }
     }
@@ -139,6 +160,9 @@ impl Moment {
                 // something to pick or room to type.
                 Kind::Question { questions, asker: Asker::OpenCode, .. } => !questions.is_empty() && questions.iter().all(|q| !q.options.is_empty() || q.custom),
                 Kind::Question { asker: Asker::Codex, .. } => false,
+                // A schema the card can't show is answered in the terminal (§5.6).
+                Kind::Form { form, .. } => form.fields.is_some(),
+                Kind::Link { url, .. } => !url.is_empty(),
                 _ => true,
             }
     }
@@ -146,6 +170,14 @@ impl Moment {
     /// The plan, for ExitPlanMode (`plan` as Claude Code injects it).
     pub(super) fn plan(&self) -> &str {
         self.input.get("plan").and_then(Value::as_str).unwrap_or_default()
+    }
+
+    /// What's typed in the field, as the island sends it.
+    pub(super) fn set_text(&mut self, text: &str) {
+        self.text = text.to_string();
+        if let Kind::Form { form, .. } = &mut self.kind {
+            form.typed(text);
+        }
     }
 
     /// Applies an action (the part after the moment's id: `allow`, `pick:2`, `alt:deny`…;
@@ -200,6 +232,15 @@ impl Moment {
                 false => Outcome::Reply(Some(answer::plan_revised(&text))),
             },
             (Kind::Plan, "approve") if !self.explaining => Outcome::Reply(Some(answer::plan_approved(&self.input))),
+            (Kind::Form { form, .. }, action) => match form.act(action, &mut self.text) {
+                Step::Nothing => Outcome::Nothing,
+                Step::Changed => Outcome::Changed,
+                Step::Submit(content) => Outcome::Reply(Some(answer::elicitation(Elicitation::Accept(Some(content))))),
+                Step::Decline => Outcome::Reply(Some(answer::elicitation(Elicitation::Decline))),
+            },
+            // The module opens the link; Claude, told it's accepted, doesn't open it again.
+            (Kind::Link { .. }, "open") => Outcome::Reply(Some(answer::elicitation(Elicitation::Accept(None)))),
+            (Kind::Link { .. }, "decline") => Outcome::Reply(Some(answer::elicitation(Elicitation::Decline))),
             (Kind::Question { questions, step, picked, typed, asker }, action) => {
                 let s = *step;
                 let advance = |step: &mut usize| {
@@ -401,6 +442,31 @@ pub(super) mod tests {
         let Kind::Question { questions, step: 1, .. } = &m.kind else { panic!() };
         assert!(!questions[0].secret && questions[1].secret && questions[1].options.is_empty());
         assert_eq!(m.act("terminal"), Outcome::Dismissed);
+    }
+
+    #[test]
+    fn mcp_forms_and_links_answer_in_the_hooks_shape() {
+        // The hooks reference's form-mode example.
+        let event = json!({ "hook_event_name": "Elicitation", "mcp_server_name": "my-mcp-server", "message": "Please provide your credentials", "mode": "form",
+            "requested_schema": { "type": "object", "properties": { "username": { "type": "string", "title": "Username" } } } });
+        let mut m = Moment::elicitation(1, "s1", &event, Instant::now());
+        assert!(m.answerable());
+        m.text = "alice".into();
+        let Outcome::Reply(Some(out)) = m.act("submit") else { panic!() };
+        assert_eq!(serde_json::from_str::<Value>(&out).unwrap(), json!({ "hookSpecificOutput": { "hookEventName": "Elicitation", "action": "accept", "content": { "username": "alice" } } }));
+
+        let link = json!({ "mcp_server_name": "my-mcp-server", "message": "Please authenticate", "mode": "url", "url": "https://auth.example.com/login" });
+        let mut m = Moment::elicitation(2, "s1", &link, Instant::now());
+        assert!(matches!(m.act("open"), Outcome::Reply(Some(s)) if s.contains("\"accept\"") && !s.contains("content")));
+        let mut m = Moment::elicitation(3, "s1", &link, Instant::now());
+        assert!(matches!(m.act("decline"), Outcome::Reply(Some(s)) if s.contains("\"decline\"")));
+
+        // Beyond a card: the terminal only.
+        let nested = json!({ "mcp_server_name": "x", "message": "m", "requested_schema": { "type": "object", "properties": { "a": { "type": "array" } } } });
+        let mut m = Moment::elicitation(4, "s1", &nested, Instant::now());
+        assert!(!m.answerable());
+        assert_eq!(m.act("decline"), Outcome::Nothing);
+        assert_eq!(m.act("terminal"), Outcome::Reply(None));
     }
 
     #[test]

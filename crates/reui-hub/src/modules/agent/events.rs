@@ -6,9 +6,10 @@
 //! entry (`reui-bridge claude ask`, which waits for the answer) and the async `*` one;
 //! `moments::Queue::arrive` makes them one moment. A `PermissionRequest` for either tool is
 //! answered "no decision" at once: allowing it wouldn't carry an answer, and the island
-//! already offered it through `PreToolUse`. MCP elicitation (`Elicitation`, blocking) also
-//! gets "no decision" at once until the island can answer forms (agent moments M4), so
-//! Claude shows its own dialog without waiting.
+//! already offered it through `PreToolUse`. An MCP server's form or link (`Elicitation`,
+//! blocking) is a moment of its own; Claude's `elicitation_dialog` notification only comes
+//! once that's left to the terminal, so it shows nothing more. Codex's questions
+//! (`request_user_input`) show read-only.
 
 use std::path::{Path, PathBuf};
 
@@ -36,9 +37,6 @@ pub(super) async fn on_hook(ctx: &ModuleContext, me: &Agentry, call: HookCall, s
     let name = str_field("hook_event_name");
     let tool = str_field("tool_name");
     match name {
-        // Not answerable here yet: Claude's own dialog, at once (dropping the reply is "no
-        // decision").
-        "Elicitation" => return,
         "PermissionRequest" if asks(tool) => return,
         "SessionEnd" => {
             sessions.remove(&session_id);
@@ -105,6 +103,14 @@ pub(super) async fn on_hook(ctx: &ModuleContext, me: &Agentry, call: HookCall, s
             moments_changed = true;
             Some(Phase::WaitingPermission)
         }
+        // An MCP server asking for input (Claude): a form or a link, answered from here.
+        "Elicitation" => {
+            let Some(reply) = call.reply else { return };
+            moments.queue.arrive(Moment::elicitation(call.id, &session_id, &event, Instant::now()));
+            moments.replies.insert(call.id, reply);
+            moments_changed = true;
+            Some(Phase::WaitingPermission)
+        }
         // Codex asking you something: shown read-only (no hook can answer it) until its
         // `PostToolUse` or the turn's end.
         "PreToolUse" if tool == "request_user_input" => {
@@ -128,7 +134,7 @@ pub(super) async fn on_hook(ctx: &ModuleContext, me: &Agentry, call: HookCall, s
         }
         // A moment already shows what the agent needs.
         "Notification" if moments.queue.has_session(&session_id) => None,
-        "Notification" if matches!(str_field("notification_type"), "agent_needs_input" | "elicitation_dialog") => match &session.phase {
+        "Notification" if str_field("notification_type") == "agent_needs_input" => match &session.phase {
             // The question the agent asked already says more than the notification.
             Some(Phase::NeedsInput(Some(q))) => Some(Phase::NeedsInput(Some(q.clone()))),
             _ => Some(Phase::NeedsInput(None)),
