@@ -32,7 +32,8 @@ pub fn draw(p: &Painter, look: &Look) -> Result<()> {
     let strip = context_height();
     let mid = inset + strip / 2.0;
     let a = component::art::COMPACT;
-    let mark = a * opacity::LOGO_BARE;
+    // Whole DIPs, as the island sizes a bare mark (`render/images.rs`, `mark_size`).
+    let mark = (a * opacity::LOGO_BARE).round();
     p.claude(Rect::at(inset + (a - mark) / 2.0, mid - mark / 2.0, mark, mark))?;
     let cl = typography::CONTEXT.line_height;
     let x = header::context_left(look, a);

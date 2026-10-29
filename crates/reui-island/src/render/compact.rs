@@ -102,7 +102,7 @@ impl Renderer {
     /// The mark alone, centred in a square surface, for the pill's animated logo visual.
     pub fn draw_logo(&self, surface: &CompositionDrawingSurface, image: ImageId, size: f32, color: Color) -> Result<()> {
         self.paint(surface, |rt| {
-            let mark = size * opacity::LOGO_BARE;
+            let mark = super::images::mark_size(size, opacity::LOGO_BARE);
             self.svg(rt, image, (size - mark) / 2.0, (size - mark) / 2.0, mark, color)
         })
     }
