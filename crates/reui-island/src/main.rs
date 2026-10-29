@@ -11,6 +11,7 @@ mod drag_guard;
 mod features;
 mod fullscreen;
 mod images;
+mod menus;
 mod intent;
 mod ipc;
 mod order;
@@ -37,7 +38,7 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 use crate::features::clipboard_keys;
 use reui_design::look::Look;
 
-use crate::pill::{MenuEntry, Pill};
+use crate::pill::Pill;
 use crate::place::{MonitorChoice, Placement};
 use crate::settings::Settings;
 
@@ -185,60 +186,6 @@ fn rebuild(hwnd: HWND, placement: &Placement) {
             unsafe { PostQuitMessage(1) };
         }
     }
-}
-
-/// The island's menu, led by `moment`'s entries when it was opened on a moment that can be
-/// quieted (`quiet.rs`).
-fn open_menu(hwnd: HWND, moment: Vec<MenuEntry>) {
-    let (mut paused, mut hidden) = (false, false);
-    with_pill(|pill| (paused, hidden) = (pill.paused(), pill.hidden_by_user()));
-    let labels: Vec<&str> = moment.iter().map(|(label, ..)| label.as_str()).collect();
-    with_pill(|pill| pill.menu_opened());
-    let (picked, previous) = tray::menu(hwnd, paused, hidden, &labels);
-    with_pill(|pill| pill.menu_closed(previous));
-    match picked {
-        Some(tray::Command::Moment(i)) => with_pill(|pill| pill.quiet_pick(&moment[i].1)),
-        Some(tray::Command::Settings) => tray::open_settings(),
-        Some(tray::Command::TogglePause) => with_pill(|pill| pill.set_paused(!paused)),
-        Some(tray::Command::ToggleHidden) => with_pill(|pill| pill.toggle_hidden()),
-        Some(tray::Command::Module(module, action)) => with_pill(|pill| pill.command(module, &action)),
-        Some(tray::Command::Quit) => unsafe { _ = DestroyWindow(hwnd) },
-        None => {}
-    }
-}
-
-/// Right-click: a card's own menu over a card that has one, the island's menu elsewhere
-/// (led by the moment's quiet entries when it has them).
-fn right_click(hwnd: HWND, x: f32, y: f32) {
-    let (mut entries, mut moment) = (None, Vec::new());
-    with_pill(|pill| {
-        entries = pill.card_menu(x, y);
-        if entries.is_none() {
-            moment = pill.moment_menu(x, y);
-        }
-    });
-    match entries {
-        Some(entries) => card_menu(hwnd, entries),
-        None => open_menu(hwnd, moment),
-    }
-}
-
-/// A menu from the open card (a card's actions, a slider's output devices). It runs
-/// outside the pill's borrow so hooks and timers keep working meanwhile.
-fn card_menu(hwnd: HWND, entries: Vec<MenuEntry>) {
-    if entries.is_empty() {
-        return;
-    }
-    with_pill(|pill| pill.menu_opened());
-    let items: Vec<(&str, bool)> = entries.iter().map(|(label, _, _, checked)| (label.as_str(), *checked)).collect();
-    let (picked, previous) = tray::item_menu(hwnd, &items);
-    with_pill(|pill| {
-        pill.menu_closed(previous);
-        if let Some(i) = picked {
-            let (_, action, closes, _) = &entries[i];
-            pill.act(action.clone(), *closes);
-        }
-    });
 }
 
 fn client_point(lparam: LPARAM) -> (f32, f32) {
@@ -397,7 +344,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             if dragged {
                 _ = ReleaseCapture();
             } else if let Some(entries) = menu {
-                card_menu(hwnd, entries);
+                menus::card_menu(hwnd, entries);
             } else {
                 with_pill(|pill| pill.on_click(x, y, shift, alt));
             }
@@ -416,13 +363,13 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         }
         WM_RBUTTONUP => {
             let (x, y) = client_point(lparam);
-            right_click(hwnd, x, y);
+            menus::right_click(hwnd, x, y);
             LRESULT(0)
         }
         tray::WM_TRAY => {
             match tray::click(lparam) {
                 Some(tray::Click::Open) => tray::open_settings(),
-                Some(tray::Click::Menu) => open_menu(hwnd, Vec::new()),
+                Some(tray::Click::Menu) => menus::open_menu(hwnd, Vec::new()),
                 None => {}
             }
             LRESULT(0)

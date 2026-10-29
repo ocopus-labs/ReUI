@@ -119,6 +119,7 @@ modules/
 main.rs            window class, message loop, mouse/foreground hooks
 ipc.rs             pipe client
 settings.rs        visibility modes, pause, the look's keys, watching settings.json
+menus.rs           the island's menu and a card's menus, opened outside the pill's borrow
 tray.rs            tray icon, short menu (Install update while one is known; a moment's quiet
                    entries first when it was right-clicked)
 theme.rs           Windows' app mode (Auto) and accent, re-read on "ImmersiveColorSet"
