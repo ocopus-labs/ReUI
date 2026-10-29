@@ -344,7 +344,7 @@ pub mod tests {
         assert_eq!(Page::from_arg("about"), Some(Page::About));
         assert_eq!(Page::from_arg("zzz"), None);
         assert_eq!(Page::from_arg("what"), None, "welcome steps aren't Settings pages");
-        assert_eq!((Page::WelcomeShortcut.index(), Page::About.index()), (1, 10));
+        assert_eq!((Page::WelcomeShortcut.index(), Page::About.index()), (1, 11));
         assert_eq!(Page::from_arg("appearance"), Some(Page::Appearance));
         assert_eq!(Page::from_arg("timers"), Some(Page::Timers));
         assert_eq!(Page::from_arg("mic"), Some(Page::Indicators));
