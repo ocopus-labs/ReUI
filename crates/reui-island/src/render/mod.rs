@@ -51,6 +51,8 @@ mod images;
 mod minimal;
 mod notch;
 mod rows;
+#[cfg(test)]
+mod sheet;
 mod text;
 
 pub use reui_design::layout::compact::{BARS, BAR_LEVELS as BAR_LEVELS_LIVE, MAX_WIDTH as COMPACT_MAX_WIDTH, MINIMAL_SURFACE, SURFACE as COMPACT_SURFACE};
