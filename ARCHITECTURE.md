@@ -22,7 +22,7 @@ reui-settings.exe  the Settings window, opened from the tray; single instance
 | Crate | Job |
 |---|---|
 | `reui-protocol` | Wire types: `Activity`, presentations (compact, minimal, expanded), rows, priorities, actions; postcard framing. Also `version` (semver comparison for update.json) and `install` (the lines `reui-settings --install-update` prints) |
-| `reui-design` | `design/tokens.json` compiled into constants at build time; `icon.rs` turns `design/logo/reui.ico` into the icon resource every program's `build.rs` links in |
+| `reui-design` | `design/tokens.json` compiled into constants at build time (plus a `Palette` per theme); `look.rs` turns the Appearance settings into a `Look` (palette, radii, insets, the concentric maths) for the island and Settings' previews alike; `icon.rs` turns `design/logo/reui.ico` into the icon resource every program's `build.rs` links in |
 | `reui-hub` | Feature modules and the hub that orders their activities |
 | `reui-island` | The island window: Windows.UI.Composition + Direct2D/DirectWrite |
 | `reui-bridge` | Hook entry point for coding agents, and the hook installer |
@@ -90,8 +90,9 @@ modules/
 ```
 main.rs            window class, message loop, mouse/foreground hooks
 ipc.rs             pipe client
-settings.rs        visibility modes, pause, watching settings.json
+settings.rs        visibility modes, pause, the look's keys, watching settings.json
 tray.rs            tray icon, short menu (Install update while one is known)
+theme.rs           Windows' app mode (Auto) and accent, re-read on "ImmersiveColorSet"
 order.rs           which activity is in the pill and which in the bubble
 place.rs           which display (monitor setting) and the window rect at its DPI
 fullscreen.rs      when to hide: D3D, presentation, busy, a window covering the display
@@ -101,7 +102,8 @@ images.rs          encoded images from the hub
 pill/              the island's behaviour
   mod.rs           state machine, snapshot apply, render orchestration
   link.rs          the hub link: snapshots, images and focus requests as they arrive
-  setup.rs         builds the composition tree
+  setup.rs         builds the composition tree for the Look (shape, hairline, notch ears);
+                   a new look rebuilds it (WM_LOOK), like a DPI change
   input.rs         clicks, wheel, drag, hover
   summon.rs        hotkey-summoned cards, keyboard capture, search
   visibility.rs    size springs, show/hide, reveal, fullscreen, topmost
@@ -111,6 +113,7 @@ render/            drawing only (no behaviour state)
   mod.rs           Renderer, surfaces, layouts, hit testing
   fonts.rs  text.rs  images.rs  elements.rs
   compact.rs  minimal.rs  expanded.rs (strip + header + row layout)
+  notch.rs         the Notch style's ears
   rows/            timeline, controls, slider, lyrics, cards, search, tabs, note,
                    context (session strip), choices, block (scrolling text)
 features/          per-feature island logic
@@ -148,7 +151,7 @@ ui/                pages as data: blocks, rows, parts (controls)
 render/            drawing only: Renderer/Painter primitives, fonts, text (layout cache),
                    shapes, icons, sidebar, frame (caption, scrollbar), page, controls, menu
   preview/         the hero cards' island previews (music, clipboard, levels, devices,
-                   timers, agents)
+                   timers, agents, appearance: the island in the chosen Look)
 pages/             one file per page: build its rows from State, handle its controls;
                    welcome.rs is the three-step welcome (first run, Replay the tour)
 model/             settings files (read, change a key, atomic write, keep unknown keys,
@@ -167,7 +170,7 @@ stats.rs           idle cost: CPU and private memory of ReUI's processes
 
 | Path | What |
 |---|---|
-| `%APPDATA%\ReUI\settings.json` | island `visibility`, `show_on_desktop`, `hide_in_fullscreen`, `monitor`, and `paused_until` while ReUI is paused |
+| `%APPDATA%\ReUI\settings.json` | island `visibility`, `show_on_desktop`, `hide_in_fullscreen`, `monitor`, `paused_until` while ReUI is paused, and the look: `style` (island / notch), `theme` (auto / dark / light), `accent` (reui / windows), `roundness` (0..1), `top_gap` (0..24), `padding` (compact / regular / roomy), `scale` (0.9..1.25) |
 | `%APPDATA%\ReUI\onboarding.json` | first run done (`welcomed`), tips shown, offers answered |
 | `%APPDATA%\ReUI\clipboard.db`, `clipboard.json` | clipboard history and settings |
 | `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json`, `timers.json`, `coding.json` | music, OSD, Devices, Timers and coding agent settings (`coding.json` is read by all three agent modules) |

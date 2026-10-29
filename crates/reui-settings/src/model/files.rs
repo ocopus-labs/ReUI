@@ -68,7 +68,22 @@ impl File {
 
     fn defaults(self) -> Value {
         match self {
-            File::Island => json!({ "visibility": "always", "hide_in_fullscreen": true, "show_on_desktop": true, "monitor": "primary", "check_updates": true, "whats_new": true }),
+            File::Island => json!({
+                "visibility": "always",
+                "hide_in_fullscreen": true,
+                "show_on_desktop": true,
+                "monitor": "primary",
+                "check_updates": true,
+                "whats_new": true,
+                // The look, as reui_design::look::Appearance reads it.
+                "style": "island",
+                "theme": "dark",
+                "accent": "reui",
+                "roundness": 1.0,
+                "top_gap": 11.0,
+                "padding": "regular",
+                "scale": 1.0,
+            }),
             File::Media => json!({ "enabled": true, "visualizer": "real", "lyrics": false, "retract_after_pause_min": 10, "swipe_to_skip": true, "show_video": true }),
             File::Clipboard => json!({
                 "enabled": true,
@@ -156,6 +171,12 @@ impl Files {
     pub fn monitor(&self) -> String {
         let doc = self.doc(File::Island);
         doc.str("monitor").map(str::trim).filter(|s| !s.is_empty()).unwrap_or(MONITOR_PRIMARY).to_string()
+    }
+
+    /// The island's look settings, read exactly as the island reads them.
+    pub fn appearance(&self) -> reui_design::look::Appearance {
+        let doc = self.doc(File::Island);
+        reui_design::look::Appearance::read(|k| doc.str(k).map(str::to_string), |k| doc.get(k).and_then(Value::as_f64))
     }
 
     pub fn paused_until(&self) -> Option<u64> {

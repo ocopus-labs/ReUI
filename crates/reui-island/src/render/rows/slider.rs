@@ -1,7 +1,7 @@
 //! The slider row (volume and the like): toggle, bar, value while dragging, menu button.
 
 
-use reui_design::tokens::{color, component, island, space};
+use reui_design::tokens::{component, space};
 use reui_design::Color;
 use reui_protocol::{Button, ButtonRole, Menu};
 use windows::core::Result;
@@ -18,7 +18,7 @@ impl Renderer {
     pub(in crate::render) fn slider(&self, rt: &ID2D1RenderTarget, leading: &Button, value: f32, action: &str, trailing: Option<&Menu>, y: f32, thumb: bool, dragging: bool, accent: Color, hits: &mut Vec<Hit>) -> Result<f32> {
         let h = component::slider::HEIGHT;
         let gap = component::slider::GAP;
-        let inset = island::expanded::INSET;
+        let inset = self.look.inset();
         let (mut l, mut r) = (inset, self.width.get() - inset);
         self.button(rt, leading, l, y, h, h, accent, hits)?;
         l += h + gap;
@@ -34,7 +34,7 @@ impl Renderer {
         let top = y + (h - bar) / 2.0;
         let end = l + (r - l) * value.clamp(0.0, 1.0);
         unsafe {
-            self.round_rect(rt, l, top, r, top + bar, bar / 2.0, color::fill::TRACK)?;
+            self.round_rect(rt, l, top, r, top + bar, bar / 2.0, self.pal().fill_track)?;
             self.round_rect(rt, l, top, end, top + bar, bar / 2.0, accent)?;
         }
         if thumb {
@@ -47,7 +47,7 @@ impl Renderer {
             let reach = component::thumb::SIZE / 2.0;
             let x = (end - tw / 2.0).min(r + reach - tw).max(l - reach);
             let bottom = y + (h - component::thumb::SIZE) / 2.0 - space::XXS;
-            self.text(rt, &text, font, x, bottom - font.style.line_height, tw + 1.0, Align::Start, color::label::SECONDARY)?;
+            self.text(rt, &text, font, x, bottom - font.style.line_height, tw + 1.0, Align::Start, self.pal().label_secondary)?;
         }
         // The whole row height, and a little past the ends so the extremes are easy to hit.
         let reach = component::thumb::SIZE / 2.0;

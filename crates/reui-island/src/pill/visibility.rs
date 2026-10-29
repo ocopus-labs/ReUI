@@ -2,7 +2,7 @@
 //! click-through, visibility modes, reveal, fullscreen hiding and staying topmost.
 
 
-use reui_design::tokens::{island, motion};
+use reui_design::tokens::{island, motion, notch};
 use reui_design::Spring;
 use windows::core::{h, Interface, Result, HSTRING};
 use windows::Foundation::{IReference, PropertyValue, TimeSpan};
@@ -14,6 +14,10 @@ use crate::desktop;
 use crate::fullscreen;
 use crate::place::{self, MonitorChoice, Placement};
 use crate::settings::{self, Settings};
+use reui_design::look::{Appearance, Look};
+
+/// Posted to the island window when the look changed: it rebuilds the pill.
+pub const WM_LOOK: u32 = WM_APP + 6;
 
 use super::{Pill, State};
 use super::timers::*;
@@ -23,7 +27,7 @@ impl Pill {
         let core_h = island::HEIGHT;
         let grow = island::compact::PEEK_GROW;
         match state {
-            State::Idle => (island::idle::WIDTH, core_h),
+            State::Idle => super::setup::idle_size(&self.look),
             State::Compact => (self.compact_width, core_h),
             State::Peek => (self.compact_width + grow, core_h + grow),
             State::Expanded => (self.expanded_width, self.expanded_height),
@@ -95,13 +99,13 @@ impl Pill {
         let win_w = (self.window.right - self.window.left) as f32;
         let left = self.window.left as f32 + (win_w - w * s) / 2.0;
         let top = self.window.top as f32;
-        (left, top, left + w * s, top + (island::TOP + h) * s)
+        (left, top, left + w * s, top + (self.look.top() + h) * s)
     }
 
     /// Screen rectangle of the pill as drawn (without the band above it).
     pub(super) fn shape_rect(&self) -> (f32, f32, f32, f32) {
         let (l, _, r, b) = self.hit_rect();
-        (l, self.window.top as f32 + island::TOP * self.scale, r, b)
+        (l, self.window.top as f32 + self.look.top() * self.scale, r, b)
     }
 
     /// Screen rectangle of the minimal bubble, when it's there to be clicked.
@@ -112,8 +116,9 @@ impl Pill {
         let s = self.scale;
         let win_w = (self.window.right - self.window.left) as f32;
         let pill_w = self.state_size(self.state).0;
-        let left = self.window.left as f32 + (win_w + pill_w * s) / 2.0 + island::minimal::GAP * s;
-        let top = self.window.top as f32 + island::TOP * s;
+        let gap = if self.look.notch() { notch::JOIN_GAP } else { island::minimal::GAP };
+        let left = self.window.left as f32 + (win_w + pill_w * s) / 2.0 + gap * s;
+        let top = self.window.top as f32 + self.look.top() * s;
         let size = island::minimal::SIZE * s;
         Some((left, top, left + size, top + size))
     }
@@ -147,12 +152,21 @@ impl Pill {
             self.hide_in_fullscreen = settings.hide_in_fullscreen;
             self.update_fullscreen(unsafe { GetForegroundWindow() });
         }
+        if self.appearance != settings.appearance {
+            // A new look is a new composition tree and window size: main.rs rebuilds.
+            unsafe { _ = PostMessageW(Some(self.hwnd), WM_LOOK, WPARAM(0), LPARAM(0)) };
+        }
         if self.monitor_choice != settings.monitor {
             eprintln!("island: on {:?}", settings.monitor);
             self.monitor_choice = settings.monitor;
             unsafe { _ = PostMessageW(Some(self.hwnd), place::WM_PLACE, WPARAM(0), LPARAM(0)) };
         }
         self.refresh_visibility();
+    }
+
+    /// The look the pill was built with, and the settings it came from.
+    pub fn look(&self) -> (&Look, &Appearance) {
+        (&self.look, &self.appearance)
     }
 
     /// The `monitor` setting.
@@ -164,7 +178,7 @@ impl Pill {
     /// resolution) and puts it back on top. `false` when the display's scale differs: the
     /// pill is built for one scale, so the caller rebuilds it there instead.
     pub fn move_to(&mut self, placement: &Placement) -> bool {
-        if (placement.scale - self.scale).abs() > 0.001 {
+        if (placement.scale - self.dpi).abs() > 0.001 {
             return false;
         }
         if placement.window != self.window || placement.monitor != self.monitor {

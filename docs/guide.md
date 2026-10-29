@@ -16,6 +16,14 @@ ReUI puts a dynamic island at the top of your screen: a small black pill that sh
 
 The island hides while a game, video or presentation fills the screen (Settings → General → Hide in full screen), and can sit on your main display, the display the pointer is on, or one display you choose (Settings → General → Display). In "When active" and "When needed" it still shows in full whenever the desktop is in front (you clicked the wallpaper or pressed Win+D), and keeps out of the way inside apps (Settings → General → Always show on the desktop).
 
+**Appearance** (Settings → Appearance, with the island previewed at the top):
+- **Style:** *Island* floats below the top edge; *Notch* joins it to the edge like a Mac's notch (flat top, curved ears where it meets the edge), with a second activity inside its right end instead of a bubble.
+- **Theme:** *Dark* (black, the default), *Light* (white with a hairline edge), or *Auto*, which follows Windows' app mode (Settings → Personalization → Colors) as soon as you change it.
+- **Accent:** ReUI blue or your Windows accent, for whatever has no colour of its own (music, timers and agents keep theirs).
+- **Roundness** (square-ish to a capsule), **Gap from the top** (Island only), **Padding** (Compact / Regular / Roomy, the space inside an open card) and **Size** (90–125 %). Inner corners always follow the outer ones.
+
+The island picks up a change within a moment; nothing else restarts.
+
 **Pause ReUI** (tray, or Settings → General) quiets the island and stops recording the clipboard for an hour. Permission requests from coding agents still show.
 
 ## Now Playing

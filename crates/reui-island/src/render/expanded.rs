@@ -2,7 +2,7 @@
 //! trailing, pager) and the dispatch of each full-width row to its drawer in `rows`.
 
 
-use reui_design::tokens::{color, component, island, opacity, radius, space};
+use reui_design::tokens::{component, island, opacity, radius, space};
 use reui_design::Color;
 use crate::features::{clipboard, clock};
 use reui_protocol::{Button, ButtonContent, CardSize, Element, ExpandedView, Headline, Row};
@@ -12,7 +12,8 @@ use windows::Win32::Graphics::Direct2D::Common::*;
 use windows::Win32::Graphics::Direct2D::*;
 use windows_numerics::{Matrix3x2, Vector2};
 
-use crate::render::{d2d, Align, ExpandedLayout, Hit, Interaction, Renderer, Slot, Thumb, EXPANDED_SURFACE};
+use crate::render::{d2d, Align, ExpandedLayout, Hit, Interaction, Renderer, Slot, Thumb};
+use crate::render::expanded_surface;
 use crate::render::text::{clock, clock_left};
 use crate::render::elements::shown_level;
 use crate::render::rows::Meter;
@@ -28,8 +29,8 @@ impl Renderer {
         let mut block_max = 0.0;
         let mut choice_spans = None;
         let max_height = match view.map(|v| v.size) {
-            Some(CardSize::Roomy) => island::expanded::ROOMY_MAX_HEIGHT,
-            _ => island::expanded::MAX_HEIGHT,
+            Some(CardSize::Roomy) => self.look.max_height(island::expanded::ROOMY_MAX_HEIGHT),
+            _ => self.look.max_height(island::expanded::MAX_HEIGHT),
         };
         self.paint(surface, |rt| {
             let Some(view) = view else { return Ok(()) };
@@ -39,14 +40,14 @@ impl Renderer {
             self.size.set(view.size);
             let roomy = view.size == CardSize::Roomy;
             // Normal views sit centred in the wide surface.
-            let dx = (EXPANDED_SURFACE.0 - w) / 2.0;
+            let dx = (expanded_surface(&self.look).0 - w) / 2.0;
             unsafe {
                 let mut transform = Matrix3x2::default();
                 rt.GetTransform(&mut transform);
                 rt.SetTransform(&Matrix3x2 { M31: transform.M31 + dx * self.scale, ..transform });
             }
-            let inset = island::expanded::INSET;
-            let gap = island::expanded::COLUMN_GAP;
+            let inset = self.look.inset();
+            let gap = self.look.column_gap();
             if view.tint {
                 self.wash(rt, w, accent)?;
             }
@@ -155,25 +156,25 @@ impl Renderer {
                 line_w = text_w;
             }
             match &view.headline {
-                Headline::Value(s) => self.text(rt, s, &self.fonts.value, text_left, y, line_w, Align::Start, color::label::PRIMARY)?,
+                Headline::Value(s) => self.text(rt, s, &self.fonts.value, text_left, y, line_w, Align::Start, self.pal().label_primary)?,
                 Headline::Clock { clock: c, tenths } => {
-                    let tone = if c.running { color::label::PRIMARY } else { color::label::SECONDARY };
+                    let tone = if c.running { self.pal().label_primary } else { self.pal().label_secondary };
                     self.text(rt, &clock::text(c, reui_protocol::unix_ms(), *tenths), &self.fonts.value, text_left, y, line_w, Align::Start, tone)?
                 }
-                Headline::Text(s) => self.text(rt, s, &self.fonts.headline, text_left, y, line_w, Align::Start, color::label::PRIMARY)?,
+                Headline::Text(s) => self.text(rt, s, &self.fonts.headline, text_left, y, line_w, Align::Start, self.pal().label_primary)?,
                 Headline::Code(s) => {
                     let (px, py) = (component::chip::PADDING_X, component::chip::PADDING_Y);
                     let chip_w = (self.text_width(s, &self.fonts.code)? + 2.0 * px).min(line_w);
-                    unsafe { self.round_rect(rt, text_left, y, text_left + chip_w, y + hero_h, radius::CHIP, color::fill::TERTIARY)? };
-                    self.text(rt, s, &self.fonts.code, text_left + px, y + py, chip_w - 2.0 * px, Align::Start, color::label::PRIMARY)?;
+                    unsafe { self.round_rect(rt, text_left, y, text_left + chip_w, y + hero_h, radius::CHIP.min(self.concentric()), self.pal().fill_tertiary)? };
+                    self.text(rt, s, &self.fonts.code, text_left + px, y + py, chip_w - 2.0 * px, Align::Start, self.pal().label_primary)?;
                 }
             }
             y += hero_h;
             if let Some(detail) = &view.detail {
                 if detail_lines > 1.0 {
-                    self.text_block(rt, detail, &self.fonts.detail_wrap, text_left, y + line_gap, text_w, detail_h - line_gap, color::label::SECONDARY)?;
+                    self.text_block(rt, detail, &self.fonts.detail_wrap, text_left, y + line_gap, text_w, detail_h - line_gap, self.pal().label_secondary)?;
                 } else {
-                    self.text(rt, detail, &self.fonts.detail, text_left, y + line_gap, text_w, Align::Start, color::label::SECONDARY)?;
+                    self.text(rt, detail, &self.fonts.detail, text_left, y + line_gap, text_w, Align::Start, self.pal().label_secondary)?;
                 }
             }
 
@@ -197,8 +198,8 @@ impl Renderer {
             while i < rows.len() {
                 y += match i {
                     0 if headless => 0.0,
-                    0 => island::expanded::SECTION_GAP,
-                    _ => island::expanded::ROW_GAP,
+                    0 => self.look.section_gap(),
+                    _ => self.look.row_gap(),
                 };
                 let meter = match &rows[i] {
                     Row::Progress { fraction, leading, trailing } => Some(Meter { fraction: Some(*fraction), leading: leading.clone(), trailing: trailing.clone(), seek: None }),
@@ -292,7 +293,7 @@ impl Renderer {
             // Alert-style buttons at the bottom keep the same distance from the bottom edge
             // as from the sides.
             let text_buttons_last = matches!(rows.last(), Some(Row::Buttons(b)) if b.iter().any(|b| matches!(b.content, ButtonContent::Text(_))));
-            let natural = y + if roomy && text_buttons_last { component::button::ROOMY_INSET } else { inset };
+            let natural = y + if roomy && text_buttons_last { self.look.padded(component::button::ROOMY_INSET) } else { inset };
             if natural > max_height {
                 // Clamping would eat the bottom padding; make it visible instead.
                 eprintln!("island: expanded content is {natural} tall, over max-height {max_height}");
@@ -312,7 +313,7 @@ impl Renderer {
             bars = bars.map(|(x, mid, live)| (x + dx, mid, live));
             Ok(())
         })?;
-        let radius = if view.is_some_and(|v| v.size == CardSize::Wide) { island::expanded::PANEL_RADIUS } else { island::expanded::RADIUS };
+        let radius = self.card_radius(view.map_or(CardSize::Regular, |v| v.size));
         Ok(ExpandedLayout { width, height, radius, hits, bars, block_max, choices: choice_spans })
     }
 
@@ -331,7 +332,7 @@ impl Renderer {
             let collection = rt.CreateGradientStopCollection(&stops, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP)?;
             let props = D2D1_RADIAL_GRADIENT_BRUSH_PROPERTIES { center: self.point(0.0, 0.0), gradientOriginOffset: Vector2::new(0.0, 0.0), radiusX: radius, radiusY: radius };
             let brush = rt.CreateRadialGradientBrush(&props, None, &collection)?;
-            rt.FillRectangle(&self.rect(0.0, 0.0, w, EXPANDED_SURFACE.1), &brush);
+            rt.FillRectangle(&self.rect(0.0, 0.0, w, expanded_surface(&self.look).1), &brush);
         }
         Ok(())
     }

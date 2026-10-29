@@ -1,7 +1,7 @@
 //! Buttons: a centred row of them, one button, and the source switcher (pager).
 
 
-use reui_design::tokens::{color, component, icon, island, opacity};
+use reui_design::tokens::{component, icon, opacity};
 use reui_design::Color;
 use reui_protocol::{Button, ButtonContent, ButtonRole, CardSize, Pager};
 use windows::core::Result;
@@ -15,7 +15,7 @@ impl Renderer {
     pub(in crate::render) fn button_row(&self, rt: &ID2D1RenderTarget, buttons: &[Button], y: f32, accent: Color, hits: &mut Vec<Hit>) -> Result<f32> {
         let n = buttons.len() as f32;
         let w = self.width.get();
-        let inset = island::expanded::INSET;
+        let inset = self.look.inset();
         if buttons.iter().all(|b| matches!(b.content, ButtonContent::Glyph(_))) {
             let size = component::button::TRANSPORT;
             let gap = component::button::TRANSPORT_GAP;
@@ -29,7 +29,7 @@ impl Renderer {
             let h = component::button::HEIGHT;
             // A roomy card's buttons sit like an alert's: a little nearer the edge, further apart.
             let (inset, gap) = match self.size.get() {
-                CardSize::Roomy => (component::button::ROOMY_INSET, component::button::ROOMY_GAP),
+                CardSize::Roomy => (self.look.padded(component::button::ROOMY_INSET), self.look.padded(component::button::ROOMY_GAP)),
                 _ => (inset, component::button::GAP),
             };
             let width = (w - 2.0 * inset - gap * (n - 1.0)) / n;
@@ -43,9 +43,13 @@ impl Renderer {
     /// A capsule (or circle when square) button.
     #[allow(clippy::too_many_arguments)]
     pub(in crate::render) fn button(&self, rt: &ID2D1RenderTarget, button: &Button, x: f32, y: f32, w: f32, h: f32, accent: Color, hits: &mut Vec<Hit>) -> Result<()> {
-        let (fill, ink) = button_colors(button.role, accent);
+        let (fill, ink) = self.button_colors(button.role, accent);
         if let Some(fill) = fill {
-            unsafe { self.round_rect(rt, x, y, x + w, y + h, h / 2.0, fill)? };
+            let inset = match self.size.get() {
+                CardSize::Roomy => self.look.padded(component::button::ROOMY_INSET),
+                _ => self.look.inset(),
+            };
+            unsafe { self.round_rect(rt, x, y, x + w, y + h, self.capsule(h, inset), fill)? };
         }
         match &button.content {
             ButtonContent::Glyph(g) => {
@@ -73,7 +77,7 @@ impl Renderer {
         let next_l = right - hit;
         let label_l = next_l - gap - label_w;
         let prev_l = label_l - gap - hit;
-        let ink = color::label::SECONDARY;
+        let ink = self.pal().label_secondary;
         self.text(rt, "\u{E76B}", &self.fonts.icon_pager, prev_l, mid - glyph / 2.0, hit, Align::Center, ink)?;
         self.text(rt, &label, font, label_l, mid - font.style.line_height / 2.0, label_w + 1.0, Align::Start, ink)?;
         self.text(rt, "\u{E76C}", &self.fonts.icon_pager, next_l, mid - glyph / 2.0, hit, Align::Center, ink)?;
@@ -82,15 +86,16 @@ impl Renderer {
         hits.push(Hit { pager: true, ..Hit::new(prev_l, top, right, bottom, "") });
         Ok(prev_l)
     }
-}
 
-/// (fill, ink)
-fn button_colors(role: ButtonRole, accent: Color) -> (Option<Color>, Color) {
-    match role {
-        ButtonRole::Primary => (Some(color::label::PRIMARY), color::label::ON_ACCENT),
-        ButtonRole::Secondary => (Some(color::fill::SECONDARY), color::label::PRIMARY),
-        ButtonRole::Accent => (Some(accent.with_alpha(opacity::TINT_FILL)), accent),
-        ButtonRole::Destructive => (Some(color::system::RED.with_alpha(opacity::TINT_FILL)), color::system::RED),
-        ButtonRole::Plain => (None, color::label::PRIMARY),
+    /// (fill, ink)
+    fn button_colors(&self, role: ButtonRole, accent: Color) -> (Option<Color>, Color) {
+        let p = self.pal();
+        match role {
+            ButtonRole::Primary => (Some(p.label_primary), p.label_on_accent),
+            ButtonRole::Secondary => (Some(p.fill_secondary), p.label_primary),
+            ButtonRole::Accent => (Some(accent.with_alpha(opacity::TINT_FILL)), accent),
+            ButtonRole::Destructive => (Some(p.system_red.with_alpha(opacity::TINT_FILL)), p.system_red),
+            ButtonRole::Plain => (None, p.label_primary),
+        }
     }
 }

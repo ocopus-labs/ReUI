@@ -3,7 +3,8 @@
 
 use std::sync::mpsc::Receiver;
 
-use reui_design::tokens::{color, component, island, motion};
+use reui_design::look::{Appearance, Look};
+use reui_design::tokens::{component, island, look as range, motion, notch};
 use reui_design::Color;
 use reui_protocol::{
     ClientMsg, Snapshot,
@@ -23,7 +24,7 @@ use crate::features::visualizer::Visualizer;
 use crate::ipc::Event;
 use crate::drag_guard::DragGuard;
 use crate::place::MonitorChoice;
-use crate::render::{Renderer, COMPACT_SURFACE, EXPANDED_SURFACE, MINIMAL_SURFACE};
+use crate::render::{expanded_surface, Renderer, COMPACT_SURFACE, EAR_SURFACE, MINIMAL_SURFACE};
 use crate::settings::Visibility;
 
 use super::{Pill, State};
@@ -38,15 +39,22 @@ impl Pill {
     #[allow(clippy::too_many_arguments)]
     pub fn new(
         hwnd: HWND,
-        scale: f32,
+        dpi: f32,
         window: RECT,
         monitor: HMONITOR,
         reduced_motion: bool,
         visibility: Visibility,
+        appearance: Appearance,
+        look: Look,
         to_hub: UnboundedSender<ClientMsg>,
         events: Receiver<Event>,
     ) -> Result<Self> {
+        // Size scales the whole pill and its type: it's drawn at that much more than the
+        // display's scale, so every DIP below grows with it.
+        let scale = dpi * look.size;
         let s = scale;
+        let top = look.top();
+        let expanded_dims = expanded_surface(&look);
         let compositor = Compositor::new()?;
         let target = unsafe { compositor.cast::<ICompositorDesktopInterop>()?.CreateDesktopWindowTarget(hwnd, true)? };
         let root = compositor.CreateContainerVisual()?;
@@ -56,13 +64,14 @@ impl Pill {
 
         let core = (island::idle::WIDTH, island::HEIGHT);
         let peek_h = core.1 + island::compact::PEEK_GROW;
+        let rest = idle_size(&look);
         let props = compositor.CreatePropertySet()?;
-        props.InsertScalar(h!("w"), core.0 * s)?;
-        props.InsertScalar(h!("h"), core.1 * s)?;
+        props.InsertScalar(h!("w"), rest.0 * s)?;
+        props.InsertScalar(h!("h"), rest.1 * s)?;
         props.InsertScalar(h!("m"), 0.0)?;
         props.InsertScalar(h!("eh"), island::expanded::MIN_HEIGHT * s)?;
-        // Expanded corner radius: the pill's, or the wide panel's calmer one.
-        props.InsertScalar(h!("r"), island::expanded::RADIUS * s)?;
+        // Expanded corner radius: the card's, or the wide panel's calmer one.
+        props.InsertScalar(h!("r"), look.radius() * s)?;
         let win_w = (window.right - window.left) as f32;
         let expr = |text: &str, scalars: &[(&str, f32)]| -> Result<ExpressionAnimation> {
             let e = compositor.CreateExpressionAnimationWithExpression(&HSTRING::from(text))?;
@@ -78,18 +87,37 @@ impl Pill {
 
         // The pill itself.
         let pill = compositor.CreateSpriteVisual()?;
-        pill.SetBrush(&color_brush(&compositor, color::island::BACKGROUND)?)?;
+        pill.SetBrush(&color_brush(&compositor, look.palette.background)?)?;
         pill.StartAnimation(h!("Size"), &expr("Vector2(p.w, p.h)", &[])?)?;
-        pill.StartAnimation(h!("Offset"), &expr("Vector3(Round((W - p.w) / 2), Round(T), 0)", &[("W", win_w), ("T", island::TOP * s)])?)?;
-        let shape = compositor.CreateRoundedRectangleGeometry()?;
-        shape.StartAnimation(h!("Size"), &expr("Vector2(p.w, p.h)", &[])?)?;
-        shape.StartAnimation(h!("CornerRadius"), &expr("Vector2(Min(p.h / 2, p.r), Min(p.h / 2, p.r))", &[])?)?;
-        pill.SetClip(&compositor.CreateGeometricClipWithGeometry(&shape)?)?;
+        pill.StartAnimation(h!("Offset"), &expr("Vector3(Round((W - p.w) / 2), Round(T), 0)", &[("W", win_w), ("T", top * s)])?)?;
+        // Corners: the compact pill's (a capsule at full roundness, `look.rounded`) easing
+        // into the card's `p.r` as the pill opens, never more than half its height. At full
+        // roundness this is exactly `Min(p.h / 2, p.r)`.
+        let corner = format!(
+            "Min(p.h / 2, Min(p.r, (K + (p.h / 2 - K) * R) + (p.r - (K + (p.h / 2 - K) * R)) * {t}))",
+            t = t
+        );
+        let corner_scalars = [("K", range::roundness::MIN_RADIUS * s), ("R", look.roundness)];
+        let notched = look.notch();
+        // A notch's rectangle reaches one corner radius above the screen's edge, so its top
+        // corners are off-screen and the top is flat; size springs and hit testing stay.
+        let outline = || -> Result<CompositionRoundedRectangleGeometry> {
+            let shape = compositor.CreateRoundedRectangleGeometry()?;
+            if notched {
+                shape.StartAnimation(h!("Size"), &expr(&format!("Vector2(p.w, p.h + {corner})"), &corner_scalars)?)?;
+                shape.StartAnimation(h!("Offset"), &expr(&format!("Vector2(0, -({corner}))"), &corner_scalars)?)?;
+            } else {
+                shape.StartAnimation(h!("Size"), &expr("Vector2(p.w, p.h)", &[])?)?;
+            }
+            shape.StartAnimation(h!("CornerRadius"), &expr(&format!("Vector2({corner}, {corner})"), &corner_scalars)?)?;
+            Ok(shape)
+        };
+        pill.SetClip(&compositor.CreateGeometricClipWithGeometry(&outline()?)?)?;
         root.Children()?.InsertAtTop(&pill)?;
 
-        let renderer = Renderer::new(&compositor, s)?;
+        let renderer = Renderer::new(&compositor, s, look)?;
         let compact_surface = renderer.surface(COMPACT_SURFACE)?;
-        let expanded_surface = renderer.surface(EXPANDED_SURFACE)?;
+        let expanded_surface = renderer.surface(expanded_dims)?;
         let minimal_surface = renderer.surface(MINIMAL_SURFACE)?;
 
         // Compact content: centred, nudged down while peeking, gone early in an expansion.
@@ -119,9 +147,9 @@ impl Pill {
         // Expanded content: fades and scales in during the later part of the morph.
         let start = motion::crossfade::EXPANDED_IN_START;
         let from = motion::crossfade::EXPANDED_SCALE_FROM;
-        let expanded = surface_sprite(&compositor, &expanded_surface, EXPANDED_SURFACE, s)?;
-        expanded.SetCenterPoint(Vector3::new(EXPANDED_SURFACE.0 / 2.0 * s, 0.0, 0.0))?;
-        expanded.StartAnimation(h!("Offset"), &expr("Vector3(Round((p.w - We) / 2), 0, 0)", &[("We", EXPANDED_SURFACE.0 * s)])?)?;
+        let expanded = surface_sprite(&compositor, &expanded_surface, expanded_dims, s)?;
+        expanded.SetCenterPoint(Vector3::new(expanded_dims.0 / 2.0 * s, 0.0, 0.0))?;
+        expanded.StartAnimation(h!("Offset"), &expr("Vector3(Round((p.w - We) / 2), 0, 0)", &[("We", expanded_dims.0 * s)])?)?;
         expanded.StartAnimation(h!("Opacity"), &expr(&format!("Clamp(({t} - {start}) / (1 - {start}), 0, 1)"), &[])?)?;
         let grow = format!("{from} + (1 - {from}) * {t}");
         expanded.StartAnimation(h!("Scale"), &expr(&format!("Vector3({grow}, {grow}, 1)"), &[])?)?;
@@ -132,26 +160,71 @@ impl Pill {
         let size = island::minimal::SIZE * s;
         let bubble = compositor.CreateSpriteVisual()?;
         bubble.SetSize(Vector2::new(size, size))?;
-        bubble.SetBrush(&color_brush(&compositor, color::island::BACKGROUND)?)?;
+        bubble.SetBrush(&color_brush(&compositor, look.palette.background)?)?;
         let circle = compositor.CreateRoundedRectangleGeometry()?;
-        circle.SetSize(Vector2::new(size, size))?;
-        circle.SetCornerRadius(Vector2::new(size / 2.0, size / 2.0))?;
+        let round = look.rounded(island::minimal::SIZE) * s;
+        circle.SetCornerRadius(Vector2::new(round, round))?;
+        if notched {
+            // The notch's trailing end: flat-topped like the notch, joined to the edge.
+            circle.SetSize(Vector2::new(size, size + round))?;
+            circle.SetOffset(Vector2::new(0.0, -round))?;
+        } else {
+            circle.SetSize(Vector2::new(size, size))?;
+        }
         bubble.SetClip(&compositor.CreateGeometricClipWithGeometry(&circle)?)?;
+        let bubble_edge = edge(&compositor, &circle, look.palette.hairline)?;
         bubble.SetCenterPoint(Vector3::new(size / 2.0, size / 2.0, 0.0))?;
+        let bubble_gap = if notched { notch::JOIN_GAP } else { island::minimal::GAP } * s;
         bubble.StartAnimation(
             h!("Offset"),
-            &expr("Vector3(Round((W + p.w) / 2 + G), Round(T), 0)", &[("W", win_w), ("G", island::minimal::GAP * s), ("T", island::TOP * s)])?,
+            &expr("Vector3(Round((W + p.w) / 2 + G), Round(T), 0)", &[("W", win_w), ("G", bubble_gap), ("T", top * s)])?,
         )?;
         bubble.StartAnimation(h!("Opacity"), &expr(&format!("p.m * {compact_fade}"), &[])?)?;
-        bubble.StartAnimation(h!("Scale"), &expr("Vector3(0.6 + 0.4 * p.m, 0.6 + 0.4 * p.m, 1)", &[])?)?;
+        // A notch's end stays joined to the edge: it fades in without growing.
+        if !notched {
+            bubble.StartAnimation(h!("Scale"), &expr("Vector3(0.6 + 0.4 * p.m, 0.6 + 0.4 * p.m, 1)", &[])?)?;
+        }
         bubble.Children()?.InsertAtTop(&surface_sprite(&compositor, &minimal_surface, MINIMAL_SURFACE, s)?)?;
         let minimal_brush = compositor.CreateColorBrush()?;
         let minimal_bars = bar_visuals(&compositor, &bubble.Children()?, &minimal_brush, s)?;
         root.Children()?.InsertAtTop(&bubble)?;
 
+        // The theme's hairline just inside the edge (light: it holds the white island's
+        // shape on white windows; dark has none). Over the content, following the morphs.
+        if look.palette.hairline.a > 0.0 {
+            let pill_edge = edge(&compositor, &outline()?, look.palette.hairline)?;
+            pill_edge.StartAnimation(h!("Size"), &expr("Vector2(p.w, p.h)", &[])?)?;
+            pill.Children()?.InsertAtTop(&pill_edge)?;
+            bubble_edge.SetSize(Vector2::new(size, size))?;
+            bubble.Children()?.InsertAtTop(&bubble_edge)?;
+        }
+
+        // The notch's ears, over everything so their overlap hides the shape's edge where
+        // they join it. The right one moves out to the second activity's end while it shows.
+        if notched {
+            let ear_px = EAR_SURFACE.0 * s;
+            let one = s;
+            for right in [false, true] {
+                let surface = renderer.surface(EAR_SURFACE)?;
+                renderer.draw_ear(&surface, right)?;
+                let ear = surface_sprite(&compositor, &surface, EAR_SURFACE, s)?;
+                let x = if right {
+                    format!("Round((W - p.w) / 2 + p.w + p.m * {compact_fade} * (G + S) - O)")
+                } else {
+                    "Round((W - p.w) / 2) - E + O".to_string()
+                };
+                let scalars = [("W", win_w), ("E", ear_px), ("O", one), ("G", bubble_gap), ("S", size)];
+                ear.StartAnimation(h!("Offset"), &expr(&format!("Vector3({x}, 0, 0)"), &scalars)?)?;
+                root.Children()?.InsertAtTop(&ear)?;
+            }
+        }
+
         Ok(Self {
             hwnd,
             scale,
+            dpi,
+            look,
+            appearance,
             window,
             monitor,
             reduced_motion,
@@ -194,7 +267,7 @@ impl Pill {
             on_bubble: false,
             open_id: None,
             state: State::Idle,
-            target: core,
+            target: rest,
             minimal: false,
             inside: false,
             hovered: false,
@@ -231,6 +304,26 @@ impl Pill {
             events,
         })
     }
+}
+
+/// The resting pill's size: a notch at rest is narrower and only about a menu bar tall.
+pub(super) fn idle_size(look: &Look) -> (f32, f32) {
+    if look.notch() {
+        (notch::IDLE_WIDTH, notch::IDLE_HEIGHT)
+    } else {
+        (island::idle::WIDTH, island::HEIGHT)
+    }
+}
+
+/// A stroke along `shape` in `color`, two pixels wide and centred on the edge, so the
+/// clip it sits under leaves one crisp physical pixel inside.
+fn edge(c: &Compositor, shape: &CompositionRoundedRectangleGeometry, color: Color) -> Result<ShapeVisual> {
+    let visual = c.CreateShapeVisual()?;
+    let stroke = c.CreateSpriteShapeWithGeometry(shape)?;
+    stroke.SetStrokeBrush(&color_brush(c, color)?)?;
+    stroke.SetStrokeThickness(2.0)?;
+    visual.Shapes()?.Append(&stroke)?;
+    Ok(visual)
 }
 
 fn surface_sprite(c: &Compositor, surface: &CompositionDrawingSurface, dips: (f32, f32), s: f32) -> Result<SpriteVisual> {

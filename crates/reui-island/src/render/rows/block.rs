@@ -1,7 +1,7 @@
 //! A text block (a full command, an edit's changed lines, a plan): at most
 //! `block.max-height` tall, scrolling inside the card with the wheel instead of growing it.
 
-use reui_design::tokens::{color, component, island, radius};
+use reui_design::tokens::component;
 use reui_design::Color;
 use reui_protocol::{diff_tone, BlockKind};
 use windows::core::Result;
@@ -9,7 +9,7 @@ use windows::Win32::Graphics::Direct2D::*;
 use windows::Win32::Graphics::DirectWrite::*;
 
 use crate::render::text::utf16_prefix;
-use crate::render::{tone_color, Align, Hit, Renderer};
+use crate::render::{Align, Hit, Renderer};
 
 /// More than this is never worth laying out in a card that shows a few lines of it.
 const MAX_LINES: usize = 400;
@@ -21,7 +21,7 @@ impl Renderer {
     /// monospace lines, diff lines tinted by what they do; prose is bare wrapped text.
     #[allow(clippy::too_many_arguments)]
     pub(in crate::render) fn block(&self, rt: &ID2D1RenderTarget, text: &str, kind: BlockKind, y: f32, scroll: f32, accent: Color, hits: &mut Vec<Hit>) -> Result<(f32, f32)> {
-        let inset = island::expanded::INSET;
+        let inset = self.look.inset();
         let (l, r) = (inset, self.width.get() - inset);
         let s = self.scale;
         if kind == BlockKind::Prose {
@@ -36,7 +36,7 @@ impl Renderer {
             let scroll = scroll.clamp(0.0, max);
             unsafe {
                 rt.PushAxisAlignedClip(&self.rect(l, y, r, y + shown), D2D1_ANTIALIAS_MODE_ALIASED);
-                rt.DrawTextLayout(self.point(l, y - scroll), &layout, &self.brush(rt, color::label::SECONDARY)?, D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
+                rt.DrawTextLayout(self.point(l, y - scroll), &layout, &self.brush(rt, self.pal().label_secondary)?, D2D1_DRAW_TEXT_OPTIONS_ENABLE_COLOR_FONT);
                 rt.PopAxisAlignedClip();
             }
             hits.push(Hit { block: true, ..Hit::new(l, y, r, y + shown, "") });
@@ -53,7 +53,7 @@ impl Renderer {
         let h = shown + 2.0 * pad;
         let max = content - shown;
         let scroll = scroll.clamp(0.0, max);
-        unsafe { self.round_rect(rt, l, y, r, y + h, radius::CONCENTRIC.min(h / 2.0), color::fill::QUATERNARY)? };
+        unsafe { self.round_rect(rt, l, y, r, y + h, self.concentric().min(h / 2.0), self.pal().fill_quaternary)? };
         let (top, bottom) = (y + pad, y + pad + shown);
         unsafe { rt.PushAxisAlignedClip(&self.rect(l, top, r, bottom), D2D1_ANTIALIAS_MODE_ALIASED) };
         let drawn = (|| -> Result<()> {
@@ -64,8 +64,8 @@ impl Renderer {
                     break;
                 }
                 let ink = match kind {
-                    BlockKind::Diff => tone_color(diff_tone(text), accent),
-                    _ => color::label::PRIMARY,
+                    BlockKind::Diff => self.tone_color(diff_tone(text), accent),
+                    _ => self.pal().label_primary,
                 };
                 self.text(rt, text, font, l + pad, at, r - l - 2.0 * pad, Align::Start, ink)?;
             }

@@ -3,6 +3,7 @@
 
 use std::borrow::Cow;
 
+use reui_design::look::concentric;
 use reui_design::tokens::{component, island, opacity};
 use reui_design::Color;
 use reui_protocol::{Art, CompactView, Element, ImageId, Tone};
@@ -10,7 +11,7 @@ use windows::core::Result;
 use windows::UI::Composition::CompositionDrawingSurface;
 use windows::Win32::Graphics::Direct2D::ID2D1RenderTarget;
 
-use crate::render::{tone_color, Align, CompactLayout, Renderer, Slot, COMPACT_SURFACE};
+use crate::render::{Align, CompactLayout, Renderer, Slot, COMPACT_SURFACE};
 use crate::render::elements::shown_level;
 
 impl Renderer {
@@ -40,7 +41,7 @@ impl Renderer {
                 let left = (COMPACT_SURFACE.0 - width) / 2.0;
                 let mid = COMPACT_SURFACE.1 / 2.0;
                 self.element(rt, &leading, Slot::Compact, left + lm, mid, Align::Start, accent)?;
-                self.text(rt, text, font, left + lm + lw + gap, mid - font.style.line_height / 2.0, tw, Align::Start, tone_color(*tone, accent))?;
+                self.text(rt, text, font, left + lm + lw + gap, mid - font.style.line_height / 2.0, tw, Align::Start, self.tone_color(*tone, accent))?;
                 layout.width = width;
                 let tile = component::art::COMPACT;
                 layout.logo = match &view.leading {
@@ -93,7 +94,8 @@ impl Renderer {
             // Anything above zero shows at least the round end, so "on but quiet" never
             // reads as off.
             let right = left + inset + ((width - 2.0 * inset) * value).max(inner);
-            unsafe { self.round_rect(rt, left + inset, inset, right, h - inset, inner / 2.0, accent.with_alpha(accent.a * alpha))? };
+            let corner = concentric(self.look.rounded(h), inset).min(inner / 2.0);
+            unsafe { self.round_rect(rt, left + inset, inset, right, h - inset, corner, accent.with_alpha(accent.a * alpha))? };
         }
         // The fill is the tint here, so a glyph tile becomes the bare glyph.
         let glyph = match leading {

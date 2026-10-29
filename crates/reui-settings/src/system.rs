@@ -107,6 +107,18 @@ fn read_dword(root: HKEY, key: &str, value: &str) -> Option<u32> {
 }
 
 /// "26200.6899", for bug reports.
+/// Windows' app mode is light (Settings > Personalization > Colors): what the island's
+/// Auto theme follows. Light when the value is missing, as Windows treats it.
+pub fn apps_light() -> bool {
+    read_dword(HKEY_CURRENT_USER, r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize", "AppsUseLightTheme").is_none_or(|v| v != 0)
+}
+
+/// The Windows accent colour (`AccentColor` is 0xAABBGGRR), for the island's Windows accent.
+pub fn accent_color() -> Option<reui_design::Color> {
+    let abgr = read_dword(HKEY_CURRENT_USER, r"Software\Microsoft\Windows\DWM", "AccentColor")?;
+    Some(reui_design::Color::from_rgb8((abgr & 0xFF) as u8, (abgr >> 8 & 0xFF) as u8, (abgr >> 16 & 0xFF) as u8))
+}
+
 pub fn windows_build() -> String {
     let key = r"SOFTWARE\Microsoft\Windows NT\CurrentVersion";
     let build = read_string(HKEY_LOCAL_MACHINE, key, "CurrentBuild").unwrap_or_else(|| "?".into());

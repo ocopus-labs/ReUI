@@ -3,7 +3,8 @@
 
 use std::collections::HashSet;
 
-use reui_design::tokens::{color, component, opacity, radius};
+use reui_design::look::concentric;
+use reui_design::tokens::{component, island, opacity};
 use reui_design::Color;
 use reui_protocol::{Art, ImageId};
 use windows::core::{Interface, Result};
@@ -62,7 +63,7 @@ impl Renderer {
     }
 
     pub(super) fn art(&self, rt: &ID2D1RenderTarget, art: &Art, slot: Slot, left: f32, top: f32, accent: Color) -> Result<()> {
-        let (size, corner) = art_shape(slot);
+        let (size, corner) = self.art_shape(slot);
         let r = self.rect(left, top, left + size, top + size);
         let shape = D2D1_ROUNDED_RECT { rect: r, radiusX: corner * self.scale, radiusY: corner * self.scale };
         unsafe {
@@ -88,7 +89,7 @@ impl Renderer {
                     // drawn by the pill so it can spin.
                     if !(*animated && slot == Slot::Compact) {
                         let mark = size * opacity::LOGO_BARE;
-                        self.svg(rt, *image, left + (size - mark) / 2.0, top + (size - mark) / 2.0, mark, color::label::PRIMARY)?;
+                        self.svg(rt, *image, left + (size - mark) / 2.0, top + (size - mark) / 2.0, mark, self.pal().label_primary)?;
                     }
                 }
                 Art::Image(id) => match self.images.get(id) {
@@ -101,15 +102,15 @@ impl Renderer {
                             radiusX: (shape.radiusX - 0.5).max(0.0),
                             radiusY: (shape.radiusY - 0.5).max(0.0),
                         };
-                        rt.DrawRoundedRectangle(&inner, &self.brush(rt, color::label::PRIMARY.with_alpha(opacity::ART_STROKE))?, 1.0, None);
+                        rt.DrawRoundedRectangle(&inner, &self.brush(rt, self.pal().label_primary.with_alpha(opacity::ART_STROKE))?, 1.0, None);
                     }
                     Some(Decoded::Svg(_)) => {
-                        rt.FillRoundedRectangle(&shape, &self.brush(rt, color::fill::TERTIARY)?);
+                        rt.FillRoundedRectangle(&shape, &self.brush(rt, self.pal().fill_tertiary)?);
                         let mark = size * opacity::LOGO;
-                        self.svg(rt, *id, left + (size - mark) / 2.0, top + (size - mark) / 2.0, mark, color::label::PRIMARY)?;
+                        self.svg(rt, *id, left + (size - mark) / 2.0, top + (size - mark) / 2.0, mark, self.pal().label_primary)?;
                     }
                     // Not arrived yet (or undecodable): a quiet placeholder of the same shape.
-                    None => rt.FillRoundedRectangle(&shape, &self.brush(rt, color::fill::TERTIARY)?),
+                    None => rt.FillRoundedRectangle(&shape, &self.brush(rt, self.pal().fill_tertiary)?),
                 },
             }
         }
@@ -198,13 +199,20 @@ fn fit_svg(text: &str) -> String {
     format!("{}{}{}", &text[..start], fitted, &text[start + len..])
 }
 
-/// (size, corner radius): circles in the compact capsule, minimal bubble and trailing
-/// slot; concentric with the island's corner in the leading slot.
-pub(super) fn art_shape(slot: Slot) -> (f32, f32) {
-    match slot {
-        Slot::Compact | Slot::Minimal => (component::art::COMPACT, component::art::COMPACT / 2.0),
-        Slot::Leading => (component::art::EXPANDED, radius::CONCENTRIC),
-        Slot::Trailing => (component::art::TRAILING, component::art::TRAILING / 2.0),
+impl Renderer {
+    /// (size, corner radius), concentric with the edge the art sits against: the compact
+    /// capsule's or bubble's end (a circle at full roundness), the open card's corner in the
+    /// leading slot, its side in the trailing slot (a circle while that allows).
+    pub(super) fn art_shape(&self, slot: Slot) -> (f32, f32) {
+        match slot {
+            Slot::Compact | Slot::Minimal => {
+                let size = component::art::COMPACT;
+                let end = self.look.rounded(island::HEIGHT);
+                (size, concentric(end, island::compact::SIDE_MARGIN).min(size / 2.0))
+            }
+            Slot::Leading => (component::art::EXPANDED, self.concentric()),
+            Slot::Trailing => (component::art::TRAILING, self.capsule(component::art::TRAILING, self.look.inset())),
+        }
     }
 }
 

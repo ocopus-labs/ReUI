@@ -20,7 +20,7 @@ The look and behaviour of every ReUI surface. The island is the first surface; t
 
 ## Principles
 
-1. **Black and quiet.** The island is a pure black shape that blends into the top of the screen. Colour comes from one accent per activity, used sparingly: the eyebrow, a ring, the bars, one tinted button.
+1. **Black and quiet.** The island is a pure black shape that blends into the top of the screen (the default look; see *Appearance* for Light and the Notch style). Colour comes from one accent per activity, used sparingly: the eyebrow, a ring, the bars, one tinted button.
 2. **Three levels of hierarchy.** Every expanded view reads **eyebrow → hero → detail**: a small accent label saying where this comes from ("Timer", "Claude Code", "Now Playing"), one large thing to read (34 pt numerals, a 20 pt title, or a command chip), and a quieter secondary line. Never two heroes.
 3. **Concentric corners.** Shapes inside the island follow its curve. In the compact capsule, round content is a circle inset so it sits concentric with the pill's end (24 circle, 6.33 inset). In the expanded island, anything one inset from the edge uses `radius.concentric` (44 − 20 = 24); buttons are capsules (radius ≈ 24) or circles. No small-radius squares or squircles next to a round edge.
 4. **Content first, chrome never.** No borders, no separators, no shadows on the island. Hierarchy comes from size, weight and the label colours.
@@ -99,6 +99,21 @@ Layout templates fall out of the content, so modules don't pick them:
 
 In the hidden modes, pushing the pointer against the top edge above the island reveals it; it hides again `motion.delay.reveal-hold` after the pointer leaves. Showing and hiding use the presence animation (`motion.show`): the island emerges from the top edge (slides down, scales up from `from-scale` with a slight overshoot) and retracts into it, quicker, on hide.
 
+## Appearance
+
+The user picks a look in Settings → Appearance (`settings.json`; PRD: `docs/PRD-appearance.md`). `reui_design::look` turns those settings into a **`Look`**: the theme's `Palette`, the radii, insets and gaps, the size and the gap from the top. The island's renderer and pill draw only from it (never from colour or inset constants), and Settings' Appearance preview draws from the same `Look`. A new look rebuilds the pill, like a DPI change; nothing is checked per frame.
+
+| Setting | What changes |
+| --- | --- |
+| **Style** | *Island*: floats `top_gap` below the edge, the second activity in a detached bubble. *Notch*: flush with the top edge, flat top, square top corners joined to the edge by concave **ears** (`notch.ear`; a square minus a quarter circle, overlapping the shape by one DIP so no seam shows), bottom corners from the roundness; the second activity sits in the notch's trailing end, `notch.join-gap` away, flat-topped. A resting notch is `notch.idle-width` × `notch.idle-height` |
+| **Theme** | `theme.dark` (today's colours) or `theme.light`: a white island with a 1 px `hairline` (8 % black) just inside its edge, black ink, Apple's light labels, fills and system colours. *Auto* follows Windows' app mode, re-read only when Windows broadcasts a colour change. Content colours (artwork, logos, swatches, an activity's accent) are never inverted |
+| **Accent** | The default accent (activities without their own): ReUI blue (`color.accent.default`) or the Windows accent |
+| **Roundness** | 0..1: the card radius from `look.roundness.min-radius` (10) to 44 (the panel's to 34), the compact pill and bubble from 10 to a capsule |
+| **Padding** | Compact / Regular / Roomy scale the expanded `inset`, column, section and row gaps by `look.padding.*` (whole DIPs); max heights grow with Roomy so the same content fits |
+| **Size** | `look.size.min..max`: the pill is drawn at the display's scale times this, so every dimension and the type scale together |
+
+**Concentric in every combination.** Anything one inset inside an edge takes `concentric(outer, inset) = outer − inset`, never under `radius.min` (4). Controls are capsules only while the concentric radius allows one (within `radius.capsule-slack`), otherwise they take it (square-ish looks get square-ish buttons). Round content in the compact pill takes `concentric(pill end, side-margin)`, a circle at full roundness. Rings stay rings. Tested for every roundness × padding in `look.rs`.
+
 ## Tokens
 
 | Group | Contents |
@@ -109,12 +124,15 @@ In the hidden modes, pushing the pointer against the top edge above the island r
 | `color.fill` | Apple's grey fills for secondary buttons and tiles; `track` for unfilled rings, bars and progress |
 | `color.system` | Apple dark system palette: red, orange, yellow, green, mint, teal, cyan, blue, indigo, purple, pink, gray |
 | `color.accent.default` | Accent when an activity doesn't send one |
+| `theme` | `dark` and `light`: the same keys each (background, hairline, labels, fills, track, red / orange / green), compiled into a `Palette` per theme |
+| `look` | The Appearance ranges: `roundness.min-radius`, `padding.compact` / `roomy`, `size.min` / `max`, `top-gap.max` |
+| `notch` | `ear`, `idle-width`, `idle-height`, `join-gap` |
 | `opacity` | `tint-fill` (accent-tinted fills), `glow` (0 = off) |
 | `typography` | `eyebrow` 13/16 semibold · `value` 34/38 semibold tabular · `headline` 20/24 semibold · `code` 15/20 Cascadia Mono · `detail` 15/20 · `compact` 15/20 semibold tabular · `button` 15/20 semibold · `caption` 12/16 tabular · `context` 13/16 medium · `choice` (= button) · `choice-detail` 13/16 · `block-code` 12/16 Cascadia Mono · `block-prose` 13/18 |
 | `icon` | Glyph sizes for compact, button, expanded |
 | `space` | 2 · 4 · 8 · 12 · 16 · 20 · 24 |
 | `island` | Top offset, height, idle width, compact (centre gap, round and text margins), minimal and expanded geometry (widths per size, max heights, inset, column, line, section, row and strip gaps) |
-| `radius` | `concentric` (expanded radius − inset), `chip` |
+| `radius` | `concentric` (expanded radius − inset, at the default look), `chip`, `min` (concentric radii never go under it), `capsule-slack` |
 | `component` | Ring, art, app icon, button (with the roomy card's alert-style inset and gap), progress, bars, dot, choice and block sizes |
 | `motion.spring` | `expand`, `collapse`, `peek`, `settle`, `reduced` (damping ratio + period) |
 | `motion.height` | Height springs are slightly calmer than width: `damping-offset`, `period-factor` |
@@ -189,7 +207,7 @@ Text buttons are 44 high capsules; inline glyph buttons are 40 circles; transpor
 
 ## Settings window
 
-`reui-settings` follows macOS System Settings (dark), with the island's type (tokens under `prefs`; most of the older `settings` group is no longer read). A solid sidebar (#252527) holds a search field, the ReUI header row (icon, name, version), then the pages, each with a coloured icon tile (General grey, Now Playing pink, Clipboard blue, Volume orange, Devices green, Timers red, Agents purple, Privacy indigo); the selected page is an accent-filled row. The content has back/forward and the page title in its own caption row, then a hero card: a live island preview drawn from real components on a soft wash of the page colour, under it the page icon, title, one paragraph and the module's master toggle. Groups are a small eyebrow over one rounded card whose rows are split by inset hairlines. A row is a title, one quiet line, and its controls on the right: macOS-style toggles, segmented controls, steppers/popups, key caps, capsule buttons (a destructive one asks a second time). Keyboard focus is an accent ring following the control's radius. No filler: every line is a fact about the setting.
+`reui-settings` follows macOS System Settings (dark), with the island's type (tokens under `prefs`; most of the older `settings` group is no longer read). A solid sidebar (#252527) holds a search field, the ReUI header row (icon, name, version), then the pages, each with a coloured icon tile (General grey, Appearance mint, Now Playing pink, Clipboard blue, Volume orange, Devices green, Timers red, Agents purple, Privacy indigo); the selected page is an accent-filled row. The content has back/forward and the page title in its own caption row, then a hero card: a live island preview drawn from real components on a soft wash of the page colour, under it the page icon, title, one paragraph and the module's master toggle. Groups are a small eyebrow over one rounded card whose rows are split by inset hairlines. A row is a title, one quiet line, and its controls on the right: macOS-style toggles, segmented controls, steppers/popups, key caps, capsule buttons (a destructive one asks a second time). Keyboard focus is an accent ring following the control's radius. No filler: every line is a fact about the setting.
 
 Rendering: D3D11 + a Direct2D device context on a flip-model swap chain paced by its frame-latency waitable object, so motion runs at display rate (≈200 fps on a 200 Hz panel, ~0.3 ms CPU per frame) and the window does nothing at rest. Text layouts and page bitmaps are cached; `--perf` prints frame timings, `perf/harness.ps1` drives it.
 

@@ -5,6 +5,7 @@
 
 mod about;
 mod agents;
+mod appearance;
 mod clipboard;
 mod devices;
 mod general;
@@ -29,6 +30,7 @@ use crate::ui::{button, footed, group, icons, Act, Block, Icon, Part, Preview, R
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Page {
     General,
+    Appearance,
     NowPlaying,
     Clipboard,
     Osd,
@@ -45,13 +47,14 @@ pub enum Page {
 
 impl Page {
     /// The Settings window's pages, in the nav.
-    pub const ALL: [Page; 9] = [Page::General, Page::NowPlaying, Page::Clipboard, Page::Osd, Page::Devices, Page::Timers, Page::Agents, Page::Privacy, Page::About];
+    pub const ALL: [Page; 10] = [Page::General, Page::Appearance, Page::NowPlaying, Page::Clipboard, Page::Osd, Page::Devices, Page::Timers, Page::Agents, Page::Privacy, Page::About];
     /// The welcome's steps, in its nav.
     pub const WELCOME: [Page; 3] = [Page::WelcomeFeatures, Page::WelcomeShortcut, Page::WelcomeStartup];
 
     pub fn title(self) -> &'static str {
         match self {
             Page::General => "General",
+            Page::Appearance => "Appearance",
             Page::NowPlaying => "Now Playing",
             Page::Clipboard => "Clipboard",
             Page::Osd => "Volume & brightness",
@@ -97,6 +100,7 @@ impl Page {
     pub fn icon(self) -> Icon {
         match self {
             Page::General => icons::general(),
+            Page::Appearance => icons::appearance(),
             Page::NowPlaying => icons::now_playing(),
             Page::Clipboard => icons::clipboard(),
             Page::Osd => icons::osd(),
@@ -150,6 +154,7 @@ pub enum Effect {
 pub fn build(page: Page, state: &State) -> Vec<Block> {
     let mut blocks = match page {
         Page::General => general::build(state),
+        Page::Appearance => appearance::build(state),
         Page::NowPlaying => now_playing::build(state),
         Page::Clipboard => clipboard::build(state),
         Page::Osd => osd::build(state),
@@ -188,6 +193,7 @@ pub fn act(page: Page, state: &mut State, target: &Target, act: Act) -> Effect {
     }
     match page {
         Page::General => general::act(state, target, act),
+        Page::Appearance => appearance::act(state, target, act),
         Page::NowPlaying => now_playing::act(state, target, act),
         Page::Clipboard => clipboard::act(state, target, act),
         Page::Osd => osd::act(state, target, act),
@@ -314,7 +320,8 @@ pub mod tests {
         assert_eq!(Page::from_arg("about"), Some(Page::About));
         assert_eq!(Page::from_arg("zzz"), None);
         assert_eq!(Page::from_arg("what"), None, "welcome steps aren't Settings pages");
-        assert_eq!((Page::WelcomeShortcut.index(), Page::About.index()), (1, 8));
+        assert_eq!((Page::WelcomeShortcut.index(), Page::About.index()), (1, 9));
+        assert_eq!(Page::from_arg("appearance"), Some(Page::Appearance));
         assert_eq!(Page::from_arg("timers"), Some(Page::Timers));
         assert!(Page::WelcomeStartup.is_welcome() && !Page::General.is_welcome());
     }

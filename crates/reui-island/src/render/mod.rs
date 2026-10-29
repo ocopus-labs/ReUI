@@ -15,7 +15,8 @@
 use std::cell::Cell;
 use std::collections::HashMap;
 
-use reui_design::tokens::{color, component, font, icon, island, typography};
+use reui_design::look::{concentric, Look};
+use reui_design::tokens::{component, font, icon, island, typography, Palette};
 use reui_design::{Color, TextStyle};
 use reui_protocol::{CardSize, ImageId, Rgb, Tone};
 use windows::core::{Interface, Result};
@@ -45,15 +46,20 @@ mod expanded;
 mod fonts;
 mod images;
 mod minimal;
+mod notch;
 mod rows;
 mod text;
 
 /// Widest compact presentation: two maximal sides around the centre gap.
 pub const COMPACT_MAX_WIDTH: f32 = island::compact::CENTER_GAP + 2.0 * (island::compact::MAX_SIDE + island::compact::TEXT_MARGIN);
 pub const COMPACT_SURFACE: (f32, f32) = (COMPACT_MAX_WIDTH, island::HEIGHT);
-/// Wide enough for the wide expanded island and tall enough for the roomy one; narrower
-/// views are drawn centred in it.
-pub const EXPANDED_SURFACE: (f32, f32) = (island::expanded::WIDE_WIDTH, island::expanded::ROOMY_MAX_HEIGHT);
+
+/// Wide enough for the wide expanded island and tall enough for the roomy one at the
+/// look's padding; narrower views are drawn centred in it.
+pub fn expanded_surface(look: &Look) -> (f32, f32) {
+    (island::expanded::WIDE_WIDTH, look.max_height(island::expanded::ROOMY_MAX_HEIGHT))
+}
+pub use self::notch::EAR_SURFACE;
 pub const MINIMAL_SURFACE: (f32, f32) = (island::minimal::SIZE, island::minimal::SIZE);
 
 pub const BARS: usize = 4;
@@ -184,7 +190,10 @@ pub struct Renderer {
     tabular: IDWriteTypography,
     round: ID2D1StrokeStyle,
     fonts: Fonts,
+    /// Pixels per DIP: the display's scale times the look's size.
     scale: f32,
+    /// Colours and geometry (Settings > Appearance). A new look builds a new renderer.
+    look: Look,
     /// Width of the expanded view being drawn (normal or wide).
     width: Cell<f32>,
     /// Size of the expanded view being drawn: a roomy card lays out its buttons and detail
@@ -193,7 +202,7 @@ pub struct Renderer {
 }
 
 impl Renderer {
-    pub fn new(compositor: &Compositor, scale: f32) -> Result<Self> {
+    pub fn new(compositor: &Compositor, scale: f32, look: Look) -> Result<Self> {
         let d3d = create_d3d_device()?;
         let dxgi: IDXGIDevice = d3d.cast()?;
         let factory: ID2D1Factory1 = unsafe { D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, None)? };
@@ -262,7 +271,7 @@ impl Renderer {
             block_code: f(typography::BLOCK_CODE, false)?,
             block_prose: wrapped(typography::BLOCK_PROSE)?,
         };
-        Ok(Self { graphics, factory, dwrite, wic, images: HashMap::new(), tabular, round, fonts, scale, width: Cell::new(island::expanded::WIDTH), size: Cell::new(CardSize::Regular) })
+        Ok(Self { graphics, factory, dwrite, wic, images: HashMap::new(), tabular, round, fonts, scale, look, width: Cell::new(island::expanded::WIDTH), size: Cell::new(CardSize::Regular) })
     }
 
     pub fn surface(&self, dips: (f32, f32)) -> Result<CompositionDrawingSurface> {
@@ -315,14 +324,44 @@ enum Align {
     End,
 }
 
-fn tone_color(tone: Tone, accent: Color) -> Color {
-    match tone {
-        Tone::Primary => color::label::PRIMARY,
-        Tone::Secondary => color::label::SECONDARY,
-        Tone::Accent => accent,
-        Tone::Positive => color::system::GREEN,
-        Tone::Warning => color::system::ORANGE,
-        Tone::Negative => color::system::RED,
+impl Renderer {
+    /// The theme's colours.
+    fn pal(&self) -> &Palette {
+        &self.look.palette
+    }
+
+    pub fn look(&self) -> &Look {
+        &self.look
+    }
+
+    fn tone_color(&self, tone: Tone, accent: Color) -> Color {
+        match tone {
+            Tone::Primary => self.pal().label_primary,
+            Tone::Secondary => self.pal().label_secondary,
+            Tone::Accent => accent,
+            Tone::Positive => self.pal().system_green,
+            Tone::Warning => self.pal().system_orange,
+            Tone::Negative => self.pal().system_red,
+        }
+    }
+
+    /// The open card's corner radius: the wide panel's or the card's, from the roundness.
+    pub fn card_radius(&self, size: CardSize) -> f32 {
+        match size {
+            CardSize::Wide => self.look.panel_radius(),
+            _ => self.look.radius(),
+        }
+    }
+
+    /// Radius of a shape one inset inside the open card's edge (tiles, wells, cards).
+    fn concentric(&self) -> f32 {
+        concentric(self.card_radius(self.size.get()), self.look.inset())
+    }
+
+    /// A control `h` tall at `inset` from the open card's edge: a capsule while the
+    /// concentric radius allows one, else concentric.
+    fn capsule(&self, h: f32, inset: f32) -> f32 {
+        self.look.capsule(h, self.card_radius(self.size.get()), inset)
     }
 }
 
