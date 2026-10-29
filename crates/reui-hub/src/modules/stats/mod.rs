@@ -27,7 +27,8 @@ use tokio::time::{sleep_until, Instant};
 
 mod card;
 mod history;
-mod maths;
+/// Also formats sizes and speeds for the downloads module.
+pub(crate) mod maths;
 mod os;
 mod pdh;
 mod sampler;

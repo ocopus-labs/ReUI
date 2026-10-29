@@ -5,13 +5,16 @@
 //! (Claude Code, Codex, OpenCode) / Now Playing / system OSD / Devices / Timers / privacy
 //! indicator / System stats modules, `--no-link-previews` keeps clipboard links offline,
 //! `--no-island` doesn't launch the island (run `reui-island` yourself, e.g. under a
-//! debugger). `--no-updates` never looks for updates or mentions them. Clipboard, Now
-//! Playing, Devices, Timers, the privacy indicators and System stats also stay off when their
-//! file says `"enabled": false` (Settings, the welcome). `--no-onboarding` skips the first
-//! run and one-time tips; `--first-run` replays the demo and welcome. `--restore-flyout` only
-//! puts back Windows' volume flyout if a crashed run left it hidden, then exits (the
-//! uninstaller). `REUI_CONFIG_DIR=<dir>` keeps every file in that folder and runs beside the
-//! real ReUI (own pipe, own single-instance lock), for testing.
+//! debugger). `--no-downloads` / `--no-screenshots` disable the downloads and screenshot
+//! moments. `--no-updates` never looks for updates or mentions them. Clipboard, Now
+//! Playing, Devices, Timers, the privacy indicators, System stats, downloads and screenshots
+//! also stay off when their file says `"enabled": false` (Settings, the welcome).
+//! `--no-onboarding` skips the first run and one-time tips; `--first-run` replays the demo
+//! and welcome. `--restore-flyout` only puts back Windows' volume flyout if a crashed run
+//! left it hidden, then exits (the uninstaller). `REUI_CONFIG_DIR=<dir>` keeps every file in
+//! that folder and runs beside the real ReUI (own pipe, own single-instance lock), for
+//! testing; such a sandbox may also set `REUI_DOWNLOADS_DIR` / `REUI_SCREENSHOTS_DIR` to
+//! watch temp folders instead of the user's own.
 //!
 //! One hub per user: launching it again (the Start menu entry) opens Settings and exits.
 
@@ -88,6 +91,9 @@ async fn main() -> Result<()> {
     }
     if !has("--no-stats") && feature_on("stats.json") {
         enabled.push(Box::new(modules::stats::SystemStats));
+    }
+    if !has("--no-downloads") && feature_on("downloads.json") {
+        enabled.push(Box::new(modules::downloads::Downloads));
     }
     if !has("--no-updates") {
         enabled.push(Box::new(modules::updates::Updates));
