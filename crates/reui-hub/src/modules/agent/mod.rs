@@ -5,20 +5,22 @@
 //! JSON; OpenCode's plugin (installed by `reui-bridge install opencode`) translates its
 //! events into the same shape, so one state machine serves all three.
 //!
-//! Each session is one activity that follows the turn: thinking → running a tool (or
-//! compacting, waiting on a permission, asking you something) → done or failed. Done and
-//! failed show briefly and then vanish. Each permission request is its own decision
-//! activity; answering it replies to the waiting bridge, and if the bridge goes away
-//! (answered in the agent's own UI, timed out) the request vanishes.
-//!
-//! Status text is quiet (secondary); colour is kept for the logo and for "your turn".
+//! Every session is tracked through its turn: thinking → running a tool (or compacting,
+//! waiting on a permission, asking you something) → done or failed. Only what needs you
+//! is published by default (a question, a failed turn); working phases and finished turns
+//! show only when `coding.json` asks for them (`settings.rs`, PRD agent moments M1), so a
+//! busy agent costs the island nothing. Each permission request is its own decision
+//! activity, with the session's strip (project, prompt, time in turn) so two sessions
+//! never get confused; answering it replies to the waiting bridge, and if the bridge goes
+//! away (answered in the agent's own UI, timed out) the request vanishes.
 //!
 //! Each hook event is also noted (throttled) in `agents.json` for Settings' status line,
 //! and `reui-bridge test <agent>` (Settings' "Send test event") gets a short "connected"
 //! confirmation instead of a session.
 //!
-//! Files: `view.rs` (how sessions and requests look), `usage.rs` (token usage),
-//! `status.rs` (`agents.json`, the test event).
+//! Files: `view.rs` (what shows and how), `describe.rs` (a tool request for humans),
+//! `settings.rs` (`coding.json`), `usage.rs` (token usage), `status.rs` (`agents.json`,
+//! the test event).
 
 use std::collections::HashMap;
 use std::future::Future;
@@ -32,13 +34,17 @@ use serde_json::{json, Value};
 use tokio::sync::oneshot;
 use tokio::time::{sleep_until, Instant};
 
+mod describe;
+mod settings;
 mod status;
 mod usage;
 mod view;
 
+use self::describe::{short_tool_name, GLYPH_TERMINAL};
+use self::settings::Settings;
 use self::status::Throttle;
 use self::usage::Ledger;
-use self::view::{publish_request, publish_session, publish_test, short_tool_name, GLYPH_TERMINAL, TEST_KEY};
+use self::view::{publish_request, publish_session, publish_test, TEST_KEY};
 use super::Module;
 use crate::hub::{HookCall, ModuleContext, ModuleInput};
 
@@ -130,7 +136,8 @@ enum Phase {
     Tool(String),
     Compacting,
     WaitingPermission,
-    NeedsInput,
+    /// Asking you something; the question when the agent said it.
+    NeedsInput(Option<String>),
     Done { took: Option<Duration> },
     Failed { reason: Option<String> },
 }
@@ -170,6 +177,8 @@ struct Agentry {
     ledger: Arc<Mutex<Ledger>>,
     /// `agents.json` writes.
     status: Mutex<Throttle>,
+    /// `coding.json`: what shows besides what needs you.
+    settings: Mutex<Settings>,
 }
 
 async fn run(profile: &'static Profile, mut ctx: ModuleContext) {
@@ -177,7 +186,7 @@ async fn run(profile: &'static Profile, mut ctx: ModuleContext) {
         Some(svg) => Element::Art(Art::Logo { image: ctx.image(svg.to_vec()), animated: false }),
         None => Element::Art(Art::Glyph(profile.glyph)),
     };
-    let me = Agentry { profile, mark, ledger: Arc::new(Mutex::new(Ledger::default())), status: Mutex::new(Throttle::default()) };
+    let me = Agentry { profile, mark, ledger: Arc::new(Mutex::new(Ledger::default())), status: Mutex::new(Throttle::default()), settings: Mutex::new(Settings::load()) };
     // Claude's usage needs today's transcripts read once; taken out of the loop when done,
     // so a finished scan can't wake the loop again.
     let mut scan = (profile.usage == UsageSource::ClaudeTranscripts)
@@ -214,6 +223,12 @@ async fn run(profile: &'static Profile, mut ctx: ModuleContext) {
                         ctx.retract(&permission_key(id));
                         // Answered elsewhere: the tool most likely runs now.
                         resume(&ctx, &me, &mut sessions, &p.session, Phase::Tool(short_tool_name(&p.tool)));
+                    }
+                }
+                Some(ModuleInput::Action(action)) if action.key.is_empty() && action.action == "reload" => {
+                    *me.settings.lock().unwrap() = Settings::load();
+                    for (id, session) in &sessions {
+                        publish_session(&ctx, &me, id, session);
                     }
                 }
                 Some(ModuleInput::Action(action)) => {
@@ -303,7 +318,7 @@ async fn on_hook(ctx: &ModuleContext, me: &Agentry, call: HookCall, sessions: &m
             Some(Phase::Thinking)
         }
         // The agent asking you something is a question, not a tool run.
-        "PreToolUse" if matches!(str_field("tool_name"), "AskUserQuestion" | "question") => Some(Phase::NeedsInput),
+        "PreToolUse" if matches!(str_field("tool_name"), "AskUserQuestion" | "question") => Some(Phase::NeedsInput(question(&event))),
         "PreToolUse" => Some(Phase::Tool(short_tool_name(str_field("tool_name")))),
         "PostToolUse" => Some(Phase::Thinking),
         "PreCompact" => Some(Phase::Compacting),
@@ -316,7 +331,11 @@ async fn on_hook(ctx: &ModuleContext, me: &Agentry, call: HookCall, sessions: &m
             session.subagents = session.subagents.saturating_sub(1);
             session.phase.clone()
         }
-        "Notification" if matches!(str_field("notification_type"), "agent_needs_input" | "elicitation_dialog") => Some(Phase::NeedsInput),
+        "Notification" if matches!(str_field("notification_type"), "agent_needs_input" | "elicitation_dialog") => match &session.phase {
+            // The question the agent asked already says more than the notification.
+            Some(Phase::NeedsInput(Some(q))) => Some(Phase::NeedsInput(Some(q.clone()))),
+            _ => Some(Phase::NeedsInput(None)),
+        },
         "Stop" => {
             session.usage = read_usage(me, &session_id, session.transcript.clone()).await;
             session.subagents = 0;
@@ -337,7 +356,7 @@ async fn on_hook(ctx: &ModuleContext, me: &Agentry, call: HookCall, sessions: &m
                 .and_then(|s| s.first())
                 .cloned()
                 .filter(|_| me.profile.can_always);
-            publish_request(ctx, me, call.id, &session.project, &tool, &input, suggestion.is_some());
+            publish_request(ctx, me, call.id, session, &tool, &input, suggestion.is_some());
             pending.insert(call.id, Pending { session: session_id.clone(), tool, reply, suggestion, deadline: Instant::now() + DECISION_TIMEOUT });
             Some(Phase::WaitingPermission)
         }
@@ -400,6 +419,13 @@ fn decision(action: &str, suggestion: Option<Value>) -> String {
     json!({ "hookSpecificOutput": { "hookEventName": "PermissionRequest", "decision": decision } }).to_string()
 }
 
+/// The first question of an AskUserQuestion (Claude: `questions[].question`; OpenCode's
+/// `question` tool the same shape), as one line.
+fn question(event: &Value) -> Option<String> {
+    let questions = event.get("tool_input")?.get("questions")?.as_array()?;
+    questions.first()?.get("question")?.as_str().and_then(first_line)
+}
+
 /// First non-empty line, without paste markers, cut to a readable length.
 fn first_line(text: &str) -> Option<String> {
     let line = text.lines().map(str::trim).find(|l| !l.is_empty() && !l.starts_with("<pasted_content"))?;
@@ -447,6 +473,13 @@ mod tests {
         assert_eq!(project_name(r"\\?\D:\ocopus", "Codex"), "ocopus");
         assert_eq!(project_name("D:/fusion-proxy/", "OpenCode"), "fusion-proxy");
         assert_eq!(project_name("", "Codex"), "Codex");
+    }
+
+    #[test]
+    fn questions_are_read_from_the_tool_input() {
+        let event = json!({ "tool_input": { "questions": [{ "question": "Which framework?\nmore", "header": "Framework" }] } });
+        assert_eq!(question(&event), Some("Which framework?".into()));
+        assert_eq!(question(&json!({ "tool_input": {} })), None);
     }
 
     #[test]

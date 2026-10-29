@@ -1,11 +1,11 @@
-//! The expanded presentation: the header (leading, text column, trailing, pager) and the
-//! dispatch of each full-width row to its drawer in `rows`.
+//! The expanded presentation: the session strip, the header (leading, text column,
+//! trailing, pager) and the dispatch of each full-width row to its drawer in `rows`.
 
 
 use reui_design::tokens::{color, component, island, opacity, radius, space};
 use reui_design::Color;
-use crate::features::clock;
-use reui_protocol::{Button, ButtonContent, Element, ExpandedView, Headline, Row};
+use crate::features::{clipboard, clock};
+use reui_protocol::{Button, ButtonContent, CardSize, Element, ExpandedView, Headline, Row};
 use windows::core::Result;
 use windows::UI::Composition::CompositionDrawingSurface;
 use windows::Win32::Graphics::Direct2D::Common::*;
@@ -25,11 +25,18 @@ impl Renderer {
         let mut hits = Vec::new();
         let mut bars = None;
         let mut width = island::expanded::WIDTH;
+        let mut block_max = 0.0;
+        let max_height = match view.map(|v| v.size) {
+            Some(CardSize::Roomy) => island::expanded::ROOMY_MAX_HEIGHT,
+            _ => island::expanded::MAX_HEIGHT,
+        };
         self.paint(surface, |rt| {
             let Some(view) = view else { return Ok(()) };
-            let w = if view.wide { island::expanded::WIDE_WIDTH } else { island::expanded::WIDTH };
+            let w = clipboard::view_width(view);
             width = w;
             self.width.set(w);
+            self.size.set(view.size);
+            let roomy = view.size == CardSize::Roomy;
             // Normal views sit centred in the wide surface.
             let dx = (EXPANDED_SURFACE.0 - w) / 2.0;
             unsafe {
@@ -41,6 +48,18 @@ impl Renderer {
             let gap = island::expanded::COLUMN_GAP;
             if view.tint {
                 self.wash(rt, w, accent)?;
+            }
+
+            // The session strip comes first, and the pager sits on it; the header follows.
+            let mut top = inset;
+            if let Some(context) = &view.context {
+                let h = self.context_height(context)?;
+                let right = match &view.pager {
+                    Some(pager) => self.pager(rt, pager, w - inset, inset + h / 2.0, &mut hits)? - space::SM,
+                    None => w - inset,
+                };
+                self.context(rt, context, inset, right, accent)?;
+                top += h + island::expanded::CONTEXT_GAP;
             }
 
             // A lone row of glyph buttons belongs beside the hero, not under it.
@@ -67,10 +86,18 @@ impl Renderer {
                 Headline::Text(_) => self.fonts.headline.style.line_height,
                 Headline::Code(_) => self.fonts.code.style.line_height + 2.0 * component::chip::PADDING_Y,
             };
-            let detail_h = view.detail.as_ref().map_or(0.0, |_| line_gap + self.fonts.detail.style.line_height);
+            // A roomy card's detail (the agent's own description) wraps to a second line
+            // rather than losing its end; elsewhere it's one line.
+            let detail_lines = match &view.detail {
+                Some(d) if roomy && self.text_width(d, &self.fonts.detail)? > text_w => 2.0,
+                Some(_) => 1.0,
+                None => 0.0,
+            };
+            let detail_h = if detail_lines > 0.0 { line_gap + detail_lines * self.fonts.detail.style.line_height } else { 0.0 };
             let text_h = eyebrow_h + hero_h + detail_h;
             // A view of only rows (e.g. clipboard cards) has no header at all.
-            let headless = matches!(view.leading, Element::Empty)
+            let headless = view.context.is_none()
+                && matches!(view.leading, Element::Empty)
                 && matches!(view.trailing, Element::Empty)
                 && inline.is_none()
                 && view.eyebrow.is_none()
@@ -82,10 +109,10 @@ impl Renderer {
             // the right shares its centre line. Text is centred on it when it fits beside
             // it, and starts at the inset when it's taller.
             let (mid, text_top) = if lh > 0.0 {
-                let mid = inset + lh.max(th) / 2.0;
-                (mid, if text_h <= lh { mid - text_h / 2.0 } else { inset })
+                let mid = top + lh.max(th) / 2.0;
+                (mid, if text_h <= lh { mid - text_h / 2.0 } else { top })
             } else {
-                let mid = inset + header_h / 2.0;
+                let mid = top + header_h / 2.0;
                 (mid, mid - text_h / 2.0)
             };
 
@@ -113,7 +140,7 @@ impl Renderer {
             // The source switcher sits at the top right, on the first line of text, which
             // makes room for it.
             let first_line = if view.eyebrow.is_some() { self.fonts.eyebrow.style.line_height } else { hero_h };
-            let first_w = match &view.pager {
+            let first_w = match view.pager.as_ref().filter(|_| view.context.is_none()) {
                 Some(pager) => self.pager(rt, pager, w - inset, text_top + first_line / 2.0, &mut hits)? - space::SM - text_left,
                 None => text_w,
             };
@@ -142,7 +169,11 @@ impl Renderer {
             }
             y += hero_h;
             if let Some(detail) = &view.detail {
-                self.text(rt, detail, &self.fonts.detail, text_left, y + line_gap, text_w, Align::Start, color::label::SECONDARY)?;
+                if detail_lines > 1.0 {
+                    self.text_block(rt, detail, &self.fonts.detail_wrap, text_left, y + line_gap, text_w, detail_h - line_gap, color::label::SECONDARY)?;
+                } else {
+                    self.text(rt, detail, &self.fonts.detail, text_left, y + line_gap, text_w, Align::Start, color::label::SECONDARY)?;
+                }
             }
 
             // Where the timeline is now as shown (a drag's preview or a held seek win), for
@@ -160,7 +191,7 @@ impl Renderer {
             // Full-width rows. A progress bar with times followed by icon-only controls shares
             // one line under the bar when the controls fit between the times; otherwise the
             // times flank the bar.
-            let mut y = inset + header_h;
+            let mut y = top + header_h;
             let mut i = 0;
             while i < rows.len() {
                 y += match i {
@@ -181,7 +212,7 @@ impl Renderer {
                             seek: seekable.then_some(*length_ms),
                         })
                     }
-                    Row::Buttons(_) | Row::Items(_) | Row::Search { .. } | Row::Tabs(_) | Row::Note(_) | Row::Slider { .. } | Row::Lyrics(_) => None,
+                    Row::Buttons(_) | Row::Items(_) | Row::Search { .. } | Row::Tabs(_) | Row::Note(_) | Row::Slider { .. } | Row::Lyrics(_) | Row::Choices { .. } | Row::Block { .. } => None,
                 };
                 let controls = match rows.get(i + 1) {
                     Some(Row::Buttons(b)) if b.iter().all(|b| matches!(b.content, ButtonContent::Glyph(_))) => Some(b),
@@ -241,17 +272,26 @@ impl Renderer {
                             y += self.slider(rt, leading, value, action, trailing.as_ref(), y, thumb, dragging, accent, &mut hits)?
                         }
                         Row::Lyrics(lines) => y += self.lyrics(rt, lines, track_at, y, with.lyric)?,
+                        Row::Choices { options, multi } => y += self.choices(rt, options, *multi, with.choice, y, accent, &mut hits)?,
+                        Row::Block { text, kind } => {
+                            let (h, max) = self.block(rt, text, *kind, y, with.block_scroll, accent, &mut hits)?;
+                            block_max = max;
+                            y += h;
+                        }
                         Row::Progress { .. } | Row::Timeline { .. } => {}
                     },
                 }
                 i += 1;
             }
-            let natural = y + inset;
-            if natural > island::expanded::MAX_HEIGHT {
+            // Alert-style buttons at the bottom keep the same distance from the bottom edge
+            // as from the sides.
+            let text_buttons_last = matches!(rows.last(), Some(Row::Buttons(b)) if b.iter().any(|b| matches!(b.content, ButtonContent::Text(_))));
+            let natural = y + if roomy && text_buttons_last { component::button::ROOMY_INSET } else { inset };
+            if natural > max_height {
                 // Clamping would eat the bottom padding; make it visible instead.
-                eprintln!("island: expanded content is {natural} tall, over max-height {}", island::expanded::MAX_HEIGHT);
+                eprintln!("island: expanded content is {natural} tall, over max-height {max_height}");
             }
-            height = natural.clamp(island::expanded::MIN_HEIGHT, island::expanded::MAX_HEIGHT);
+            height = natural.clamp(island::expanded::MIN_HEIGHT, max_height);
             // Hits and bar positions are in surface coordinates.
             for hit in hits.iter_mut() {
                 hit.left += dx;
@@ -266,8 +306,8 @@ impl Renderer {
             bars = bars.map(|(x, mid, live)| (x + dx, mid, live));
             Ok(())
         })?;
-        let radius = if width == island::expanded::WIDE_WIDTH { island::expanded::PANEL_RADIUS } else { island::expanded::RADIUS };
-        Ok(ExpandedLayout { width, height, radius, hits, bars })
+        let radius = if view.is_some_and(|v| v.size == CardSize::Wide) { island::expanded::PANEL_RADIUS } else { island::expanded::RADIUS };
+        Ok(ExpandedLayout { width, height, radius, hits, bars, block_max })
     }
 
     /// The accent washed in from the top-left corner, fading out by `tint-extent` of the

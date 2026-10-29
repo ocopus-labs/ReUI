@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::pin::Pin;
 use std::time::Duration;
 
-use reui_protocol::{Button, ButtonContent, ButtonRole, CompactView, Element, ExpandedView, Headline, Priority, Row, Tone};
+use reui_protocol::{Button, ButtonContent, ButtonRole, CardSize, CompactView, Element, ExpandedView, Headline, Priority, Row, Tone};
 use serde_json::{Map, Value};
 use tokio::time::{sleep, Instant};
 
@@ -138,7 +138,7 @@ fn brief(glyph: char, compact: &str, headline: String, button: &str) -> View {
             headline: Headline::Text(headline),
             detail: None,
             trailing: Element::Empty,
-            wide: false,
+            context: None, size: CardSize::Regular,
             tint: false,
             pager: None,
             open: None,

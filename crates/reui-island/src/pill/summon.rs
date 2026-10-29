@@ -9,6 +9,7 @@ use reui_protocol::{
 };
 use windows::Win32::UI::WindowsAndMessaging::*;
 
+use crate::features::choices;
 use crate::features::clipboard::{self, Key};
 use crate::features::clipboard_keys;
 use crate::settings::Visibility;
@@ -70,13 +71,11 @@ impl Pill {
         self.open_id = now_open;
     }
 
-    /// The panel reads the keyboard only while a card opened by its hotkey, with a search
-    /// field, is open and showing; the hook is gone the moment that stops being true.
+    /// The panel reads the keyboard only while an open, showing card can use it (a search
+    /// field, a choice list) and was asked to: opened by its hotkey, or clicked. The hook is
+    /// gone the moment that stops being true.
     pub(super) fn update_capture(&mut self) {
-        let want = self.state == State::Expanded
-            && self.summoned
-            && self.shown
-            && self.front_view().is_some_and(|v| v.rows.iter().any(|r| matches!(r, Row::Search { .. })));
+        let want = self.state == State::Expanded && self.shown && (self.summoned || self.engaged) && self.front_view().is_some_and(choices::wants_keys);
         if want == clipboard_keys::captured() {
             return;
         }
@@ -87,6 +86,9 @@ impl Pill {
             }
             self.panel.query = Some(self.panel.module_query().unwrap_or_default().to_string());
             self.panel.select(self.panel.selected);
+            if self.choice_cursor.is_none() && self.front_view().is_some_and(|v| v.rows.iter().any(|r| matches!(r, Row::Choices { .. }))) {
+                self.choice_cursor = Some(0);
+            }
         } else {
             clipboard_keys::release();
             self.panel.query = None;
@@ -111,6 +113,9 @@ impl Pill {
             return;
         }
         for key in keys {
+            if !clipboard_keys::captured() {
+                break;
+            }
             self.on_key(key);
         }
         // Typing counts as using the panel.
@@ -124,6 +129,9 @@ impl Pill {
     }
 
     fn on_key(&mut self, key: Key) {
+        if self.on_answer_key(key) {
+            return;
+        }
         let Some(query) = self.panel.query.as_mut() else { return };
         let edited = match key {
             Key::Type(c) => {
@@ -195,6 +203,33 @@ impl Pill {
             let pastes = matches!(key, Key::Activate | Key::Nth(_) | Key::Item(ItemKey::ShiftEnter | ItemKey::CtrlEnter));
             self.act(action, pastes);
         }
+    }
+
+    /// Keys for a card that asks something (see `features::choices`); `false` leaves the
+    /// key to the panel (the field, a summoned card's Esc).
+    fn on_answer_key(&mut self, key: Key) -> bool {
+        let Some(view) = self.front_view() else { return false };
+        let asks = view.rows.iter().any(|r| matches!(r, Row::Choices { .. }));
+        if !asks && !(self.engaged && !self.summoned) {
+            return false;
+        }
+        let typing = self.panel.query.as_deref().is_some_and(|q| !q.is_empty());
+        match choices::on_key(key, view, self.choice_cursor, typing, self.summoned) {
+            choices::Effect::Pass => return false,
+            choices::Effect::Ignore => {}
+            choices::Effect::Cursor(i) => self.choice_cursor = Some(i),
+            choices::Effect::Send { action, at } => {
+                if at.is_some() {
+                    self.choice_cursor = at;
+                }
+                self.send_action(action);
+            }
+            choices::Effect::Release => {
+                self.engaged = false;
+                self.update_capture();
+            }
+        }
+        true
     }
 
     /// Typed text is still on its way to the module, or its results haven't come back.

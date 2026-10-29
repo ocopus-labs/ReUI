@@ -2,7 +2,7 @@
 //! activity accent only: red when a battery is at 20 % or below, green while charging above
 //! it; otherwise the island's default.
 
-use reui_protocol::{Art, Button, ButtonContent, ButtonRole, CompactView, Element, ExpandedView, Headline, Rgb, Row, Tone};
+use reui_protocol::{Art, Button, ButtonContent, ButtonRole, CardSize, CompactView, Element, ExpandedView, Headline, Rgb, Row, Tone};
 
 use super::airpods::Pods;
 use super::drives::{self, Drive};
@@ -31,7 +31,7 @@ fn low_accent(level: Option<u8>) -> Option<Rgb> {
 }
 
 fn expanded(leading: Element, eyebrow: Option<&str>, headline: Headline, detail: Option<String>, trailing: Element, rows: Vec<Row>) -> ExpandedView {
-    ExpandedView { leading, eyebrow: eyebrow.map(str::to_owned), headline, detail, trailing, rows, wide: false, tint: false, pager: None, open: None }
+    ExpandedView { leading, eyebrow: eyebrow.map(str::to_owned), headline, detail, trailing, rows, context: None, size: CardSize::Regular, tint: false, pager: None, open: None }
 }
 
 /// What a connect card or overview row knows about a device.

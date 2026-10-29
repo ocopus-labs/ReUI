@@ -3,7 +3,7 @@
 
 use reui_design::tokens::{color, component, icon, island, opacity};
 use reui_design::Color;
-use reui_protocol::{Button, ButtonContent, ButtonRole, Pager};
+use reui_protocol::{Button, ButtonContent, ButtonRole, CardSize, Pager};
 use windows::core::Result;
 use windows::Win32::Graphics::Direct2D::*;
 
@@ -27,7 +27,11 @@ impl Renderer {
             Ok(size)
         } else {
             let h = component::button::HEIGHT;
-            let gap = component::button::GAP;
+            // A roomy card's buttons sit like an alert's: a little nearer the edge, further apart.
+            let (inset, gap) = match self.size.get() {
+                CardSize::Roomy => (component::button::ROOMY_INSET, component::button::ROOMY_GAP),
+                _ => (inset, component::button::GAP),
+            };
             let width = (w - 2.0 * inset - gap * (n - 1.0)) / n;
             for (i, button) in buttons.iter().enumerate() {
                 self.button(rt, button, inset + i as f32 * (width + gap), y, width, h, accent, hits)?;

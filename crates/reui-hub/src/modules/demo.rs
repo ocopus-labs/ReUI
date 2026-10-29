@@ -8,7 +8,7 @@ use std::future::Future;
 use std::pin::Pin;
 use std::time::Duration;
 
-use reui_protocol::{unix_ms, Art, Button, ButtonContent, ButtonRole, Clock, CompactView, Element, ExpandedView, Headline, ImageId, Priority, Rgb, Row, Tone};
+use reui_protocol::{unix_ms, Art, Button, ButtonContent, ButtonRole, CardSize, Clock, CompactView, Element, ExpandedView, Headline, ImageId, Priority, Rgb, Row, Tone};
 use tokio::time::{sleep, sleep_until, Instant};
 
 use super::Module;
@@ -167,7 +167,7 @@ fn publish_music(ctx: &ModuleContext, track: usize, playing: bool, image: Option
                 headline: Headline::Text(t.title.into()),
                 detail: Some(t.artist.into()),
                 trailing: Element::Bars { live: playing },
-                wide: false,
+                context: None, size: CardSize::Regular,
                 tint: false,
                 pager: None,
                 open: None,
@@ -206,7 +206,7 @@ fn publish_timer(ctx: &ModuleContext, clock: Clock) {
                 detail: (!running).then(|| "Paused".into()),
                 trailing: Element::Empty,
                 // A lone glyph row sits inline beside the value.
-                wide: false,
+                context: None, size: CardSize::Regular,
                 tint: false,
                 pager: None,
                 open: None,
@@ -235,7 +235,7 @@ fn publish_request(ctx: &ModuleContext, key: &str, command: &str) {
                 headline: Headline::Code(command.into()),
                 detail: Some("wants to run this in ReUI".into()),
                 trailing: Element::Empty,
-                wide: false,
+                context: None, size: CardSize::Regular,
                 tint: false,
                 pager: None,
                 open: None,

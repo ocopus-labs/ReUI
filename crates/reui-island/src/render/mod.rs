@@ -17,7 +17,7 @@ use std::collections::HashMap;
 
 use reui_design::tokens::{color, component, font, icon, island, typography};
 use reui_design::{Color, TextStyle};
-use reui_protocol::{ImageId, Rgb, Tone};
+use reui_protocol::{CardSize, ImageId, Rgb, Tone};
 use windows::core::{Interface, Result};
 use windows::Foundation::Size;
 use windows::Graphics::DirectX::{DirectXAlphaMode, DirectXPixelFormat};
@@ -51,8 +51,9 @@ mod text;
 /// Widest compact presentation: two maximal sides around the centre gap.
 pub const COMPACT_MAX_WIDTH: f32 = island::compact::CENTER_GAP + 2.0 * (island::compact::MAX_SIDE + island::compact::TEXT_MARGIN);
 pub const COMPACT_SURFACE: (f32, f32) = (COMPACT_MAX_WIDTH, island::HEIGHT);
-/// Wide enough for the wide expanded island; normal views are drawn centred in it.
-pub const EXPANDED_SURFACE: (f32, f32) = (island::expanded::WIDE_WIDTH, island::expanded::MAX_HEIGHT);
+/// Wide enough for the wide expanded island and tall enough for the roomy one; narrower
+/// views are drawn centred in it.
+pub const EXPANDED_SURFACE: (f32, f32) = (island::expanded::WIDE_WIDTH, island::expanded::ROOMY_MAX_HEIGHT);
 pub const MINIMAL_SURFACE: (f32, f32) = (island::minimal::SIZE, island::minimal::SIZE);
 
 pub const BARS: usize = 4;
@@ -88,11 +89,15 @@ pub struct Hit {
     pub menu: bool,
     /// The source switcher: the wheel over it switches source.
     pub pager: bool,
+    /// A text block: the wheel over it scrolls it.
+    pub block: bool,
+    /// A choice: its index in the list, so a click also moves the keyboard cursor there.
+    pub choice: Option<usize>,
 }
 
 impl Hit {
     fn new(left: f32, top: f32, right: f32, bottom: f32, action: &str) -> Self {
-        Hit { left, top, right, bottom, action: action.to_string(), seek: None, card: None, slider: None, menu: false, pager: false }
+        Hit { left, top, right, bottom, action: action.to_string(), seek: None, card: None, slider: None, menu: false, pager: false, block: false, choice: None }
     }
 
     /// The action a click at `x` (card DIPs) sends.
@@ -142,6 +147,10 @@ pub struct Interaction<'a> {
     pub lyric: Option<(usize, f32)>,
     /// The front activity's level as shown right now (eased), over the view's own.
     pub level: Option<f32>,
+    /// How far the text block is scrolled, in DIPs (the renderer clamps it).
+    pub block_scroll: f32,
+    /// The choice under the keyboard cursor, while the card has the keyboard.
+    pub choice: Option<usize>,
 }
 
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
@@ -158,6 +167,8 @@ pub struct ExpandedLayout {
     pub hits: Vec<Hit>,
     /// Left edge, vertical centre and liveness of the level bars, in expanded-surface DIPs.
     pub bars: Option<(f32, f32, bool)>,
+    /// How far the text block can scroll (content taller than what shows), in DIPs.
+    pub block_max: f32,
 }
 
 pub struct Renderer {
@@ -172,6 +183,9 @@ pub struct Renderer {
     scale: f32,
     /// Width of the expanded view being drawn (normal or wide).
     width: Cell<f32>,
+    /// Size of the expanded view being drawn: a roomy card lays out its buttons and detail
+    /// like an alert.
+    size: Cell<CardSize>,
 }
 
 impl Renderer {
@@ -213,6 +227,7 @@ impl Renderer {
             headline: f(typography::HEADLINE, false)?,
             code: f(typography::CODE, false)?,
             detail: f(typography::DETAIL, false)?,
+            detail_wrap: wrapped(typography::DETAIL)?,
             compact: f(typography::COMPACT, true)?,
             button: f(typography::BUTTON, false)?,
             caption: f(typography::CAPTION, true)?,
@@ -235,8 +250,14 @@ impl Renderer {
             icon_pager: f(icons(icon::PAGER), false)?,
             lyric_wrap: f(typography::LYRIC, true)?,
             pager: f(typography::PAGER, true)?,
+            context: f(typography::CONTEXT, false)?,
+            choice: f(typography::CHOICE, false)?,
+            choice_detail: f(typography::CHOICE_DETAIL, false)?,
+            icon_check: f(icons(component::choice::CHECK), false)?,
+            block_code: f(typography::BLOCK_CODE, false)?,
+            block_prose: wrapped(typography::BLOCK_PROSE)?,
         };
-        Ok(Self { graphics, factory, dwrite, wic, images: HashMap::new(), tabular, round, fonts, scale, width: Cell::new(island::expanded::WIDTH) })
+        Ok(Self { graphics, factory, dwrite, wic, images: HashMap::new(), tabular, round, fonts, scale, width: Cell::new(island::expanded::WIDTH), size: Cell::new(CardSize::Regular) })
     }
 
     pub fn surface(&self, dips: (f32, f32)) -> Result<CompositionDrawingSurface> {

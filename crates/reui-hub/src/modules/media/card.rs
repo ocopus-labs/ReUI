@@ -1,7 +1,7 @@
 //! The Now Playing card: what it shows (track, art, timeline, transport, volume, lyrics,
 //! switcher) and the view built from it for the island.
 
-use reui_protocol::{unix_ms, Button, ButtonContent, ButtonRole, CompactView, Element, ExpandedView, Headline, LyricLine, Menu, MenuOption, Pager, Priority, Rgb, Row};
+use reui_protocol::{unix_ms, Button, ButtonContent, ButtonRole, CardSize, CompactView, Element, ExpandedView, Headline, LyricLine, Menu, MenuOption, Pager, Priority, Rgb, Row};
 use windows::Media::MediaPlaybackAutoRepeatMode as RepeatMode;
 
 use super::settings::{Settings, Visualizer};
@@ -210,7 +210,7 @@ pub(super) fn build_view(card: &Card) -> (Priority, View) {
             detail,
             trailing: bars,
             rows,
-            wide: false,
+            context: None, size: CardSize::Regular,
             // Black like the rest of the island: colour comes from the art, bars and progress.
             tint: false,
             pager: card.pager.clone(),

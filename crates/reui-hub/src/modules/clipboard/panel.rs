@@ -3,7 +3,7 @@
 //! same messages the module already handles. One set of logic, whatever draws it.
 
 use reui_protocol::{
-    Button, ButtonContent, ButtonRole, CompactView, Element, ExpandedView, Headline, ImageId, Item, ItemAction, ItemKey, Preview, Rgb, Row, Tab, ACTION_SEARCH,
+    Button, ButtonContent, ButtonRole, CardSize, CompactView, Element, ExpandedView, Headline, ImageId, Item, ItemAction, ItemKey, Preview, Rgb, Row, Tab, ACTION_SEARCH,
     ACTION_UNDO,
 };
 use serde_json::json;
@@ -48,7 +48,7 @@ pub fn panel(view: &cv::View, accent: Rgb) -> View {
             detail: None,
             trailing: Element::Empty,
             rows: vec![Row::Search { query: view.query.clone(), buttons, placeholder: None, glyph: None }, Row::Tabs(tabs), content],
-            wide: true,
+            context: None, size: CardSize::Wide,
             tint: false,
             pager: None,
             open: None,

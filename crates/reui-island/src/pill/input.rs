@@ -3,7 +3,7 @@
 
 use std::time::Instant;
 
-use reui_design::tokens::{island, motion};
+use reui_design::tokens::{component, island, motion, typography};
 use reui_protocol::{
     ActivityId, ClientMsg, ItemKey, Row, ACTION_SWIPE_NEXT, ACTION_SWIPE_PREV,
 };
@@ -11,6 +11,7 @@ use windows::Win32::Foundation::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
 use crate::drag_guard;
+use crate::features::choices;
 use crate::features::clipboard_keys;
 use crate::features::music::{self, SeekHold, Throttle};
 use crate::render::{self, Thumb, EXPANDED_SURFACE};
@@ -156,6 +157,15 @@ impl Pill {
             return;
         }
         let (cx, cy) = self.card_point(x, y);
+        // A click on a card that asks something gives it the keyboard (PRD agent moments
+        // §5.7): only now, never when it arrived by itself.
+        if self.front_view().is_some_and(choices::wants_keys) {
+            self.engaged = true;
+            if let Some(i) = render::hit_at(&self.hits, cx, cy).and_then(|h| h.choice) {
+                self.choice_cursor = Some(i);
+            }
+            self.update_capture();
+        }
         if let Some(hit) = render::hit_at(&self.hits, cx, cy) {
             let card = hit.card.is_some();
             let action = match hit.card {
@@ -177,10 +187,11 @@ impl Pill {
     pub fn on_wheel(&mut self, delta: i16, horizontal: bool, pt: POINT) {
         if self.state == State::Expanded && !horizontal {
             let (cx, cy) = self.card_point((pt.x - self.window.left) as f32, (pt.y - self.window.top) as f32);
-            let hit = render::hit_at(&self.hits, cx, cy).map(|h| (h.pager, h.slider.is_some(), h.action.clone()));
+            let hit = render::hit_at(&self.hits, cx, cy).map(|h| (h.pager, h.slider.is_some(), h.action.clone(), h.block));
             match hit {
                 Some((true, ..)) => return self.wheel_pager(delta as i32),
-                Some((_, true, action)) => return self.wheel_slider(delta as i32, action),
+                Some((_, true, action, _)) => return self.wheel_slider(delta as i32, action),
+                Some((.., true)) => return self.wheel_block(delta as i32),
                 _ => {}
             }
         }
@@ -219,6 +230,17 @@ impl Pill {
             let down = self.pager_travel < 0;
             self.pager_travel -= music::WHEEL_NOTCH * self.pager_travel.signum();
             self.send_action(if down { pager.next.clone() } else { pager.prev.clone() });
+        }
+    }
+
+    /// Wheel over a text block: a few lines a notch (trackpads proportionally), drawn at
+    /// once with no easing, so nothing keeps running afterwards.
+    fn wheel_block(&mut self, delta: i32) {
+        let step = component::block::WHEEL_LINES * typography::BLOCK_CODE.line_height;
+        let scroll = (self.block_scroll - delta as f32 / music::WHEEL_NOTCH as f32 * step).clamp(0.0, self.block_max);
+        if scroll != self.block_scroll {
+            self.block_scroll = scroll;
+            self.redraw_expanded();
         }
     }
 

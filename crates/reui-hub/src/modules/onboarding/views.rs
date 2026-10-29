@@ -1,7 +1,7 @@
 //! What onboarding puts in the island: the first-run demo card, the "Hover me" hint, and
 //! the one-time tips and offers. The only teaching text in the island, each shown once.
 
-use reui_protocol::{Art, Button, ButtonContent, ButtonRole, CompactView, Element, ExpandedView, Headline, ImageId, Rgb, Row, Tone};
+use reui_protocol::{Art, Button, ButtonContent, ButtonRole, CardSize, CompactView, Element, ExpandedView, Headline, ImageId, Rgb, Row, Tone};
 
 use crate::hub::View;
 
@@ -32,7 +32,7 @@ fn text_button(action: &str, label: &str, role: ButtonRole) -> Button {
 }
 
 fn card(leading: Element, eyebrow: &str, headline: Headline, detail: Option<String>, rows: Vec<Row>) -> ExpandedView {
-    ExpandedView { leading, eyebrow: Some(eyebrow.into()), headline, detail, trailing: Element::Empty, rows, wide: false, tint: false, pager: None, open: None }
+    ExpandedView { leading, eyebrow: Some(eyebrow.into()), headline, detail, trailing: Element::Empty, rows, context: None, size: CardSize::Regular, tint: false, pager: None, open: None }
 }
 
 /// The first-run demo: a Now Playing-style card with a moving timeline. `open` keeps its
