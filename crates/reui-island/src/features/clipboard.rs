@@ -165,7 +165,7 @@ mod tests {
     }
 
     fn item(action: &str) -> Item {
-        Item { action: action.into(), preview: Preview::Text(action.into()), icon: None, age: "1m".into(), meta: None, pinned: false, actions: vec![] }
+        Item { action: action.into(), preview: Preview::Text(action.into()), icon: None, age: "1m".into(), meta: None, pinned: false, actions: vec![], drag: None }
     }
 
     fn view(query: &str, tab: &str, actions: &[&str]) -> ExpandedView {
