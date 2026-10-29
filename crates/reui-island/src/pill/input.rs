@@ -11,6 +11,7 @@ use windows::Win32::Foundation::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
 use crate::drag_guard;
+use crate::intent::{self, Rest};
 use crate::features::choices;
 use crate::features::clipboard_keys;
 use crate::features::music::{self, SeekHold, Throttle};
@@ -109,8 +110,9 @@ impl Pill {
         }
         self.inside = inside;
         if inside {
-            // Only take over once the pointer rests here (see `hovered`).
-            unsafe { SetTimer(Some(self.hwnd), TIMER_HOVER, motion::delay::HOVER_INTENT, None) };
+            // Only take over once the pointer rests here (see `hovered`), as long as the user
+            // chose (`hover_delay`).
+            unsafe { SetTimer(Some(self.hwnd), TIMER_HOVER, self.intent.delay, None) };
             return;
         }
         unsafe { _ = KillTimer(Some(self.hwnd), TIMER_HOVER) };
@@ -146,9 +148,13 @@ impl Pill {
         unsafe { _ = KillTimer(Some(self.hwnd), TIMER_COLLAPSE) };
         self.set_clickthrough(false);
         // Resting on the bubble makes it clickable without growing the pill. The idle pill
-        // peeks too, with the date and time.
-        if matches!(self.state, State::Compact | State::Idle) && !self.on_bubble {
-            self.set_state(State::Peek);
+        // peeks too, with the date and time. With "open on hover" the rest opens the card.
+        let compact = matches!(self.state, State::Compact | State::Idle);
+        let card = self.front().is_some_and(|a| a.expanded.is_some());
+        match intent::after_rest(self.intent.open_on, compact, card, self.on_bubble) {
+            Rest::Peek => self.set_state(State::Peek),
+            Rest::Open => self.set_state(State::Expanded),
+            Rest::Nothing => {}
         }
     }
 

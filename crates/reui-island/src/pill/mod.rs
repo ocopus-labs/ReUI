@@ -95,7 +95,7 @@ pub struct Pill {
     /// runs only while one is moving.
     levels: Levels,
     level_ticking: bool,
-    _keys: KeysRelease,
+    _keys: setup::KeysRelease,
     compositor: Compositor,
     _target: DesktopWindowTarget,
     root: ContainerVisual,
@@ -221,6 +221,8 @@ pub struct Pill {
     tabs: switcher::Tabs,
     /// The idle pill: its clock setting and the row of places' hover.
     idle: idle::Idle,
+    /// Whether a rest opens or peeks, and how long it is (`intent.rs`).
+    intent: crate::intent::Intent,
     to_hub: UnboundedSender<ClientMsg>,
     events: Receiver<Event>,
 }
@@ -502,28 +504,3 @@ impl Pill {
 
 }
 
-/// Releases the keyboard hook when the pill goes. A field rather than `Drop` on `Pill`, so a
-/// rebuild can move the compositor and renderer out of the old pill ([`Pill::into_gpu`]).
-pub(super) struct KeysRelease;
-
-impl Drop for KeysRelease {
-    fn drop(&mut self) {
-        clipboard_keys::release();
-    }
-}
-
-/// What a rebuild keeps: creating these takes ~140 ms (the D3D device, the factories, the
-/// fonts), while the visual tree a new look needs takes a few.
-pub struct Gpu {
-    compositor: Compositor,
-    target: DesktopWindowTarget,
-    renderer: Renderer,
-}
-
-impl Pill {
-    /// The old pill's compositor, window target and renderer, for the next one; the rest
-    /// (its visuals, timers' state, the keyboard hook) goes.
-    pub fn into_gpu(self) -> Gpu {
-        Gpu { compositor: self.compositor, target: self._target, renderer: self.renderer }
-    }
-}

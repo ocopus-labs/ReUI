@@ -28,7 +28,7 @@ use crate::render::{expanded_surface, Renderer, COMPACT_SURFACE, EAR_SURFACE, MI
 use crate::settings::Visibility;
 
 use super::switcher::Tabs;
-use super::{Gpu, Pill, State};
+use super::{Pill, State};
 use super::visuals::bar_visuals;
 
 fn color_brush(c: &Compositor, color: Color) -> Result<CompositionColorBrush> {
@@ -319,7 +319,7 @@ impl Pill {
             lyric_change: None,
             levels: Levels::default(),
             level_ticking: false,
-            _keys: super::KeysRelease,
+            _keys: KeysRelease,
             compositor,
             _target: target,
             root,
@@ -392,9 +392,36 @@ impl Pill {
             choice_spans: None,
             tabs,
             idle: Default::default(),
+            intent: Default::default(),
             to_hub,
             events,
         })
+    }
+}
+
+/// Releases the keyboard hook when the pill goes. A field rather than `Drop` on `Pill`, so a
+/// rebuild can move the compositor and renderer out of the old pill ([`Pill::into_gpu`]).
+pub(super) struct KeysRelease;
+
+impl Drop for KeysRelease {
+    fn drop(&mut self) {
+        crate::features::clipboard_keys::release();
+    }
+}
+
+/// What a rebuild keeps: creating these takes ~140 ms (the D3D device, the factories, the
+/// fonts), while the visual tree a new look needs takes a few.
+pub struct Gpu {
+    compositor: Compositor,
+    target: windows::UI::Composition::Desktop::DesktopWindowTarget,
+    renderer: Renderer,
+}
+
+impl Pill {
+    /// The old pill's compositor, window target and renderer, for the next one; the rest
+    /// (its visuals, timers' state, the keyboard hook) goes.
+    pub fn into_gpu(self) -> Gpu {
+        Gpu { compositor: self.compositor, target: self._target, renderer: self.renderer }
     }
 }
 

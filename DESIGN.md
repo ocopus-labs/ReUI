@@ -79,7 +79,7 @@ Layout templates fall out of the content, so modules don't pick them:
 | Decision arrives (e.g. agent permission) | Expands itself, then folds back to compact (still pending, accent "Allow?") after `motion.delay.decision-hold` unless you engage |
 | Alert arrives (done, failed, "your turn") | Comes to the front in compact; doesn't expand itself |
 | Decision answered | Folds back to compact (unless hovered) |
-| Pointer rests on the pill for `motion.delay.hover-intent` | Becomes clickable and peeks. Until then it's click-through, so quick moves and clicks reach what's underneath (browser tabs) |
+| Pointer rests on the pill for the hover delay (`hover_delay`; default `motion.delay.hover-intent`, Settings → General: Quick 150 / Normal 250 / Relaxed 500 ms) | Becomes clickable and peeks; with **Open on hover** (`open_on`) a pill with a card opens it instead (the idle pill still only peeks: its row of places opens on a click). Until then the band above the pill is click-through, so quick moves and clicks reach what's underneath (browser tabs). PRD: `docs/PRD-behaviour.md` |
 | Click on compact | Expand |
 | Click on the idle pill | Opens the row of places; a tab opens its place as a switcher tab does (the module's own open command), Esc (the keyboard hook passes every other key on), a press elsewhere or leaving folds it back. Never takes focus |
 | Pointer leaves expanded | Collapse after `motion.delay.collapse` |
@@ -144,7 +144,7 @@ The user picks a look in Settings → Appearance (`settings.json`; PRD: `docs/PR
 | `component` | Ring, art, app icon, button (with the roomy card's alert-style inset and gap), progress, bars, dot, choice, block, gauge (gap, glyph, sparkline) and fact sizes, the header button's target |
 | `motion.spring` | `expand`, `collapse`, `peek`, `settle`, `reduced` (damping ratio + period) |
 | `motion.height` | Height springs are slightly calmer than width: `damping-offset`, `period-factor` |
-| `motion.delay` | `collapse`, `hover-intent`, `decision-hold`, `reveal-hold`, `fade` |
+| `motion.delay` | `collapse`, `hover-intent` (the default hover delay; the user's `hover_delay` overrides it), `decision-hold`, `reveal-hold`, `fade` |
 | `motion.show` | Presence animation: `in`, `out`, `from-scale`, `rise` |
 | `motion.logo` | Brand-logo working animation (ticks: `interval`, `turn`); built but unused, logos are static for now |
 | `motion.crossfade` | When compact content fades out and expanded content fades and scales in, as fractions of the morph |

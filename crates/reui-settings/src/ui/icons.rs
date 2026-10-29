@@ -29,6 +29,8 @@ pub const VIEW: char = '\u{E890}';
 pub const TABS: char = '\u{E8A9}';
 pub const KEYBOARD: char = '\u{E765}';
 pub const CLOCK: char = '\u{E823}';
+/// TouchPointer: how the island opens.
+pub const POINTER: char = '\u{E7C9}';
 pub const MIC: char = '\u{E720}';
 pub const BATTERY_LOW: char = '\u{E851}';
 pub const BATTERY: char = '\u{E859}';

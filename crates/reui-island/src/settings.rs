@@ -8,7 +8,8 @@
 //! `hidden` (bool: hidden with the hide shortcut or the tray until asked again),
 //! `hide_in_fullscreen` (bool, default true), `show_on_desktop` (bool, default true), `monitor` ("primary" | "cursor" | a display's
 //! device name such as `\\.\DISPLAY2`), `view_switcher` (bool, default true: tabs under an
-//! open place's card), `idle_clock` (bool, default false: the time in the resting pill), and the look (`style`, `theme`, `roundness`, `top_gap`,
+//! open place's card), `idle_clock` (bool, default false: the time in the resting pill),
+//! `open_on` ("click" | "hover") and `hover_delay` (ms; see `intent.rs`), and the look (`style`, `theme`, `roundness`, `top_gap`,
 //! `padding`, `scale`, `accent`; read by `reui_design::look::Appearance`).
 
 use std::path::{Path, PathBuf};
@@ -16,6 +17,7 @@ use std::path::{Path, PathBuf};
 use reui_design::look::Appearance;
 use reui_protocol::{Activity, Priority};
 
+use crate::intent::{self, OpenOn};
 use crate::place::MonitorChoice;
 use serde_json::{Map, Value};
 use windows::core::HSTRING;
@@ -94,13 +96,17 @@ pub struct Settings {
     pub view_switcher: bool,
     /// The time in the resting island (for a hidden taskbar). Off: the quiet empty pill.
     pub idle_clock: bool,
+    /// Whether a rest on the pill opens its card or only peeks.
+    pub open_on: OpenOn,
+    /// How long the pointer rests before the pill peeks (or opens) and takes clicks, in ms.
+    pub hover_delay: u32,
     /// Style, theme, shape and size (Settings > Appearance).
     pub appearance: Appearance,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { visibility: Visibility::default(), paused_until: None, hidden: false, hide_in_fullscreen: true, show_on_desktop: true, monitor: MonitorChoice::default(), view_switcher: true, idle_clock: false, appearance: Appearance::default() }
+        Self { visibility: Visibility::default(), paused_until: None, hidden: false, hide_in_fullscreen: true, show_on_desktop: true, monitor: MonitorChoice::default(), view_switcher: true, idle_clock: false, open_on: OpenOn::default(), hover_delay: intent::hover_delay(None), appearance: Appearance::default() }
     }
 }
 
@@ -132,6 +138,8 @@ impl Settings {
             monitor: map.get("monitor").and_then(Value::as_str).map(MonitorChoice::parse).unwrap_or_default(),
             view_switcher: map.get("view_switcher").and_then(Value::as_bool).unwrap_or(true),
             idle_clock: map.get("idle_clock").and_then(Value::as_bool).unwrap_or(false),
+            open_on: map.get("open_on").and_then(Value::as_str).and_then(OpenOn::parse).unwrap_or_default(),
+            hover_delay: intent::hover_delay(map.get("hover_delay").and_then(Value::as_u64)),
             appearance: Appearance::read(|k| map.get(k).and_then(Value::as_str).map(str::to_string), |k| map.get(k).and_then(Value::as_f64)),
         }
     }
@@ -217,6 +225,9 @@ mod tests {
         assert!(Settings::default().hide_in_fullscreen);
         assert!(Settings::default().view_switcher && !Settings::parse(r#"{"view_switcher":false}"#).view_switcher);
         assert!(!Settings::default().idle_clock && Settings::parse(r#"{"idle_clock":true}"#).idle_clock);
+        let opening = Settings::parse(r#"{"open_on":"hover","hover_delay":500}"#);
+        assert_eq!((opening.open_on, opening.hover_delay), (OpenOn::Hover, 500));
+        assert_eq!((Settings::default().open_on, Settings::default().hover_delay), (OpenOn::Click, 250));
         // Missing or extra fields fall back to defaults instead of failing.
         assert_eq!(Settings::parse(r#"{"other":1}"#), Settings::default());
         assert_eq!(Settings::parse(r#"{"visibility":"sometimes"}"#), Settings::default());

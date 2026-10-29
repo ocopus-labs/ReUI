@@ -159,6 +159,8 @@ impl Pill {
         }
         self.visibility = settings.visibility;
         self.show_on_desktop = settings.show_on_desktop;
+        self.intent.open_on = settings.open_on;
+        self.intent.delay = settings.hover_delay;
         self.set_switcher_enabled(settings.view_switcher);
         self.set_idle_clock(settings.idle_clock);
         if self.hide_in_fullscreen != settings.hide_in_fullscreen {

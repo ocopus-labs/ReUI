@@ -5,7 +5,7 @@ use serde_json::Value;
 use super::{button, flag, footed, group, head, Effect, Page};
 use crate::ui::icons;
 use reui_design::tokens::color::system as palette;
-use crate::model::files::{File, MONITOR_CURSOR, MONITOR_PRIMARY, VISIBILITY};
+use crate::model::files::{File, HOVER_DELAYS, MONITOR_CURSOR, MONITOR_PRIMARY, OPEN_ON, VISIBILITY};
 use crate::state::State;
 use crate::system::{self, Startup};
 use crate::ui::{Act, Block, Part, Role, Row, Target, Tone};
@@ -36,6 +36,18 @@ pub fn build(state: &State) -> Vec<Block> {
         .part(Part::Segmented { options: vec!["Always".into(), "When active".into(), "When needed".into()], selected })
         .enabled(doc_ok)
         .icon(icons::tile(icons::VIEW, palette::BLUE));
+    // How a rest on the pill is read (docs/PRD-behaviour.md §4.1).
+    let open_on = state.files.open_on();
+    let opening = Row::new("open_on", "Open the island")
+        .detail(["A click opens a card; resting the pointer peeks", "Resting the pointer opens a card"][open_on])
+        .part(Part::Segmented { options: vec!["On click".into(), "On hover".into()], selected: open_on })
+        .enabled(doc_ok)
+        .icon(icons::tile(icons::POINTER, palette::BLUE));
+    let delay = Row::new("hover_delay", "Hover delay")
+        .detail("How long the pointer rests before the island responds")
+        .part(Part::Segmented { options: vec!["Quick".into(), "Normal".into(), "Relaxed".into()], selected: state.files.hover_delay() })
+        .enabled(doc_ok)
+        .icon(icons::tile(icons::STOPWATCH, palette::BLUE));
     let monitor = Row::new("monitor", "Display").detail("Where the island sits").part(Part::Dropdown { label: monitor_label(&state.files.monitor()) }).enabled(doc_ok).icon(icons::tile(icons::MONITOR, palette::TEAL));
     // Only means something when the island would otherwise hide.
     let desktop = flag(state, File::Island, "show_on_desktop", "Always show on the desktop", "In apps it shows only as chosen above")
@@ -51,7 +63,7 @@ pub fn build(state: &State) -> Vec<Block> {
     // Hides it until pressed again; the hub registers it (`modules/hide.rs`).
     let hide = super::shortcut::named(state, File::Island, "Hide the island", "Until you press it again; permission requests still show")
         .icon(icons::tile(icons::KEYBOARD, palette::GRAY));
-    blocks.push(group("Island", vec![visibility, desktop, monitor, fullscreen, switcher, clock, hide]));
+    blocks.push(group("Island", vec![visibility, desktop, opening, delay, monitor, fullscreen, switcher, clock, hide]));
 
     let left = state.files.paused_until().and_then(|until| until.checked_sub(reui_protocol::unix_ms())).filter(|&ms| ms > 0);
     let pause = match left {
@@ -110,6 +122,8 @@ pub fn act(state: &mut State, target: &Target, act: Act) -> Effect {
             state.startup = system::startup(&state.paths);
         }
         ("visibility", Act::Choose(i)) if i < VISIBILITY.len() => state.set(File::Island, "visibility", Value::String(VISIBILITY[i].into())),
+        ("open_on", Act::Choose(i)) if i < OPEN_ON.len() => state.set(File::Island, "open_on", Value::String(OPEN_ON[i].into())),
+        ("hover_delay", Act::Choose(i)) if i < HOVER_DELAYS.len() => state.set(File::Island, "hover_delay", Value::from(HOVER_DELAYS[i])),
         // The island sees the file change, hides, and pauses clipboard recording itself.
         ("pause", Act::Press) => {
             let paused = state.files.paused_until().is_some_and(|until| until > reui_protocol::unix_ms());
@@ -158,6 +172,10 @@ mod tests {
         // Unplugged: still listed, so the menu shows what's saved.
         state.monitors.clear();
         assert_eq!(monitor_choices(&state), ["primary", "cursor", r"\\.\DISPLAY2"]);
+        act(&mut state, &Target::new("open_on", 0), Act::Choose(1));
+        act(&mut state, &Target::new("hover_delay", 0), Act::Choose(0));
+        assert_eq!((state.files.open_on(), state.files.hover_delay()), (1, 0));
+        assert_eq!(state.files.doc(File::Island).get("hover_delay").and_then(Value::as_u64), Some(150));
         crate::pages::act(crate::pages::Page::General, &mut state, &Target::new("island:hide_in_fullscreen", 0), Act::Press);
         assert!(!state.files.doc(File::Island).bool("hide_in_fullscreen"));
         _ = std::fs::remove_dir_all(&dir);

@@ -10,6 +10,7 @@ mod drag_guard;
 mod features;
 mod fullscreen;
 mod images;
+mod intent;
 mod ipc;
 mod order;
 mod pill;

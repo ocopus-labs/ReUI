@@ -6,7 +6,7 @@ ReUI puts a dynamic island at the top of your screen: a small black pill that sh
 
 | Do this | It does |
 | --- | --- |
-| Rest the pointer on the pill | After a short pause it becomes clickable and peeks. Until then clicks go through to what's underneath (browser tabs stay usable) |
+| Rest the pointer on the pill | After a short pause it becomes clickable and peeks. Until then clicks go through to what's underneath (browser tabs stay usable). Settings → General → **Open the island: On hover** opens the card instead; **Hover delay** sets the pause (Quick, Normal, Relaxed) |
 | Click the pill | Opens the card |
 | Rest the pointer on the pill while nothing is happening | Shows the date and time |
 | Click the pill while nothing is happening | Opens a row of glyphs: Clipboard, Timers, Devices, System stats (and Now Playing while something plays). Click one to go there; Esc or moving away closes the row |
