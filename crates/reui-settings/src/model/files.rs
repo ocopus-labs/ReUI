@@ -86,6 +86,7 @@ impl File {
                 "idle_clock": false,
                 "open_on": "click",
                 "hover_delay": 250,
+                "reveal_zone": "wide",
                 "monitor": "primary",
                 "check_updates": true,
                 "whats_new": true,
@@ -152,6 +153,8 @@ impl File {
 pub const VISIBILITY: [&str; 3] = ["always", "when-active", "when-needed"];
 /// `open_on`: what a rest on the pill does (docs/PRD-behaviour.md §4.1).
 pub const OPEN_ON: [&str; 2] = ["click", "hover"];
+/// `reveal_zone`: how much of the top edge reveals a hidden island (docs/PRD-behaviour.md §4.2).
+pub const REVEAL_ZONE: [&str; 3] = ["off", "pill", "wide"];
 /// `hover_delay` choices in ms: Quick, Normal (`motion.delay.hover-intent`), Relaxed.
 pub const HOVER_DELAYS: [u64; 3] = [150, 250, 500];
 pub const VISUALIZER: [&str; 3] = ["real", "simple", "off"];
@@ -192,6 +195,12 @@ impl Files {
     pub fn open_on(&self) -> usize {
         let doc = self.doc(File::Island);
         doc.str("open_on").and_then(|v| OPEN_ON.iter().position(|x| *x == v)).unwrap_or(0)
+    }
+
+    /// Index into [`REVEAL_ZONE`]; Wide when missing or unknown, as the island reads it.
+    pub fn reveal_zone(&self) -> usize {
+        let doc = self.doc(File::Island);
+        doc.str("reveal_zone").and_then(|v| REVEAL_ZONE.iter().position(|x| *x == v)).unwrap_or(2)
     }
 
     /// Index into [`HOVER_DELAYS`]: the nearest choice to the file's value (it takes any
@@ -315,7 +324,7 @@ mod tests {
         let f = files(&dir);
         assert_eq!((f.visibility(), f.paused_until(), f.visualizer(), f.retract_min()), (0, None, 0, 10));
         assert_eq!(f.monitor(), "primary");
-        assert_eq!((f.open_on(), f.hover_delay()), (0, 1));
+        assert_eq!((f.open_on(), f.hover_delay(), f.reveal_zone()), (0, 1, 2));
         let island = f.doc(File::Island);
         assert!(island.bool("hide_in_fullscreen") && island.bool("check_updates") && island.bool("whats_new"));
         assert!(f.doc(File::Media).bool("enabled") && f.doc(File::Clipboard).bool("enabled") && f.doc(File::Devices).bool("enabled"));

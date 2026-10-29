@@ -347,6 +347,8 @@ impl Pill {
                     // A decision opens itself so it's noticed, then folds back to compact (still
                     // pending) unless the user engages, so it never blocks the top of the screen.
                     self.set_state(State::Expanded);
+                    // A card that opened by itself takes no click until it's been seen.
+                    self.intent.appeared_at = Some(now);
                     if !self.hovered {
                         unsafe { SetTimer(Some(self.hwnd), TIMER_COLLAPSE, motion::delay::DECISION_HOLD, None) };
                     }

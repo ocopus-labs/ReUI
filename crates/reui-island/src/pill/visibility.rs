@@ -161,6 +161,7 @@ impl Pill {
         self.show_on_desktop = settings.show_on_desktop;
         self.intent.open_on = settings.open_on;
         self.intent.delay = settings.hover_delay;
+        self.intent.reveal_zone = settings.reveal_zone;
         self.set_switcher_enabled(settings.view_switcher);
         self.set_idle_clock(settings.idle_clock);
         if self.hide_in_fullscreen != settings.hide_in_fullscreen {
@@ -259,6 +260,8 @@ impl Pill {
             return;
         }
         self.shown = show;
+        // What just appeared hasn't been aimed at yet (`intent::clicks_at_once`).
+        self.intent.appeared_at = show.then(std::time::Instant::now);
         if show {
             self.raise();
         }

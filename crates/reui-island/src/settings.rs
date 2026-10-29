@@ -9,7 +9,8 @@
 //! `hide_in_fullscreen` (bool, default true), `show_on_desktop` (bool, default true), `monitor` ("primary" | "cursor" | a display's
 //! device name such as `\\.\DISPLAY2`), `view_switcher` (bool, default true: tabs under an
 //! open place's card), `idle_clock` (bool, default false: the time in the resting pill),
-//! `open_on` ("click" | "hover") and `hover_delay` (ms; see `intent.rs`), and the look (`style`, `theme`, `roundness`, `top_gap`,
+//! `open_on` ("click" | "hover"), `hover_delay` (ms) and `reveal_zone` ("off" | "pill" |
+//! "wide"; see `intent.rs`), and the look (`style`, `theme`, `roundness`, `top_gap`,
 //! `padding`, `scale`, `accent`; read by `reui_design::look::Appearance`).
 
 use std::path::{Path, PathBuf};
@@ -17,7 +18,7 @@ use std::path::{Path, PathBuf};
 use reui_design::look::Appearance;
 use reui_protocol::{Activity, Priority};
 
-use crate::intent::{self, OpenOn};
+use crate::intent::{self, OpenOn, RevealZone};
 use crate::place::MonitorChoice;
 use serde_json::{Map, Value};
 use windows::core::HSTRING;
@@ -100,13 +101,15 @@ pub struct Settings {
     pub open_on: OpenOn,
     /// How long the pointer rests before the pill peeks (or opens) and takes clicks, in ms.
     pub hover_delay: u32,
+    /// How much of the top edge reveals the island in a hidden visibility mode.
+    pub reveal_zone: RevealZone,
     /// Style, theme, shape and size (Settings > Appearance).
     pub appearance: Appearance,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { visibility: Visibility::default(), paused_until: None, hidden: false, hide_in_fullscreen: true, show_on_desktop: true, monitor: MonitorChoice::default(), view_switcher: true, idle_clock: false, open_on: OpenOn::default(), hover_delay: intent::hover_delay(None), appearance: Appearance::default() }
+        Self { visibility: Visibility::default(), paused_until: None, hidden: false, hide_in_fullscreen: true, show_on_desktop: true, monitor: MonitorChoice::default(), view_switcher: true, idle_clock: false, open_on: OpenOn::default(), hover_delay: intent::hover_delay(None), reveal_zone: RevealZone::default(), appearance: Appearance::default() }
     }
 }
 
@@ -140,6 +143,7 @@ impl Settings {
             idle_clock: map.get("idle_clock").and_then(Value::as_bool).unwrap_or(false),
             open_on: map.get("open_on").and_then(Value::as_str).and_then(OpenOn::parse).unwrap_or_default(),
             hover_delay: intent::hover_delay(map.get("hover_delay").and_then(Value::as_u64)),
+            reveal_zone: map.get("reveal_zone").and_then(Value::as_str).and_then(RevealZone::parse).unwrap_or_default(),
             appearance: Appearance::read(|k| map.get(k).and_then(Value::as_str).map(str::to_string), |k| map.get(k).and_then(Value::as_f64)),
         }
     }
@@ -228,6 +232,7 @@ mod tests {
         let opening = Settings::parse(r#"{"open_on":"hover","hover_delay":500}"#);
         assert_eq!((opening.open_on, opening.hover_delay), (OpenOn::Hover, 500));
         assert_eq!((Settings::default().open_on, Settings::default().hover_delay), (OpenOn::Click, 250));
+        assert_eq!((Settings::parse(r#"{"reveal_zone":"pill"}"#).reveal_zone, Settings::default().reveal_zone), (RevealZone::Pill, RevealZone::Wide));
         // Missing or extra fields fall back to defaults instead of failing.
         assert_eq!(Settings::parse(r#"{"other":1}"#), Settings::default());
         assert_eq!(Settings::parse(r#"{"visibility":"sometimes"}"#), Settings::default());

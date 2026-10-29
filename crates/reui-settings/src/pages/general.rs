@@ -5,7 +5,7 @@ use serde_json::Value;
 use super::{button, flag, footed, group, head, Effect, Page};
 use crate::ui::icons;
 use reui_design::tokens::color::system as palette;
-use crate::model::files::{File, HOVER_DELAYS, MONITOR_CURSOR, MONITOR_PRIMARY, OPEN_ON, VISIBILITY};
+use crate::model::files::{File, HOVER_DELAYS, MONITOR_CURSOR, MONITOR_PRIMARY, OPEN_ON, REVEAL_ZONE, VISIBILITY};
 use crate::state::State;
 use crate::system::{self, Startup};
 use crate::ui::{Act, Block, Part, Role, Row, Target, Tone};
@@ -36,6 +36,14 @@ pub fn build(state: &State) -> Vec<Block> {
         .part(Part::Segmented { options: vec!["Always".into(), "When active".into(), "When needed".into()], selected })
         .enabled(doc_ok)
         .icon(icons::tile(icons::VIEW, palette::BLUE));
+    // How much of the top edge brings a hidden island back (docs/PRD-behaviour.md §4.2); only
+    // means something when the island would otherwise hide.
+    let zone = state.files.reveal_zone();
+    let reveal = Row::new("reveal_zone", "Reveal from the top edge")
+        .detail(["The top edge never shows it", "Pushing the pointer to the edge above the pill shows it", "Pushing the pointer to the edge near the island shows it"][zone])
+        .part(Part::Segmented { options: vec!["Off".into(), "Pill".into(), "Wide".into()], selected: zone })
+        .enabled(doc_ok && selected != 0)
+        .icon(icons::tile(icons::UP, palette::GREEN));
     // How a rest on the pill is read (docs/PRD-behaviour.md §4.1).
     let open_on = state.files.open_on();
     let opening = Row::new("open_on", "Open the island")
@@ -63,7 +71,7 @@ pub fn build(state: &State) -> Vec<Block> {
     // Hides it until pressed again; the hub registers it (`modules/hide.rs`).
     let hide = super::shortcut::named(state, File::Island, "Hide the island", "Until you press it again; permission requests still show")
         .icon(icons::tile(icons::KEYBOARD, palette::GRAY));
-    blocks.push(group("Island", vec![visibility, desktop, opening, delay, monitor, fullscreen, switcher, clock, hide]));
+    blocks.push(group("Island", vec![visibility, desktop, reveal, opening, delay, monitor, fullscreen, switcher, clock, hide]));
 
     let left = state.files.paused_until().and_then(|until| until.checked_sub(reui_protocol::unix_ms())).filter(|&ms| ms > 0);
     let pause = match left {
@@ -123,6 +131,7 @@ pub fn act(state: &mut State, target: &Target, act: Act) -> Effect {
         }
         ("visibility", Act::Choose(i)) if i < VISIBILITY.len() => state.set(File::Island, "visibility", Value::String(VISIBILITY[i].into())),
         ("open_on", Act::Choose(i)) if i < OPEN_ON.len() => state.set(File::Island, "open_on", Value::String(OPEN_ON[i].into())),
+        ("reveal_zone", Act::Choose(i)) if i < REVEAL_ZONE.len() => state.set(File::Island, "reveal_zone", Value::String(REVEAL_ZONE[i].into())),
         ("hover_delay", Act::Choose(i)) if i < HOVER_DELAYS.len() => state.set(File::Island, "hover_delay", Value::from(HOVER_DELAYS[i])),
         // The island sees the file change, hides, and pauses clipboard recording itself.
         ("pause", Act::Press) => {
@@ -175,6 +184,8 @@ mod tests {
         act(&mut state, &Target::new("open_on", 0), Act::Choose(1));
         act(&mut state, &Target::new("hover_delay", 0), Act::Choose(0));
         assert_eq!((state.files.open_on(), state.files.hover_delay()), (1, 0));
+        act(&mut state, &Target::new("reveal_zone", 0), Act::Choose(1));
+        assert_eq!((state.files.reveal_zone(), state.files.doc(File::Island).str("reveal_zone")), (1, Some("pill")));
         assert_eq!(state.files.doc(File::Island).get("hover_delay").and_then(Value::as_u64), Some(150));
         crate::pages::act(crate::pages::Page::General, &mut state, &Target::new("island:hide_in_fullscreen", 0), Act::Press);
         assert!(!state.files.doc(File::Island).bool("hide_in_fullscreen"));

@@ -124,7 +124,8 @@ order.rs           which activity is in the pill and which in the bubble
 place.rs           which display (monitor setting) and the window rect at its DPI
 fullscreen.rs      when to hide: D3D, presentation, busy, a window covering the display
 desktop.rs         whether the desktop (not an app) is in front, for "Always show on the desktop"
-intent.rs          reading the pointer: open on click or hover, the hover delay
+intent.rs          reading the pointer: open on click or hover, the hover delay, the reveal
+                   zone, when a just-appeared pill may take a click
 drag_guard.rs      no hover intent while a drag from elsewhere passes over
 images.rs          encoded images from the hub
 pill/              the island's behaviour
