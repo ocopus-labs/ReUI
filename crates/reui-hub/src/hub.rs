@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
-use reui_protocol::{Activity, ActivityId, CompactView, Element, ExpandedView, ImageId, Priority, Rgb, Snapshot};
+use reui_protocol::{Activity, ActivityId, CompactView, Destination, Element, ExpandedView, ImageId, Priority, Rgb, Snapshot};
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
 
 /// How an activity presents itself; see the protocol for each presentation.
@@ -80,13 +80,16 @@ pub struct Hub {
     snapshots: Arc<watch::Sender<Arc<Snapshot>>>,
     /// "Open this activity" requests for surfaces.
     focus: broadcast::Sender<ActivityId>,
+    /// The places surfaces may switch between (see `modules::destinations`).
+    destinations: Arc<watch::Sender<Arc<Vec<Destination>>>>,
 }
 
 impl Hub {
     pub fn new() -> Self {
         let (snapshots, _) = watch::channel(Arc::new(Snapshot::default()));
         let (focus, _) = broadcast::channel(8);
-        Self { state: Arc::default(), snapshots: Arc::new(snapshots), focus }
+        let (destinations, _) = watch::channel(Arc::new(Vec::new()));
+        Self { state: Arc::default(), snapshots: Arc::new(snapshots), focus, destinations: Arc::new(destinations) }
     }
 
     /// Latest snapshot plus change notifications. `watch` keeps only the newest value,
@@ -100,9 +103,18 @@ impl Hub {
         self.snapshots.subscribe()
     }
 
+    /// The places surfaces may switch between, plus change notifications; changes are rare
+    /// (a module starting, Now Playing's card coming or going).
+    pub fn subscribe_destinations(&self) -> watch::Receiver<Arc<Vec<Destination>>> {
+        self.destinations.subscribe()
+    }
+
     pub fn context(&self, module: &'static str) -> ModuleContext {
         let (tx, inputs) = mpsc::unbounded_channel();
-        self.state.lock().unwrap().routes.insert(module.to_string(), tx);
+        let mut state = self.state.lock().unwrap();
+        state.routes.insert(module.to_string(), tx);
+        self.rebuild_destinations(&state);
+        drop(state);
         ModuleContext { module, hub: self.clone(), inputs }
     }
 
@@ -187,6 +199,7 @@ impl Hub {
             self.rebuild(&state);
             evict_images(&mut state);
         }
+        self.rebuild_destinations(&state);
     }
 
     /// Re-sort and publish, but only wake surfaces if what they'd see actually changed.
@@ -199,6 +212,20 @@ impl Hub {
                 return false;
             }
             *current = Arc::new(snapshot);
+            true
+        });
+        self.rebuild_destinations(state);
+    }
+
+    /// The places from the running modules and their cards; surfaces hear only of a change.
+    fn rebuild_destinations(&self, state: &State) {
+        let activities: Vec<&Activity> = state.entries.values().map(|e| &e.activity).collect();
+        let list = crate::modules::destinations::available(state.routes.keys().map(String::as_str), &activities);
+        self.destinations.send_if_modified(|current| {
+            if **current == list {
+                return false;
+            }
+            *current = Arc::new(list);
             true
         });
     }
@@ -338,6 +365,18 @@ mod tests {
         assert!(!rx.has_changed().unwrap());
         ctx.publish("music", Priority::Ongoing, compact("b"));
         assert!(rx.has_changed().unwrap());
+    }
+
+    #[test]
+    fn places_follow_the_running_modules() {
+        let hub = Hub::new();
+        let places = hub.subscribe_destinations();
+        let stats = hub.context("stats");
+        let _clipboard = hub.context("clipboard");
+        let names = || places.borrow().iter().map(|d| d.module.clone()).collect::<Vec<_>>();
+        assert_eq!(names(), ["clipboard", "stats"]);
+        drop(stats);
+        assert_eq!(names(), ["clipboard"]);
     }
 
     #[test]

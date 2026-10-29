@@ -25,6 +25,8 @@ pub const FULLSCREEN: char = '\u{E740}';
 /// A picture: the wallpaper, so the desktop.
 pub const WALLPAPER: char = '\u{E8B9}';
 pub const VIEW: char = '\u{E890}';
+/// ViewAll: the view switcher.
+pub const TABS: char = '\u{E8A9}';
 pub const KEYBOARD: char = '\u{E765}';
 pub const MIC: char = '\u{E720}';
 pub const BATTERY_LOW: char = '\u{E851}';

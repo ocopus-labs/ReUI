@@ -91,6 +91,7 @@ async fn serve(pipe: NamedPipeServer, hub: Hub) -> Result<()> {
 
     let mut snapshots = hub.subscribe();
     let mut focus = hub.subscribe_focus();
+    let mut destinations = hub.subscribe_destinations();
     let images = hub.clone();
     let sender = tokio::spawn(async move {
         let mut sent = HashSet::new();
@@ -115,8 +116,22 @@ async fn serve(pipe: NamedPipeServer, hub: Hub) -> Result<()> {
             }};
         }
         send_snapshot!();
+        // The places to switch between: now, and again only when the list changes.
+        let places = destinations.borrow_and_update().as_ref().clone();
+        if write_frame(&mut writer, &HubMsg::Destinations(places)).await.is_err() {
+            return;
+        }
         loop {
             tokio::select! {
+                changed = destinations.changed() => {
+                    if changed.is_err() {
+                        return;
+                    }
+                    let places = destinations.borrow_and_update().as_ref().clone();
+                    if write_frame(&mut writer, &HubMsg::Destinations(places)).await.is_err() {
+                        return;
+                    }
+                }
                 changed = snapshots.changed() => {
                     if changed.is_err() {
                         return;

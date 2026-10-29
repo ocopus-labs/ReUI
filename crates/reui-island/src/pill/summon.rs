@@ -129,6 +129,9 @@ impl Pill {
     }
 
     fn on_key(&mut self, key: Key) {
+        if let Key::View(step) = key {
+            return self.step_place(step);
+        }
         if self.on_answer_key(key) {
             return;
         }
@@ -197,7 +200,7 @@ impl Pill {
                 tabs.get(next).filter(|t| !t.selected).map(|t| t.action.clone())
             }),
             Key::Undo => Some(ACTION_UNDO.to_string()),
-            Key::Type(_) | Key::Backspace | Key::BackspaceWord | Key::Escape => None,
+            Key::Type(_) | Key::Backspace | Key::BackspaceWord | Key::Escape | Key::View(_) => None,
         };
         if let Some(action) = action {
             let pastes = matches!(key, Key::Activate | Key::Nth(_) | Key::Item(ItemKey::ShiftEnter | ItemKey::CtrlEnter));

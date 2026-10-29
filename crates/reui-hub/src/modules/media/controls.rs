@@ -26,6 +26,14 @@ impl State {
                 self.reload_settings();
                 return;
             }
+            // The view switcher's Now Playing tab: open the card that's out (there's a tab
+            // only while there is one).
+            if action.action == "show" {
+                if self.shown.is_some() {
+                    ctx.focus(KEY);
+                }
+                return;
+            }
             let mut settings = self.settings.clone();
             if settings.apply(&action.action) {
                 self.settings = settings.clone();

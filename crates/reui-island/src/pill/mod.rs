@@ -43,6 +43,7 @@ mod input;
 mod link;
 mod setup;
 mod summon;
+mod switcher;
 mod timers;
 mod visibility;
 mod visuals;
@@ -210,6 +211,8 @@ pub struct Pill {
     block_max: f32,
     /// The choice list's spans and shown height, to scroll the cursor's choice into view.
     choice_spans: Option<(Vec<(f32, f32)>, f32)>,
+    /// The view switcher under an open place's card.
+    tabs: switcher::Tabs,
     to_hub: UnboundedSender<ClientMsg>,
     events: Receiver<Event>,
 }
@@ -352,6 +355,7 @@ impl Pill {
         if self.awaiting.is_some() && !self.search_pending() {
             self.run_awaiting();
         }
+        self.sync_switcher();
         Ok(())
     }
 
@@ -448,6 +452,7 @@ impl Pill {
         self.update_tick();
         self.sync_open();
         self.update_capture();
+        self.sync_switcher();
     }
 
     /// Moves the keyboard cursor to choice `i`, scrolling the list to show it.

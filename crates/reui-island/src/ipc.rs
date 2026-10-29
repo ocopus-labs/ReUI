@@ -6,7 +6,7 @@ use std::io;
 use std::sync::mpsc;
 use std::time::Duration;
 
-use reui_protocol::{pipe_name, read_frame, write_frame, ActivityId, ClientMsg, HubMsg, ImageId, Snapshot, SurfaceKind, PROTOCOL_VERSION};
+use reui_protocol::{pipe_name, read_frame, write_frame, ActivityId, ClientMsg, Destination, HubMsg, ImageId, Snapshot, SurfaceKind, PROTOCOL_VERSION};
 use tokio::io::{ReadHalf, WriteHalf};
 use tokio::net::windows::named_pipe::{ClientOptions, NamedPipeClient};
 use tokio::sync::mpsc::{unbounded_channel, UnboundedReceiver, UnboundedSender};
@@ -24,6 +24,8 @@ pub enum Event {
     Image(ImageId, Vec<u8>),
     Snapshot(Snapshot),
     Focus(ActivityId),
+    /// The places to switch between (the view switcher).
+    Destinations(Vec<Destination>),
     Disconnected,
 }
 
@@ -98,6 +100,7 @@ async fn read_loop(reader: &mut ReadHalf<NamedPipeClient>, notifier: &Notifier) 
             HubMsg::Snapshot(snapshot) => notifier.send(Event::Snapshot(snapshot)),
             HubMsg::Image { id, bytes } => notifier.send(Event::Image(id, bytes)),
             HubMsg::Focus { id } => notifier.send(Event::Focus(id)),
+            HubMsg::Destinations(places) => notifier.send(Event::Destinations(places)),
             _ => {}
         }
     }

@@ -70,7 +70,7 @@ impl Pill {
         }
     }
 
-    fn spring(&self, key: &HSTRING, to: f32, preset: Spring) -> Result<()> {
+    pub(super) fn spring(&self, key: &HSTRING, to: f32, preset: Spring) -> Result<()> {
         let spring = self.compositor.CreateSpringScalarAnimation()?;
         spring.SetFinalValue(&PropertyValue::CreateSingle(to)?.cast::<IReference<f32>>()?)?;
         spring.SetDampingRatio(preset.damping_ratio)?;
@@ -148,6 +148,7 @@ impl Pill {
         }
         self.visibility = settings.visibility;
         self.show_on_desktop = settings.show_on_desktop;
+        self.set_switcher_enabled(settings.view_switcher);
         if self.hide_in_fullscreen != settings.hide_in_fullscreen {
             self.hide_in_fullscreen = settings.hide_in_fullscreen;
             self.update_fullscreen(unsafe { GetForegroundWindow() });
@@ -243,6 +244,7 @@ impl Pill {
         self.update_logo();
         self.update_capture();
         self.update_clock_tick();
+        self.sync_switcher();
     }
 
     /// Emerges from the top edge (slide down, scale up with a little overshoot, fade in) or

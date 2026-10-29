@@ -6,7 +6,8 @@
 //!
 //! Keys: `visibility` ("always" | "when-active" | "when-needed"), `paused_until` (Unix ms),
 //! `hide_in_fullscreen` (bool, default true), `show_on_desktop` (bool, default true), `monitor` ("primary" | "cursor" | a display's
-//! device name such as `\\.\DISPLAY2`), and the look (`style`, `theme`, `roundness`, `top_gap`,
+//! device name such as `\\.\DISPLAY2`), `view_switcher` (bool, default true: tabs under an
+//! open place's card), and the look (`style`, `theme`, `roundness`, `top_gap`,
 //! `padding`, `scale`, `accent`; read by `reui_design::look::Appearance`).
 
 use std::path::{Path, PathBuf};
@@ -84,13 +85,15 @@ pub struct Settings {
     pub show_on_desktop: bool,
     /// Which display the island sits on.
     pub monitor: MonitorChoice,
+    /// The view switcher under an open place's card (docs/PRD-view-switcher.md).
+    pub view_switcher: bool,
     /// Style, theme, shape and size (Settings > Appearance).
     pub appearance: Appearance,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { visibility: Visibility::default(), paused_until: None, hide_in_fullscreen: true, show_on_desktop: true, monitor: MonitorChoice::default(), appearance: Appearance::default() }
+        Self { visibility: Visibility::default(), paused_until: None, hide_in_fullscreen: true, show_on_desktop: true, monitor: MonitorChoice::default(), view_switcher: true, appearance: Appearance::default() }
     }
 }
 
@@ -119,6 +122,7 @@ impl Settings {
             hide_in_fullscreen: map.get("hide_in_fullscreen").and_then(Value::as_bool).unwrap_or(true),
             show_on_desktop: map.get("show_on_desktop").and_then(Value::as_bool).unwrap_or(true),
             monitor: map.get("monitor").and_then(Value::as_str).map(MonitorChoice::parse).unwrap_or_default(),
+            view_switcher: map.get("view_switcher").and_then(Value::as_bool).unwrap_or(true),
             appearance: Appearance::read(|k| map.get(k).and_then(Value::as_str).map(str::to_string), |k| map.get(k).and_then(Value::as_f64)),
         }
     }
@@ -198,6 +202,7 @@ mod tests {
         assert_eq!((full.hide_in_fullscreen, full.monitor), (false, MonitorChoice::Cursor));
         assert_eq!(Settings::parse(r#"{"monitor":"\\\\.\\DISPLAY2"}"#).monitor, MonitorChoice::Named(r"\\.\DISPLAY2".into()));
         assert!(Settings::default().hide_in_fullscreen);
+        assert!(Settings::default().view_switcher && !Settings::parse(r#"{"view_switcher":false}"#).view_switcher);
         // Missing or extra fields fall back to defaults instead of failing.
         assert_eq!(Settings::parse(r#"{"other":1}"#), Settings::default());
         assert_eq!(Settings::parse(r#"{"visibility":"sometimes"}"#), Settings::default());

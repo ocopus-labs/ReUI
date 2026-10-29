@@ -42,12 +42,14 @@ impl Pill {
         let (x, y) = (pt.x as f32, pt.y as f32);
         let within = |(l, t, r, b): (f32, f32, f32, f32)| x >= l && x < r && y >= t && y < b;
         let interactive = self.shown && self.state != State::Idle;
-        let on_island = interactive && (within(self.shape_rect()) || self.bubble_rect().is_some_and(within));
+        let on_switcher = self.switcher_zone().is_some_and(within);
+        let on_island = interactive && (within(self.shape_rect()) || self.bubble_rect().is_some_and(within) || on_switcher);
         self.drag_guard.press(button, on_island || self.menu_open);
         if self.menu_open {
             return;
         }
-        if !within(self.shape_rect()) {
+        // A press on the switcher is going to another place, not away.
+        if !within(self.shape_rect()) && !on_switcher {
             self.dismiss_summoned();
         }
     }
@@ -82,14 +84,18 @@ impl Pill {
         let (x, y) = (pt.x as f32, pt.y as f32);
         let within = |(l, t, r, b): (f32, f32, f32, f32)| x >= l && x < r && y >= t && y < b;
         let on_bubble = interactive && self.bubble_rect().is_some_and(within);
-        let inside = interactive && (within(self.hit_rect()) || on_bubble);
+        // The switcher and the gap above it count as the card, so crossing to a tab never
+        // starts its collapse.
+        let on_switcher = interactive && self.switcher_zone().is_some_and(within);
+        let inside = interactive && (within(self.hit_rect()) || on_bubble || on_switcher);
         self.on_bubble = on_bubble;
         // On the visible pill (or bubble) itself, clicks are the island's at once: a quick
         // click there is clearly aimed at it. The rest delay only gates the peek, and the
         // thin band above the pill, where browser tabs actually are.
-        if interactive && (within(self.shape_rect()) || on_bubble) {
+        if interactive && (within(self.shape_rect()) || on_bubble || on_switcher) {
             self.set_clickthrough(false);
         }
+        self.hover_switcher(pt);
         self.update_thumb(pt);
         self.update_hover_card(pt, inside);
         if inside == self.inside {
@@ -138,6 +144,9 @@ impl Pill {
     /// `x`, `y` are client pixels. Shift+click on a card is its Shift+Enter action; Alt+click
     /// on a moment's button is its second meaning (`ACTION_ALT`: Deny → deny and say why).
     pub fn on_click(&mut self, x: f32, y: f32, shift: bool, alt: bool) {
+        if self.click_switcher(x, y) {
+            return;
+        }
         // A click on the minimal bubble swaps that activity into the pill.
         if let Some((l, t, r, b)) = self.bubble_rect() {
             let (sx, sy) = (x + self.window.left as f32, y + self.window.top as f32);
@@ -198,6 +207,9 @@ impl Pill {
     /// sideways, for trackpads). A sideways swipe on the compact pill skips track. Otherwise
     /// it cycles through activities in the hub's order.
     pub fn on_wheel(&mut self, delta: i16, horizontal: bool, pt: POINT) {
+        if !horizontal && self.wheel_switcher(delta as i32, pt) {
+            return;
+        }
         if self.state == State::Expanded && !horizontal {
             let (cx, cy) = self.card_point((pt.x - self.window.left) as f32, (pt.y - self.window.top) as f32);
             let hit = render::hit_at(&self.hits, cx, cy).map(|h| (h.pager, h.slider.is_some(), h.action.clone(), h.block));

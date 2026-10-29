@@ -22,7 +22,7 @@ reui-settings.exe  the Settings window, opened from the tray; single instance
 | Crate | Job |
 |---|---|
 | `reui-protocol` | Wire types: `Activity`, presentations (compact, minimal, expanded), rows, priorities, actions; postcard framing. Also `version` (semver comparison for update.json) and `install` (the lines `reui-settings --install-update` prints) |
-| `reui-design` | `design/tokens.json` compiled into constants at build time (plus a `Palette` per theme); `look.rs` turns the Appearance settings into a `Look` (palette, radii, insets, the concentric maths) for the island and Settings' previews alike; `layout/` is the island's geometry over that `Look` (compact pill and bubble, the expanded header, every row, the card row, gauges and their sparklines, each card's width and height), pure and tested, which both lay out with; `icon.rs` turns `design/logo/reui.ico` into the icon resource every program's `build.rs` links in |
+| `reui-design` | `design/tokens.json` compiled into constants at build time (plus a `Palette` per theme); `look.rs` turns the Appearance settings into a `Look` (palette, radii, insets, the concentric maths) for the island and Settings' previews alike; `layout/` is the island's geometry over that `Look` (compact pill and bubble, the expanded header, every row, the card row, gauges and their sparklines, each card's width and height, the view switcher), pure and tested, which both lay out with; `icon.rs` turns `design/logo/reui.ico` into the icon resource every program's `build.rs` links in |
 | `reui-hub` | Feature modules and the hub that orders their activities |
 | `reui-island` | The island window: Windows.UI.Composition + Direct2D/DirectWrite |
 | `reui-bridge` | Hook entry point for coding agents (`main.rs`; `parents.rs`: its parent process chain, sent for "Open terminal"), the hook installer (`install.rs`), and the OpenCode plugin it installs (`opencode-plugin.js`, tested by `tools/opencode-plugin-test.mjs`) |
@@ -46,6 +46,9 @@ modules/
                    arrivals, brightness keys (Raw Input), lock keys, Explorer restarts,
                    clock changes, module hotkeys
   hotkey.rs        hotkey settings ("Win+Alt+V") parsed into modifiers + virtual key
+  destinations.rs  the places the view switcher offers (module, glyph, name, open command),
+                   from the running modules and Now Playing's card; the hub sends them as
+                   HubMsg::Destinations when they change (pure, tested)
   demo/            --demo: music, a timer, and agent moments (moments.rs: a permission
                    with a body, a 3-step question, a plan) that answer nothing real
   onboarding/      first run (demo card, "Hover me", the welcome), one-time tips and offers
@@ -128,6 +131,8 @@ pill/              the island's behaviour
                    a new look rebuilds it (WM_LOOK), like a DPI change
   input.rs         clicks, wheel, drag, hover
   summon.rs        hotkey-summoned cards, keyboard capture, search
+  switcher.rs      the view switcher: places, when it shows, its tabs placed and drawn,
+                   click / wheel / Ctrl+Tab to another place
   visibility.rs    size springs, show/hide, reveal, fullscreen, topmost
   timers.rs        tick, clocks, bars, scroll, lyric, level timers
   visuals.rs       level bars, logo
@@ -137,6 +142,7 @@ render/            drawing only (no behaviour state); where things go is reui_de
   compact.rs  minimal.rs  expanded.rs (strip + header + row layout)
   notch.rs         the Notch style's ears
   sheet.rs         test-only: the device-drawing contact sheet (target/devices-art/)
+  switcher.rs      the view switcher's tabs
   rows/            timeline, controls, slider, lyrics, cards, search, tabs, note,
                    context (session strip), choices, block (scrolling text), gauges
                    (gauges with sparklines, facts: System stats)
@@ -149,6 +155,7 @@ features/          per-feature island logic
   visualizer.rs                     per-process audio loopback + FFT
   level.rs                          eased level values
   clock.rs                          how clocks read, and when they next change
+  switcher.rs                       when the view switcher shows, which tab is selected
 ```
 
 **Rules:**
@@ -203,7 +210,7 @@ stats.rs           idle cost: CPU and private memory of ReUI's processes
 
 | Path | What |
 |---|---|
-| `%APPDATA%\ReUI\settings.json` | island `visibility`, `show_on_desktop`, `hide_in_fullscreen`, `monitor`, `paused_until` while ReUI is paused, and the look: `style` (island / notch), `theme` (auto / dark / light), `accent` (reui / windows), `roundness` (0..1), `top_gap` (0..24), `padding` (compact / regular / roomy), `scale` (0.9..1.25) |
+| `%APPDATA%\ReUI\settings.json` | island `visibility`, `show_on_desktop`, `hide_in_fullscreen`, `monitor`, `paused_until` while ReUI is paused, `view_switcher`, and the look: `style` (island / notch), `theme` (auto / dark / light), `accent` (reui / windows), `roundness` (0..1), `top_gap` (0..24), `padding` (compact / regular / roomy), `scale` (0.9..1.25) |
 | `%APPDATA%\ReUI\onboarding.json` | first run done (`welcomed`), tips shown, offers answered |
 | `%APPDATA%\ReUI\clipboard.db`, `clipboard.json` | clipboard history and settings |
 | `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json`, `timers.json`, `privacy.json`, `stats.json`, `coding.json` | music, OSD, Devices, Timers, privacy indicator, System stats and coding agent settings (`coding.json` is read by all three agent modules) |

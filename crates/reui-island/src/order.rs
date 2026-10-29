@@ -9,7 +9,8 @@ use reui_protocol::{Activity, ActivityId, Priority};
 ///    urgent (above both it and "ongoing") is waiting. A `summoned` pin (opened with a
 ///    hotkey, so the user asked for exactly this) goes first regardless.
 /// 2. A card the user has open (`open`) stays in front of anything but a decision: an
-///    alert from another activity waits in the bubble until the card closes.
+///    alert from another activity waits in the bubble until the card closes. A card just
+///    summoned over it (another hotkey, a view switcher tab) replaces it instead.
 /// 3. The bubble (second place) shows a different kind of activity from the pill when there
 ///    is one, so two Claude sessions don't push the music out of sight, and vice versa.
 /// 4. A brief confirmation (a copy) never takes the pill from something else: it shows in
@@ -31,7 +32,8 @@ pub fn arrange(mut activities: Vec<Activity>, pinned: Option<&ActivityId>, summo
         }
     }
     if let (Some(open), Some(front)) = (open, activities.first()) {
-        if &front.id != open && front.priority < Priority::Decision {
+        let asked_for = summoned && pinned == Some(&front.id);
+        if &front.id != open && front.priority < Priority::Decision && !asked_for {
             if let Some(i) = activities.iter().position(|a| &a.id == open) {
                 let kept = activities.remove(i);
                 activities.insert(0, kept);
@@ -152,6 +154,16 @@ mod tests {
         let hub_order = vec![activity("claude", "session-a", Priority::Decision), activity("clipboard", "clipboard", Priority::Passive)];
         assert_eq!(keys(&arrange(hub_order.clone(), Some(&pin), true, None, false).0), ["clipboard", "session-a"]);
         assert_eq!(keys(&arrange(hub_order, Some(&pin), false, None, false).0), ["session-a", "clipboard"]);
+    }
+
+    #[test]
+    fn a_card_summoned_over_an_open_one_replaces_it() {
+        let open = activity("stats", "system", Priority::Passive).id;
+        let launcher = activity("timers", "launcher", Priority::Passive);
+        let hub_order = vec![launcher.clone(), activity("stats", "system", Priority::Passive)];
+        assert_eq!(keys(&arrange(hub_order.clone(), Some(&launcher.id), true, Some(&open), false).0), ["launcher", "system"]);
+        // Brought forward without being asked for (the wheel), the open card stays.
+        assert_eq!(keys(&arrange(hub_order, Some(&launcher.id), false, Some(&open), false).0), ["system", "launcher"]);
     }
 
     #[test]
