@@ -192,7 +192,7 @@ pub struct Renderer {
     fonts: Fonts,
     /// Pixels per DIP: the display's scale times the look's size.
     scale: f32,
-    /// Colours and geometry (Settings > Appearance). A new look builds a new renderer.
+    /// Colours and geometry (Settings > Appearance); see [`Renderer::retarget`].
     look: Look,
     /// Width of the expanded view being drawn (normal or wide).
     width: Cell<f32>,
@@ -231,47 +231,20 @@ impl Renderer {
                 None,
             )?
         };
-        let icons = |size: f32| TextStyle { family: font::ICONS, weight: 400, size, line_height: size };
-        let f = |style: TextStyle, tabular: bool| make_font(&dwrite, style, tabular, false, scale);
-        let wrapped = |style: TextStyle| make_font(&dwrite, style, false, true, scale);
-        let fonts = Fonts {
-            eyebrow: f(typography::EYEBROW, false)?,
-            value: f(typography::VALUE, true)?,
-            headline: f(typography::HEADLINE, false)?,
-            code: f(typography::CODE, false)?,
-            detail: f(typography::DETAIL, false)?,
-            detail_wrap: wrapped(typography::DETAIL)?,
-            compact: f(typography::COMPACT, true)?,
-            button: f(typography::BUTTON, false)?,
-            caption: f(typography::CAPTION, true)?,
-            icon_compact: f(icons(icon::COMPACT), false)?,
-            icon_button: f(icons(icon::BUTTON), false)?,
-            icon_tile: f(icons(icon::TILE), false)?,
-            icon_tile_compact: f(icons(icon::TILE_COMPACT), false)?,
-            icon_trailing: f(icons(icon::TRAILING), false)?,
-            card_text: wrapped(typography::CARD_TEXT)?,
-            card_code: wrapped(typography::CARD_CODE)?,
-            card_label: f(typography::CARD_LABEL, false)?,
-            card_title: wrapped(typography::CARD_TITLE)?,
-            tab: f(typography::TAB, false)?,
-            tab_count: f(typography::TAB, true)?,
-            search: f(typography::SEARCH, false)?,
-            note: f(typography::NOTE, false)?,
-            icon_search: f(icons(icon::SEARCH), false)?,
-            icon_star: f(icons(icon::STAR), false)?,
-            icon_kind: f(icons(component::card::KIND_ICON), false)?,
-            icon_pager: f(icons(icon::PAGER), false)?,
-            lyric_wrap: f(typography::LYRIC, true)?,
-            pager: f(typography::PAGER, true)?,
-            context: f(typography::CONTEXT, false)?,
-            choice: f(typography::CHOICE, false)?,
-            choice_detail: f(typography::CHOICE_DETAIL, false)?,
-            choice_detail_wrap: wrapped(typography::CHOICE_DETAIL)?,
-            icon_check: f(icons(component::choice::CHECK), false)?,
-            block_code: f(typography::BLOCK_CODE, false)?,
-            block_prose: wrapped(typography::BLOCK_PROSE)?,
-        };
+        let fonts = fonts(&dwrite, scale)?;
         Ok(Self { graphics, factory, dwrite, wic, images: HashMap::new(), tabular, round, fonts, scale, look, width: Cell::new(island::expanded::WIDTH), size: Cell::new(CardSize::Regular) })
+    }
+
+    /// A new look, or the same look at another scale (Size, another display): the device,
+    /// the factories and the decoded images stay; only the fonts depend on the scale.
+    /// Building a renderer from nothing takes ~140 ms, which a style switch shouldn't cost.
+    pub fn retarget(&mut self, scale: f32, look: Look) -> Result<()> {
+        if scale != self.scale {
+            self.fonts = fonts(&self.dwrite, scale)?;
+            self.scale = scale;
+        }
+        self.look = look;
+        Ok(())
     }
 
     pub fn surface(&self, dips: (f32, f32)) -> Result<CompositionDrawingSurface> {
@@ -395,6 +368,50 @@ fn create_d3d_device() -> Result<ID3D11Device> {
 fn mix(a: Color, b: Color, t: f32) -> Color {
     let l = |x: f32, y: f32| x + (y - x) * t.clamp(0.0, 1.0);
     Color { r: l(a.r, b.r), g: l(a.g, b.g), b: l(a.b, b.b), a: l(a.a, b.a) }
+}
+
+/// Every text style the island draws, at `scale`.
+fn fonts(dwrite: &IDWriteFactory, scale: f32) -> Result<Fonts> {
+    let icons = |size: f32| TextStyle { family: font::ICONS, weight: 400, size, line_height: size };
+    let f = |style: TextStyle, tabular: bool| make_font(&dwrite, style, tabular, false, scale);
+    let wrapped = |style: TextStyle| make_font(&dwrite, style, false, true, scale);
+    Ok(Fonts {
+        eyebrow: f(typography::EYEBROW, false)?,
+        value: f(typography::VALUE, true)?,
+        headline: f(typography::HEADLINE, false)?,
+        code: f(typography::CODE, false)?,
+        detail: f(typography::DETAIL, false)?,
+        detail_wrap: wrapped(typography::DETAIL)?,
+        compact: f(typography::COMPACT, true)?,
+        button: f(typography::BUTTON, false)?,
+        caption: f(typography::CAPTION, true)?,
+        icon_compact: f(icons(icon::COMPACT), false)?,
+        icon_button: f(icons(icon::BUTTON), false)?,
+        icon_tile: f(icons(icon::TILE), false)?,
+        icon_tile_compact: f(icons(icon::TILE_COMPACT), false)?,
+        icon_trailing: f(icons(icon::TRAILING), false)?,
+        card_text: wrapped(typography::CARD_TEXT)?,
+        card_code: wrapped(typography::CARD_CODE)?,
+        card_label: f(typography::CARD_LABEL, false)?,
+        card_title: wrapped(typography::CARD_TITLE)?,
+        tab: f(typography::TAB, false)?,
+        tab_count: f(typography::TAB, true)?,
+        search: f(typography::SEARCH, false)?,
+        note: f(typography::NOTE, false)?,
+        icon_search: f(icons(icon::SEARCH), false)?,
+        icon_star: f(icons(icon::STAR), false)?,
+        icon_kind: f(icons(component::card::KIND_ICON), false)?,
+        icon_pager: f(icons(icon::PAGER), false)?,
+        lyric_wrap: f(typography::LYRIC, true)?,
+        pager: f(typography::PAGER, true)?,
+        context: f(typography::CONTEXT, false)?,
+        choice: f(typography::CHOICE, false)?,
+        choice_detail: f(typography::CHOICE_DETAIL, false)?,
+        choice_detail_wrap: wrapped(typography::CHOICE_DETAIL)?,
+        icon_check: f(icons(component::choice::CHECK), false)?,
+        block_code: f(typography::BLOCK_CODE, false)?,
+        block_prose: wrapped(typography::BLOCK_PROSE)?,
+    })
 }
 
 #[cfg(test)]

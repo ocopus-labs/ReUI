@@ -27,7 +27,7 @@ use crate::place::MonitorChoice;
 use crate::render::{expanded_surface, Renderer, COMPACT_SURFACE, EAR_SURFACE, MINIMAL_SURFACE};
 use crate::settings::Visibility;
 
-use super::{Pill, State};
+use super::{Gpu, Pill, State};
 use super::visuals::bar_visuals;
 
 fn color_brush(c: &Compositor, color: Color) -> Result<CompositionColorBrush> {
@@ -48,6 +48,7 @@ impl Pill {
         look: Look,
         to_hub: UnboundedSender<ClientMsg>,
         events: Receiver<Event>,
+        gpu: Option<Gpu>,
     ) -> Result<Self> {
         // Size scales the whole pill and its type: it's drawn at that much more than the
         // display's scale, so every DIP below grows with it.
@@ -55,8 +56,19 @@ impl Pill {
         let s = scale;
         let top = look.top();
         let expanded_dims = expanded_surface(&look);
-        let compositor = Compositor::new()?;
-        let target = unsafe { compositor.cast::<ICompositorDesktopInterop>()?.CreateDesktopWindowTarget(hwnd, true)? };
+        // A rebuild (new look or scale) keeps the old pill's device and renderer.
+        let (compositor, target, renderer) = match gpu {
+            Some(Gpu { compositor, target, mut renderer }) => {
+                renderer.retarget(s, look)?;
+                (compositor, target, renderer)
+            }
+            None => {
+                let compositor = Compositor::new()?;
+                let target = unsafe { compositor.cast::<ICompositorDesktopInterop>()?.CreateDesktopWindowTarget(hwnd, true)? };
+                let renderer = Renderer::new(&compositor, s, look)?;
+                (compositor, target, renderer)
+            }
+        };
         let root = compositor.CreateContainerVisual()?;
         target.SetRoot(&root)?;
         // Showing and hiding scale around the top centre, where the island meets the screen edge.
@@ -115,7 +127,6 @@ impl Pill {
         pill.SetClip(&compositor.CreateGeometricClipWithGeometry(&outline()?)?)?;
         root.Children()?.InsertAtTop(&pill)?;
 
-        let renderer = Renderer::new(&compositor, s, look)?;
         let compact_surface = renderer.surface(COMPACT_SURFACE)?;
         let expanded_surface = renderer.surface(expanded_dims)?;
         let minimal_surface = renderer.surface(MINIMAL_SURFACE)?;
@@ -232,6 +243,7 @@ impl Pill {
             lyric_change: None,
             levels: Levels::default(),
             level_ticking: false,
+            _keys: super::KeysRelease,
             compositor,
             _target: target,
             root,

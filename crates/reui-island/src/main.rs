@@ -139,13 +139,15 @@ fn follow_cursor(hwnd: HWND) {
     }
 }
 
-/// A new pill for another scale (per-monitor DPI): the old one hands over its hub link and
-/// snapshot, the window is resized, and the new one picks up where it left off.
+/// A new pill for another scale (per-monitor DPI) or look: the old one hands over its hub
+/// link, snapshot and GPU objects (so a style switch takes milliseconds, not the ~140 ms a
+/// new device and fonts cost), the window is resized, and the new one picks up where it
+/// left off.
 fn rebuild(hwnd: HWND, placement: &Placement) {
     let Some(mut old) = PILL.with(|cell| cell.try_borrow_mut().ok().and_then(|mut slot| slot.take())) else { return };
     eprintln!("island: rebuilding for scale {}", placement.scale);
     let (to_hub, events, snapshot) = old.take_link();
-    drop(old);
+    let gpu = old.into_gpu();
     unsafe {
         for id in PILL_TIMERS {
             _ = KillTimer(Some(hwnd), id);
@@ -155,7 +157,7 @@ fn rebuild(hwnd: HWND, placement: &Placement) {
     }
     let settings = Settings::load();
     let look = look_for(&settings);
-    match Pill::new(hwnd, placement.scale, placement.window, placement.monitor, !animations_enabled(), settings.visibility, settings.appearance, look, to_hub, events) {
+    match Pill::new(hwnd, placement.scale, placement.window, placement.monitor, !animations_enabled(), settings.visibility, settings.appearance, look, to_hub, events, Some(gpu)) {
         Ok(mut pill) => {
             pill.apply_settings(settings);
             pill.restore(snapshot);
@@ -459,7 +461,7 @@ fn main() -> Result<()> {
 
     ISLAND.set(hwnd.0 as isize);
     let link = ipc::spawn(hwnd);
-    let mut pill = Pill::new(hwnd, scale, window, monitor, !animations_enabled(), settings.visibility, settings.appearance, look, link.to_hub, link.events)?;
+    let mut pill = Pill::new(hwnd, scale, window, monitor, !animations_enabled(), settings.visibility, settings.appearance, look, link.to_hub, link.events, None)?;
     pill.apply_settings(settings);
     settings::watch(hwnd);
     PILL.with(|cell| *cell.borrow_mut() = Some(pill));

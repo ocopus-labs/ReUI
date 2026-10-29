@@ -91,6 +91,7 @@ pub struct Pill {
     /// runs only while one is moving.
     levels: Levels,
     level_ticking: bool,
+    _keys: KeysRelease,
     compositor: Compositor,
     _target: DesktopWindowTarget,
     root: ContainerVisual,
@@ -471,8 +472,28 @@ impl Pill {
 
 }
 
-impl Drop for Pill {
+/// Releases the keyboard hook when the pill goes. A field rather than `Drop` on `Pill`, so a
+/// rebuild can move the compositor and renderer out of the old pill ([`Pill::into_gpu`]).
+pub(super) struct KeysRelease;
+
+impl Drop for KeysRelease {
     fn drop(&mut self) {
         clipboard_keys::release();
+    }
+}
+
+/// What a rebuild keeps: creating these takes ~140 ms (the D3D device, the factories, the
+/// fonts), while the visual tree a new look needs takes a few.
+pub struct Gpu {
+    compositor: Compositor,
+    target: DesktopWindowTarget,
+    renderer: Renderer,
+}
+
+impl Pill {
+    /// The old pill's compositor, window target and renderer, for the next one; the rest
+    /// (its visuals, timers' state, the keyboard hook) goes.
+    pub fn into_gpu(self) -> Gpu {
+        Gpu { compositor: self.compositor, target: self._target, renderer: self.renderer }
     }
 }
