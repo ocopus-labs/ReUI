@@ -275,8 +275,12 @@ impl Pill {
             shape.SetDuration(span(duration))?;
             self.root.StartAnimation(h!("Scale"), &shape)?;
 
+            // A notch is part of the screen's edge: overshooting the slide would pull it below
+            // the edge for a moment and show a gap. It decelerates onto the edge instead; the
+            // scale (around the top centre) keeps its overshoot.
+            let slide_ease = if show && self.look.notch() { c.CreateCubicBezierEasingFunction(Vector2::new(0.2, 0.0), Vector2::new(0.0, 1.0))? } else { ease.clone() };
             let slide = c.CreateVector3KeyFrameAnimation()?;
-            slide.InsertKeyFrameWithEasingFunction(1.0, Vector3::new(0.0, rise, 0.0), &ease)?;
+            slide.InsertKeyFrameWithEasingFunction(1.0, Vector3::new(0.0, rise, 0.0), &slide_ease)?;
             slide.SetDuration(span(duration))?;
             self.root.StartAnimation(h!("Offset"), &slide)?;
 
