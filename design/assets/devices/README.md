@@ -8,13 +8,13 @@ One drawing per **kind** of device, not per brand or model: it says what the dev
 
 | Id | Drawing |
 | --- | --- |
-| `earbuds` | A pair of in-ear buds, one in front of the other, each a round body with its ear tip (no stems, no brand silhouette) |
+| `earbuds` | A pair of in-ear buds from the side, mirrored: a round body, a short stem on its outer side and a solid ear tip peeking out above the inner side (the tip is what tells them from stem-only buds) |
 | `headphones` | Over-ear headphones (also headsets) |
 | `speaker` | A speaker: tweeter and woofer |
 | `gamepad` | A controller: D-pad and two face buttons |
 | `mouse` | A mouse from above |
 | `keyboard` | Two rows of keys and a space bar |
-| `pen` | A stylus |
+| `pen` | A stylus, diagonal: a slim barrel with a round top, a long taper to a fine tip and a side button (the small drawing drops the button) |
 | `watch` | A round watch on its strap, with a crown |
 | `phone` | A phone |
 | `bluetooth` | The fallback for a device of unknown kind |
@@ -32,12 +32,12 @@ The island draws these through `Art::Logo`: bare, no tile, filling `opacity.logo
 
 Rules, so the set reads as one family with the Segoe Fluent glyphs the island uses elsewhere:
 
-- **Stroke only**, `stroke="currentColor"`, round caps and joins; small solid dots (`fill="currentColor"`) only for buttons and keys. No colours, gradients or opacity of their own: the island sets the ink.
+- **Stroke only**, `stroke="currentColor"`, round caps and joins; small solid shapes (`fill="currentColor"`) only for buttons, keys and the ear tips. No colours, gradients or opacity of their own: the island sets the ink.
 - **Weight** follows Fluent's (about 1/16 of the glyph): 3 on the 48 grid, 1.5 on the 21 grid (a touch heavier, so the small drawings hold at 21 px).
 - **Pixel grid:** straight strokes centred on half units on the 48 grid (`x="13.5"`) and on quarter units on the 21 grid, so their edges land on pixels.
 - **Optical size:** tall things (phone, mouse, speaker) about 40 high, wide things (keyboard, gamepad) about 42 wide, everything centred on 24 (10.5 on the small grid); round shapes a little larger than square ones. Two strokes never come closer than one stroke width apart.
 - **Corners:** rounded like Fluent's (a phone's radius is about a quarter of its width); no sharp corners except where the object has them (the pen's tip, the Bluetooth rune).
-- **Small drawings drop inner detail** (the watch's hands, the pen's band, the second row of keys, the ear tips' seams) rather than shrink it.
+- **Small drawings drop inner detail** (the watch's hands, the pen's button, the second row of keys) rather than shrink it.
 
 ## Adding a kind
 
