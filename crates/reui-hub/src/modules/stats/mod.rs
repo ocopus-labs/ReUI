@@ -10,11 +10,13 @@
 //! Activity (module `stats`): `system` (Passive, summoned), there only while it's open.
 //!
 //! Commands: `open` (the tray, `reui-bridge stats`, Settings), `reload`. The hotkey
-//! (Win+Alt+S by default) lives on the shared system-events window.
+//! (Win+Alt+S by default) lives on the shared system-events window. The card's header
+//! button sends `taskmgr` (open Task Manager; the island's click lets it come forward).
 //!
 //! Files: `card.rs` (open/closed), `sampler.rs` (the thread), `os.rs` (CPU, memory, network
-//! reads), `pdh.rs` (GPU and disk counters), `maths.rs` (deltas, the GPU's busiest engine,
-//! numbers as text), `view.rs`, `settings.rs`.
+//! reads, Task Manager), `pdh.rs` (GPU and disk counters), `maths.rs` (deltas, the GPU's
+//! busiest engine, numbers as text), `history.rs` (the open card's last minute, and when a
+//! number has stayed high), `view.rs`, `settings.rs`.
 
 use std::future::Future;
 use std::pin::Pin;
@@ -24,6 +26,7 @@ use tokio::sync::mpsc;
 use tokio::time::{sleep_until, Instant};
 
 mod card;
+mod history;
 mod maths;
 mod os;
 mod pdh;
@@ -32,6 +35,7 @@ mod settings;
 mod view;
 
 use self::card::{Card, Do};
+use self::history::History;
 use self::sampler::{Reading, Sampler};
 use self::settings::Settings;
 use super::hotkey::Hotkey;
@@ -58,6 +62,8 @@ impl Module for SystemStats {
 struct State {
     settings: Settings,
     card: Card,
+    /// What this opening has read so far; a new opening starts empty.
+    history: History,
     /// Running only while the card is open; dropping it ends the thread.
     sampler: Option<Sampler>,
     readings: mpsc::UnboundedSender<Reading>,
@@ -71,7 +77,7 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
     let subscription = tokio::task::spawn_blocking(move || system_events::subscribe(events_tx)).await.ok().flatten();
     let settings = tokio::task::spawn_blocking(Settings::load).await.unwrap_or_default();
     let (readings_tx, mut readings) = mpsc::unbounded_channel();
-    let mut state = State { settings, card: Card::default(), sampler: None, readings: readings_tx, events: subscription, hotkey: None };
+    let mut state = State { settings, card: Card::default(), history: History::default(), sampler: None, readings: readings_tx, events: subscription, hotkey: None };
     state.register_hotkey();
 
     loop {
@@ -93,7 +99,9 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
             Some(reading) = readings.recv() => {
                 let todo = state.card.reading(reading.run, std::time::Instant::now());
                 if matches!(todo, Do::Publish | Do::PublishAndOpen) {
-                    ctx.publish(KEY, Priority::Passive, view::card(&reading, state.settings.show));
+                    let memory = reading.memory.filter(|(_, total)| *total > 0).map(|(used, total)| used as f32 / total as f32);
+                    state.history.push(reading.cpu, memory, reading.gpu, reading.disk);
+                    ctx.publish(KEY, Priority::Passive, view::card(&reading, state.settings.show, &state.history));
                 }
                 todo
             }
@@ -119,6 +127,10 @@ impl State {
                 Do::Nothing
             }
             (KEY, ACTION_COLLAPSED) => self.card.collapsed(),
+            (KEY, view::ACTION_TASK_MANAGER) => {
+                tokio::task::spawn_blocking(os::open_task_manager);
+                Do::Nothing
+            }
             _ => Do::Nothing,
         }
     }
@@ -127,6 +139,7 @@ impl State {
         match todo {
             Do::Nothing | Do::Publish => {}
             Do::Start(run) => {
+                self.history = History::default();
                 self.sampler = Sampler::start(run, self.settings.show, self.readings.clone());
                 if self.sampler.is_none() {
                     eprintln!("stats: couldn't start the sampler");
