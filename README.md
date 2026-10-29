@@ -13,7 +13,6 @@ A unified dynamic island for Windows, and later our own Windows shell. See `PLAN
 | `crates/reui-island` | The pill, rendered natively with Windows.UI.Composition; renders whatever the hub puts in front and sends actions back |
 | `crates/reui-setup` | Per-user installer and uninstaller (`ReUI-Setup-<version>.exe`), with the programs embedded at build time |
 | `crates/reui-bridge` | The program coding agents run as a hook; forwards events to the hub, answers permission requests and Claude's questions and plans, and installs/uninstalls the hooks |
-| `spikes/composition-pill` | Phase 0a renderer spike and its measurements |
 
 ## Install
 
