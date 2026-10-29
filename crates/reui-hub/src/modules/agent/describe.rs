@@ -288,11 +288,13 @@ mod tests {
 
     #[test]
     fn secrets_are_masked_everywhere_they_show() {
-        let short = describe_tool("Bash", &json!({ "command": "gh auth login --with-token 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" }));
-        let long = describe_tool("Bash", &json!({ "command": "export GITHUB_TOKEN=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\ngh release list" }));
+        // Built at run time: no token-shaped literal in the source (secrets::tests).
+        let token = secrets::tests::github_token();
+        let short = describe_tool("Bash", &json!({ "command": format!("gh auth login --with-token {token}") }));
+        let long = describe_tool("Bash", &json!({ "command": format!("export GITHUB_TOKEN={token}\ngh release list") }));
         for d in [short, long] {
             let all = format!("{:?} {:?} {:?}", d.headline, d.detail, d.body);
-            assert!(!all.contains("ghp_") && all.contains(secrets::MASK), "{all}");
+            assert!(!all.contains(&token[..8]) && all.contains(secrets::MASK), "{all}");
         }
     }
 
