@@ -73,10 +73,13 @@ modules/
                    ranking, lyrics (LRCLIB), player activation, settings
   osd/             volume/brightness HUDs, brightness (WMI, DDC/CI), Windows flyout hiding,
                    settings
-  devices/         Bluetooth connects and batteries (watchers, containers, PnP battery,
-                   AirPods ads), anti-spam gate, low battery, controllers, laptop power
-                   and time to full, drives and Eject, phones, overview, OSD hand-off,
-                   settings
+  devices/         Bluetooth connects and batteries (watchers, containers, PnP battery and
+                   Device ID reads, AirPods ads with colour and lid), anti-spam gate, low
+                   battery, controllers, laptop power and time to full, drives and Eject,
+                   phones, overview, OSD hand-off, settings
+    catalog/       exact models, offline: Device ID parsing (ids), Apple/Beats and
+                   controller tables with a source per row, chip vendors to refuse, the
+                   lookup order (resolve; pure, tested); families and kinds
   timers/          countdowns, focus sessions, stopwatch: launcher field parser, state
                    machines (fake-clock tests), timer-state.json, finish sound, Do Not
                    Disturb (WNF read, IQuietHoursSettings, checked), views, settings
