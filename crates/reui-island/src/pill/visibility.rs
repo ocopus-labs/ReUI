@@ -263,9 +263,9 @@ impl Pill {
         let c = &self.compositor;
         let result = (|| -> Result<()> {
             let (duration, ease) = if show {
-                // Decelerate with a slight overshoot: arrives, then settles. A control point
-                // at 1.4 swung ~10 % past and read as a wobble; 1.15 is one small settle.
-                (motion::show::IN, c.CreateCubicBezierEasingFunction(Vector2::new(0.3, 1.15), Vector2::new(0.6, 1.0))?)
+                // Decelerate onto its place and stop, like every spring in the island: any
+                // overshoot here (a control point above 1) read as a wobble.
+                (motion::show::IN, c.CreateCubicBezierEasingFunction(Vector2::new(0.2, 0.0), Vector2::new(0.0, 1.0))?)
             } else {
                 (motion::show::OUT, c.CreateCubicBezierEasingFunction(Vector2::new(0.4, 0.0), Vector2::new(1.0, 1.0))?)
             };
@@ -276,12 +276,10 @@ impl Pill {
             shape.SetDuration(span(duration))?;
             self.root.StartAnimation(h!("Scale"), &shape)?;
 
-            // A notch is part of the screen's edge: overshooting the slide would pull it below
-            // the edge for a moment and show a gap. It decelerates onto the edge instead; the
-            // scale (around the top centre) keeps its overshoot.
-            let slide_ease = if show && self.look.notch() { c.CreateCubicBezierEasingFunction(Vector2::new(0.2, 0.0), Vector2::new(0.0, 1.0))? } else { ease.clone() };
+            // No overshoot also keeps a notch on the screen's edge: overshooting the slide
+            // pulled it below the edge for a moment and showed a gap.
             let slide = c.CreateVector3KeyFrameAnimation()?;
-            slide.InsertKeyFrameWithEasingFunction(1.0, Vector3::new(0.0, rise, 0.0), &slide_ease)?;
+            slide.InsertKeyFrameWithEasingFunction(1.0, Vector3::new(0.0, rise, 0.0), &ease)?;
             slide.SetDuration(span(duration))?;
             self.root.StartAnimation(h!("Offset"), &slide)?;
 
