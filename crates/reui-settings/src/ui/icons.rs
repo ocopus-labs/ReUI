@@ -50,6 +50,9 @@ pub const CANCEL: char = '\u{E711}';
 pub const STOPWATCH: char = '\u{E916}';
 pub const SPARKLE: char = '\u{E734}';
 pub const PALETTE: char = '\u{E790}';
+pub const CAMERA: char = '\u{E722}';
+pub const SCREEN: char = MONITOR;
+pub const LOCATION: char = '\u{E81D}';
 
 pub fn tile(glyph: char, color: reui_design::Color) -> Icon {
     Icon::Glyph(glyph, color)
@@ -75,6 +78,9 @@ pub fn devices() -> Icon {
 }
 pub fn timers() -> Icon {
     tile(STOPWATCH, section::TIMERS)
+}
+pub fn indicators() -> Icon {
+    tile(MIC, section::INDICATORS)
 }
 pub fn agents() -> Icon {
     tile(CODE, section::AGENTS)
