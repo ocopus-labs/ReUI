@@ -1,6 +1,6 @@
 # PRD: View switcher (tabs under an open card)
 
-Status: draft for review · Owner: Rohit · Oct 30, 2026
+Status: M0–M1 built · Owner: Rohit · Oct 30, 2026
 
 **Ask (Rohit):** a Mac notch app shows a small pill of icons (home, tray, music, grid) under the open notch to switch views; plan the same for ReUI. "We need to give better UX with UI with our standards, we can't just do whatever we want": so this is not a copy of the reference, it's what fits ReUI.
 
@@ -159,8 +159,8 @@ It shows **with the card, not on hover**: a place opened by its hotkey usually h
 
 | # | What | Done when | Status |
 |---|---|---|---|
-| M0 | Protocol (`Destination`, `HubMsg::Destinations`, v19); the hub's list from running modules and Now Playing's card (pure, tested); Now Playing's `show`; tokens and `reui_design::layout::switcher` (pure, tested) | Tests | |
-| M1 | The island draws it under a place's card, with its motion; click, wheel and Ctrl+Tab open places through their modules; hover and click-through rules; Settings → General toggle | A sandbox `--demo` hub: Clipboard → Timers → System stats by tab, screenshots in dark, light and Notch | |
+| M0 | Protocol (`Destination`, `HubMsg::Destinations`, v19); the hub's list from running modules and Now Playing's card (pure, tested); Now Playing's `show`; tokens and `reui_design::layout::switcher` (pure, tested) | Tests | Done |
+| M1 | The island draws it under a place's card, with its motion; click, wheel and Ctrl+Tab open places through their modules; hover and click-through rules; Settings → General toggle | A sandbox `--demo` hub: Clipboard → Timers → System stats by tab, screenshots in dark, light and Notch | Done: a sandbox `--demo` hub, Stats → Clipboard → Timers by click, Devices by wheel, Now Playing by click; dark, Light + Notch, roundness 0. Ctrl+Tab is unit-tested only (no input was injected). Building it showed that a card summoned over an open one never replaced it (`order.rs`); fixed |
 | M2 | A waiting decision or alert shows on the switcher while you're in a place (its accent dot at the switcher's end; click to go to it); Settings' General preview shows the switcher | Permission arriving during a summoned place is visible within one frame | Planned |
 | M3 | A coding agents sessions view (own PRD) as a destination | | Planned |
 | M4 | UI Automation for the island; the switcher as a tab list | Narrator reads "Clipboard, tab, selected, 1 of 4" | Planned |
