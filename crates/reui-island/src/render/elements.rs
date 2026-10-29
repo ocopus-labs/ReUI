@@ -10,7 +10,7 @@ use windows::core::Result;
 use windows::Win32::Graphics::Direct2D::Common::*;
 use windows::Win32::Graphics::Direct2D::*;
 
-use crate::render::{Align, Renderer, Slot, BARS};
+use crate::render::{Align, Renderer, Slot};
 use crate::features::clock;
 
 impl Renderer {
@@ -163,9 +163,7 @@ fn ring_size(slot: Slot) -> (f32, f32) {
     }
 }
 
-pub fn bars_width() -> f32 {
-    BARS as f32 * component::bars::WIDTH + (BARS as f32 - 1.0) * component::bars::GAP
-}
+pub use reui_design::layout::compact::bars_width;
 
 /// `element` with a level's value replaced by `level` (its eased value), if both are there.
 pub(super) fn shown_level(element: &Element, level: Option<f32>) -> Cow<'_, Element> {

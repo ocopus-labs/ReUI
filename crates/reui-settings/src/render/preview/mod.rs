@@ -34,7 +34,7 @@ pub fn draw(p: &Painter, preview: Preview, r: Rect, backdrop: Option<&Backdrop>,
     let moment = stage::shown(preview, r.w());
     let (w, _) = stage::size(moment, look);
     let centred = match moment {
-        Moment::Compact => stage::music_pill(),
+        Moment::Compact => stage::music_pill().width,
         Moment::Toast => clipboard::toast_width(p),
         _ => w,
     };

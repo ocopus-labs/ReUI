@@ -1,6 +1,7 @@
 //! The slider row (volume and the like): toggle, bar, value while dragging, menu button.
 
 
+use reui_design::layout::rows;
 use reui_design::tokens::{component, space};
 use reui_design::Color;
 use reui_protocol::{Button, ButtonRole, Menu};
@@ -16,22 +17,18 @@ impl Renderer {
     /// the gap above the row, so nothing in the row moves. Returns the row's height.
     #[allow(clippy::too_many_arguments)]
     pub(in crate::render) fn slider(&self, rt: &ID2D1RenderTarget, leading: &Button, value: f32, action: &str, trailing: Option<&Menu>, y: f32, thumb: bool, dragging: bool, accent: Color, hits: &mut Vec<Hit>) -> Result<f32> {
-        let h = component::slider::HEIGHT;
-        let gap = component::slider::GAP;
-        let inset = self.look.inset();
-        let (mut l, mut r) = (inset, self.width.get() - inset);
-        self.button(rt, leading, l, y, h, h, accent, hits)?;
-        l += h + gap;
-        if let Some(menu) = trailing {
+        let row = rows::slider(&self.look, self.width.get(), trailing.is_some());
+        let (h, (l, r)) = (row.size, row.bar);
+        self.button(rt, leading, row.button, y, h, h, accent, hits)?;
+        if let (Some(menu), Some(x)) = (trailing, row.menu) {
             let button = Button { action: String::new(), content: menu.content.clone(), role: ButtonRole::Plain };
-            self.button(rt, &button, r - h, y, h, h, accent, hits)?;
+            self.button(rt, &button, x, y, h, h, accent, hits)?;
             if let Some(hit) = hits.last_mut() {
                 hit.menu = true;
             }
-            r -= h + gap;
         }
         let bar = component::progress::HEIGHT;
-        let top = y + (h - bar) / 2.0;
+        let top = y + row.bar_top;
         let end = l + (r - l) * value.clamp(0.0, 1.0);
         unsafe {
             self.round_rect(rt, l, top, r, top + bar, bar / 2.0, self.pal().fill_track)?;

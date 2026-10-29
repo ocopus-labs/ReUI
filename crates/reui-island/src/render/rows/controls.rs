@@ -1,42 +1,34 @@
 //! Buttons: a centred row of them, one button, and the source switcher (pager).
 
 
-use reui_design::tokens::{component, icon, opacity};
+use reui_design::layout::{header, rows};
+use reui_design::tokens::{icon, opacity};
 use reui_design::Color;
-use reui_protocol::{Button, ButtonContent, ButtonRole, CardSize, Pager};
+use reui_protocol::{Button, ButtonContent, ButtonRole, Pager};
 use windows::core::Result;
 use windows::Win32::Graphics::Direct2D::*;
 
-use crate::render::{Align, Hit, Renderer};
+use crate::render::{card, Align, Hit, Renderer};
 
 impl Renderer {
     /// All-glyph rows are transport-style circles centred as a group; any text makes the
     /// row equal-width capsules across the full width.
     pub(in crate::render) fn button_row(&self, rt: &ID2D1RenderTarget, buttons: &[Button], y: f32, accent: Color, hits: &mut Vec<Hit>) -> Result<f32> {
-        let n = buttons.len() as f32;
         let w = self.width.get();
-        let inset = self.look.inset();
         if buttons.iter().all(|b| matches!(b.content, ButtonContent::Glyph(_))) {
-            let size = component::button::TRANSPORT;
-            let gap = component::button::TRANSPORT_GAP;
-            let mut x = (w - (n * size + (n - 1.0) * gap)) / 2.0;
+            let t = rows::transport(w, buttons.len());
+            let mut x = t.left;
             for button in buttons {
-                self.button(rt, button, x, y, size, size, accent, hits)?;
-                x += size + gap;
+                self.button(rt, button, x, y, t.size, t.size, accent, hits)?;
+                x += t.size + t.gap;
             }
-            Ok(size)
+            Ok(t.size)
         } else {
-            let h = component::button::HEIGHT;
-            // A roomy card's buttons sit like an alert's: a little nearer the edge, further apart.
-            let (inset, gap) = match self.size.get() {
-                CardSize::Roomy => (self.look.padded(component::button::ROOMY_INSET), self.look.padded(component::button::ROOMY_GAP)),
-                _ => (inset, component::button::GAP),
-            };
-            let width = (w - 2.0 * inset - gap * (n - 1.0)) / n;
+            let row = rows::text_buttons(&self.look, card(self.size.get()), w, buttons.len());
             for (i, button) in buttons.iter().enumerate() {
-                self.button(rt, button, inset + i as f32 * (width + gap), y, width, h, accent, hits)?;
+                self.button(rt, button, row.x(i), y, row.width, row.height, accent, hits)?;
             }
-            Ok(h)
+            Ok(row.height)
         }
     }
 
@@ -45,10 +37,7 @@ impl Renderer {
     pub(in crate::render) fn button(&self, rt: &ID2D1RenderTarget, button: &Button, x: f32, y: f32, w: f32, h: f32, accent: Color, hits: &mut Vec<Hit>) -> Result<()> {
         let (fill, ink) = self.button_colors(button.role, accent);
         if let Some(fill) = fill {
-            let inset = match self.size.get() {
-                CardSize::Roomy => self.look.padded(component::button::ROOMY_INSET),
-                _ => self.look.inset(),
-            };
+            let inset = rows::button_inset(&self.look, card(self.size.get()));
             unsafe { self.round_rect(rt, x, y, x + w, y + h, self.capsule(h, inset), fill)? };
         }
         match &button.content {
@@ -71,12 +60,10 @@ impl Renderer {
         let label = format!("{}/{}", pager.index + 1, pager.count);
         let font = &self.fonts.pager;
         let label_w = self.text_width(&label, font)?;
-        let (hit, gap) = (component::pager::HIT, component::pager::GAP);
+        let p = header::pager(right, label_w);
+        let (hit, prev_l, label_l, next_l) = (p.hit, p.prev, p.label, p.next);
         let glyph = icon::PAGER;
         let (top, bottom) = (mid - hit / 2.0, mid + hit / 2.0);
-        let next_l = right - hit;
-        let label_l = next_l - gap - label_w;
-        let prev_l = label_l - gap - hit;
         let ink = self.pal().label_secondary;
         self.text(rt, "\u{E76B}", &self.fonts.icon_pager, prev_l, mid - glyph / 2.0, hit, Align::Center, ink)?;
         self.text(rt, &label, font, label_l, mid - font.style.line_height / 2.0, label_w + 1.0, Align::Start, ink)?;

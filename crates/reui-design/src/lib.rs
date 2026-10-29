@@ -1,6 +1,7 @@
 //! ReUI design tokens. Edit `design/tokens.json`, not this crate: the build script turns
 //! every token into a typed constant under [`tokens`], e.g. `tokens::color::label::PRIMARY`.
-//! See `DESIGN.md` for what each token is for.
+//! See `DESIGN.md` for what each token is for. Built on them: [`look`] (the user's
+//! appearance resolved) and [`layout`] (the island's geometry), shared by every surface.
 
 /// Straight (non-premultiplied) sRGB, channels 0..=1.
 #[derive(Clone, Copy, Debug, PartialEq)]
@@ -44,6 +45,7 @@ pub struct Spring {
 }
 
 pub mod icon;
+pub mod layout;
 pub mod look;
 
 #[allow(clippy::excessive_precision, clippy::approx_constant)]

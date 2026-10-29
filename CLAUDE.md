@@ -35,7 +35,7 @@ Separate processes talking over one per-user named pipe (postcard frames, types 
 
 ## Rules that span files
 
-- **Modules describe meaning, never appearance.** The protocol carries priority, regions, element kinds, tones, button roles and an accent colour. Sizes, fonts and theme colours live only in `design/tokens.json` and the island's `render/`. A redesign should touch tokens and render code, never a module or the protocol.
+- **Modules describe meaning, never appearance.** The protocol carries priority, regions, element kinds, tones, button roles and an accent colour. Sizes, fonts and theme colours live only in `design/tokens.json`, the island's geometry in `reui-design/src/layout/` (shared with Settings' previews), and the drawing in the island's `render/`. A redesign should touch tokens and render code, never a module or the protocol.
 - **Idle costs nothing.** Event-driven adapters only (polling only where no OS event exists). No compositor animation loops: motion runs on short timers that stop once settled; progress (timelines, clocks) is interpolated in the surface from a start time, not pushed every tick.
 - Blocking calls (COM, SQLite, WMI) never run on the hub thread; OS adapters get their own threads. The hub runs a single-threaded tokio runtime.
 - Pure logic goes in small files with unit tests beside it (state machines use fake clocks). One job per file, about 500 lines at most. Doc comments say why.

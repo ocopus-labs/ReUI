@@ -2,9 +2,11 @@
 //! trailing, pager) and the dispatch of each full-width row to its drawer in `rows`.
 
 
+use reui_design::layout::header::{self, Hero};
+use reui_design::layout::{self, rows};
 use reui_design::tokens::{component, island, opacity, radius, space};
 use reui_design::Color;
-use crate::features::{clipboard, clock};
+use crate::features::clock;
 use reui_protocol::{Button, ButtonContent, CardSize, Element, ExpandedView, Headline, Row};
 use windows::core::Result;
 use windows::UI::Composition::CompositionDrawingSurface;
@@ -12,7 +14,7 @@ use windows::Win32::Graphics::Direct2D::Common::*;
 use windows::Win32::Graphics::Direct2D::*;
 use windows_numerics::{Matrix3x2, Vector2};
 
-use crate::render::{d2d, Align, ExpandedLayout, Hit, Interaction, Renderer, Slot, Thumb};
+use crate::render::{card, d2d, Align, ExpandedLayout, Hit, Interaction, Renderer, Slot, Thumb};
 use crate::render::expanded_surface;
 use crate::render::text::{clock, clock_left};
 use crate::render::elements::shown_level;
@@ -28,17 +30,15 @@ impl Renderer {
         let mut width = island::expanded::WIDTH;
         let mut block_max = 0.0;
         let mut choice_spans = None;
-        let max_height = match view.map(|v| v.size) {
-            Some(CardSize::Roomy) => self.look.max_height(island::expanded::ROOMY_MAX_HEIGHT),
-            _ => self.look.max_height(island::expanded::MAX_HEIGHT),
-        };
+        let max_height = card(view.map_or(CardSize::Regular, |v| v.size)).max_height(&self.look);
         self.paint(surface, |rt| {
             let Some(view) = view else { return Ok(()) };
-            let w = clipboard::view_width(view);
+            let size = card(view.size);
+            let w = size.width();
             width = w;
             self.width.set(w);
             self.size.set(view.size);
-            let roomy = view.size == CardSize::Roomy;
+            let roomy = size.roomy();
             // Normal views sit centred in the wide surface.
             let dx = (expanded_surface(&self.look).0 - w) / 2.0;
             unsafe {
@@ -47,7 +47,6 @@ impl Renderer {
                 rt.SetTransform(&Matrix3x2 { M31: transform.M31 + dx * self.scale, ..transform });
             }
             let inset = self.look.inset();
-            let gap = self.look.column_gap();
             if view.tint {
                 self.wash(rt, w, accent)?;
             }
@@ -74,29 +73,26 @@ impl Renderer {
             let (leading, trailing) = (shown_level(&view.leading, with.level), shown_level(&view.trailing, with.level));
             let (lw, lh) = self.measure(&leading, Slot::Leading)?;
             let (tw, th) = match inline {
-                Some(b) => (inline_width(b.len()), component::button::INLINE),
+                Some(b) => (header::inline_width(b.len()), component::button::INLINE),
                 None => self.measure(&trailing, Slot::Trailing)?,
             };
-            let text_left = inset + if lw > 0.0 { lw + gap } else { 0.0 };
-            let text_right = w - inset - if tw > 0.0 { tw + gap } else { 0.0 };
-            let text_w = text_right - text_left;
+            let (text_left, text_w) = header::columns(&self.look, w, lw, tw);
 
             let line_gap = island::expanded::LINE_GAP;
-            let eyebrow_h = view.eyebrow.as_ref().map_or(0.0, |_| self.fonts.eyebrow.style.line_height + line_gap);
-            let hero_h = match &view.headline {
-                Headline::Value(_) | Headline::Clock { .. } => self.fonts.value.style.line_height,
-                Headline::Text(_) => self.fonts.headline.style.line_height,
-                Headline::Code(_) => self.fonts.code.style.line_height + 2.0 * component::chip::PADDING_Y,
+            let hero = match &view.headline {
+                Headline::Value(_) | Headline::Clock { .. } => Hero::Value,
+                Headline::Text(_) => Hero::Text,
+                Headline::Code(_) => Hero::Code,
             };
-            // A roomy card's detail (the agent's own description) wraps to a second line
-            // rather than losing its end; elsewhere it's one line.
-            let detail_lines = match &view.detail {
-                Some(d) if roomy && self.text_width(d, &self.fonts.detail)? > text_w => 2.0,
-                Some(_) => 1.0,
-                None => 0.0,
+            // Only a roomy card's detail may wrap, so only its width is worth measuring.
+            let measured = match &view.detail {
+                Some(d) if roomy => Some(self.text_width(d, &self.fonts.detail)?),
+                Some(_) => Some(0.0),
+                None => None,
             };
-            let detail_h = if detail_lines > 0.0 { line_gap + detail_lines * self.fonts.detail.style.line_height } else { 0.0 };
-            let text_h = eyebrow_h + hero_h + detail_h;
+            let detail_lines = header::detail_lines(measured, roomy, text_w);
+            let text = header::Text::new(view.eyebrow.is_some(), hero, detail_lines);
+            let (eyebrow_h, hero_h, detail_h) = (text.eyebrow, text.hero, text.detail);
             // A view of only rows (e.g. clipboard cards) has no header at all.
             let headless = view.context.is_none()
                 && matches!(view.leading, Element::Empty)
@@ -106,17 +102,8 @@ impl Renderer {
                 && view.detail.is_none()
                 && view.pager.is_none()
                 && matches!(&view.headline, Headline::Text(t) if t.is_empty());
-            let header_h = if headless { 0.0 } else { lh.max(th).max(text_h) };
-            // The leading tile sits one inset from the top as from the left, and what's at
-            // the right shares its centre line. Text is centred on it when it fits beside
-            // it, and starts at the inset when it's taller.
-            let (mid, text_top) = if lh > 0.0 {
-                let mid = top + lh.max(th) / 2.0;
-                (mid, if text_h <= lh { mid - text_h / 2.0 } else { top })
-            } else {
-                let mid = top + header_h / 2.0;
-                (mid, mid - text_h / 2.0)
-            };
+            let head = header::header(top, lh, th, text.height(), headless);
+            let (header_h, mid, text_top) = (head.height, head.mid, head.text_top);
 
             self.element(rt, &leading, Slot::Leading, inset, mid, Align::Start, accent)?;
             if let Some(open) = view.open.as_deref().filter(|_| lw > 0.0) {
@@ -130,10 +117,9 @@ impl Renderer {
             match inline {
                 Some(buttons) => {
                     let size = component::button::INLINE;
-                    let mut x = w - inset - tw;
-                    for button in buttons {
+                    for (i, button) in buttons.iter().enumerate() {
+                        let x = header::inline_x(&self.look, w, buttons.len(), i);
                         self.button(rt, button, x, mid - size / 2.0, size, size, accent, &mut hits)?;
-                        x += size + component::button::INLINE_GAP;
                     }
                 }
                 None => self.element(rt, &trailing, Slot::Trailing, w - inset, mid, Align::End, accent)?,
@@ -141,7 +127,7 @@ impl Renderer {
 
             // The source switcher sits at the top right, on the first line of text, which
             // makes room for it.
-            let first_line = if view.eyebrow.is_some() { self.fonts.eyebrow.style.line_height } else { hero_h };
+            let first_line = text.first_line();
             let first_w = match view.pager.as_ref().filter(|_| view.context.is_none()) {
                 Some(pager) => self.pager(rt, pager, w - inset, text_top + first_line / 2.0, &mut hits)? - space::SM - text_left,
                 None => text_w,
@@ -196,11 +182,7 @@ impl Renderer {
             let mut y = top + header_h;
             let mut i = 0;
             while i < rows.len() {
-                y += match i {
-                    0 if headless => 0.0,
-                    0 => self.look.section_gap(),
-                    _ => self.look.row_gap(),
-                };
+                y += layout::row_gap(&self.look, i, headless);
                 let meter = match &rows[i] {
                     Row::Progress { fraction, leading, trailing } => Some(Meter { fraction: Some(*fraction), leading: leading.clone(), trailing: trailing.clone(), seek: None }),
                     // Live: no bar, just a quiet fact where the times would be.
@@ -224,7 +206,7 @@ impl Renderer {
                 match (meter, controls) {
                     (Some(m), Some(buttons)) if m.has_times() && self.fits_between(buttons, &m)? => {
                         if let Some(fraction) = m.fraction {
-                            y += self.meter(rt, (inset, w - inset), y, fraction, m.seek, thumb, accent, &mut hits)? + space::SM;
+                            y += self.meter(rt, (inset, w - inset), y, fraction, m.seek, thumb, accent, &mut hits)? + rows::UNDER_BAR;
                         }
                         let row_h = self.button_row(rt, buttons, y, accent, &mut hits)?;
                         self.captions(rt, m.leading.as_deref(), m.trailing.as_deref(), y + row_h / 2.0)?;
@@ -237,7 +219,7 @@ impl Renderer {
                         let line = self.fonts.caption.style.line_height;
                         let lead = self.caption_width(m.leading.as_deref())?;
                         let trail = self.caption_width(m.trailing.as_deref())?;
-                        let span = (inset + lead + space::SM, w - inset - trail - space::SM);
+                        let span = rows::bar_between_times(&self.look, w, lead, trail);
                         self.meter(rt, span, y + (line - component::progress::HEIGHT) / 2.0, fraction, m.seek, thumb, accent, &mut hits)?;
                         self.captions(rt, m.leading.as_deref(), m.trailing.as_deref(), y + line / 2.0)?;
                         y += line;
@@ -246,7 +228,7 @@ impl Renderer {
                         if let Some(fraction) = m.fraction {
                             y += self.meter(rt, (inset, w - inset), y, fraction, m.seek, thumb, accent, &mut hits)?;
                             if m.has_times() {
-                                y += space::SM;
+                                y += rows::UNDER_BAR;
                             }
                         }
                         if m.has_times() {
@@ -264,7 +246,7 @@ impl Renderer {
                         // height, so the panel doesn't jump while typing.
                         Row::Note(text) => {
                             let searchable = rows.iter().any(|r| matches!(r, Row::Search { .. }));
-                            y += self.note(rt, text, y, if searchable { component::card::HEIGHT } else { self.fonts.note.style.line_height })?
+                            y += self.note(rt, text, y, rows::note_height(searchable))?
                         }
                         Row::Slider { leading, value, action, trailing } => {
                             let set = with.slider.filter(|(a, ..)| a == action);
@@ -293,12 +275,12 @@ impl Renderer {
             // Alert-style buttons at the bottom keep the same distance from the bottom edge
             // as from the sides.
             let text_buttons_last = matches!(rows.last(), Some(Row::Buttons(b)) if b.iter().any(|b| matches!(b.content, ButtonContent::Text(_))));
-            let natural = y + if roomy && text_buttons_last { self.look.padded(component::button::ROOMY_INSET) } else { inset };
+            let natural = y + size.bottom(&self.look, text_buttons_last);
             if natural > max_height {
                 // Clamping would eat the bottom padding; make it visible instead.
                 eprintln!("island: expanded content is {natural} tall, over max-height {max_height}");
             }
-            height = natural.clamp(island::expanded::MIN_HEIGHT, max_height);
+            height = size.height(&self.look, natural);
             // Hits and bar positions are in surface coordinates.
             for hit in hits.iter_mut() {
                 hit.left += dx;
@@ -336,9 +318,4 @@ impl Renderer {
         }
         Ok(())
     }
-}
-
-fn inline_width(n: usize) -> f32 {
-    let n = n as f32;
-    n * component::button::INLINE + (n - 1.0) * component::button::INLINE_GAP
 }

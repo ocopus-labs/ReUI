@@ -1,97 +1,103 @@
-//! How big each page's island is, and so how tall its stage: the same maths the island's
-//! renderer does for that view (`reui-island/src/render/expanded.rs`, `compact.rs`), from
-//! the same tokens and the user's [`Look`]. Pure, so the layout can size the stage before
-//! anything is drawn, and tested against the island's own numbers.
+//! How big each page's island is, and so how tall its stage; and, for each open card, where
+//! its header and rows go. The maths is the island's own (`reui_design::layout`, which
+//! the island's renderer lays out with too), fed the content each preview shows. Pure, so
+//! the layout can size the stage before anything is drawn.
 //!
 //! Sizes are in island units (DIPs before the look's size scales them).
 
+use reui_design::layout::compact;
+use reui_design::layout::header::{self, Header, Hero, Text};
+use reui_design::layout::{row_gap, rows, Card};
 use reui_design::look::Look;
-use reui_design::tokens::{component, icon, island, notch, prefs::header, typography};
+use reui_design::tokens::{component, icon, island, prefs::header as stage_header};
 
 use super::{Moment, Preview};
 
-/// Width of four level bars.
-pub fn bars_width() -> f32 {
-    4.0 * component::bars::WIDTH + 3.0 * component::bars::GAP
-}
-
-/// The compact pill's width for its sides (each `content + margin`): both as wide as the
-/// wider, around the centre gap.
-pub fn compact_width(leading: f32, trailing: f32) -> f32 {
-    island::compact::CENTER_GAP + 2.0 * leading.max(trailing)
-}
-
 /// The Now Playing compact pill: artwork (or its glyph tile) and level bars.
-pub fn music_pill() -> f32 {
-    compact_width(component::art::COMPACT + island::compact::SIDE_MARGIN, bars_width() + island::compact::TEXT_MARGIN)
+pub fn music_pill() -> compact::Sides {
+    compact::sides(component::art::COMPACT, compact::margin(true), compact::bars_width(), compact::margin(false))
 }
 
-/// Eyebrow, hero and a one-line detail, with the gaps between them.
-pub fn text_height(eyebrow: bool, hero: f32, detail: bool) -> f32 {
-    let gap = island::expanded::LINE_GAP;
-    let eyebrow = if eyebrow { typography::EYEBROW.line_height + gap } else { 0.0 };
-    let detail = if detail { gap + typography::DETAIL.line_height } else { 0.0 };
-    eyebrow + hero + detail
+/// An open card as a preview draws it: its size, its header, and where its rows start.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Open {
+    pub card: Card,
+    pub height: f32,
+    /// The text column's lines.
+    pub text: Text,
+    pub header: Header,
+    /// The first row's top (under the header and its section gap).
+    pub rows: f32,
 }
 
-/// A code hero: the command in its chip.
-pub fn code_height() -> f32 {
-    typography::CODE.line_height + 2.0 * component::chip::PADDING_Y
+/// A card whose header starts at `top`: a leading element and a trailing one (`ends`: their
+/// heights, 0 when absent) around the text column, then rows `rows.0` tall in all (none
+/// when 0), the last of them text buttons when `rows.1`.
+fn open(look: &Look, card: Card, top: f32, ends: (f32, f32), text: Text, rows: (f32, bool)) -> Open {
+    let (rows_h, text_buttons_last) = rows;
+    let header = header::header(top, ends.0, ends.1, text.height(), false);
+    let first = top + header.height + row_gap(look, 0, false);
+    let natural = if rows_h > 0.0 { first + rows_h } else { top + header.height };
+    let height = card.height(look, natural + card.bottom(look, text_buttons_last));
+    Open { card, height, text, header, rows: first }
 }
 
-/// The session strip: its mark or its line, whichever is taller.
+/// The open card a moment shows, laid out; `None` for the compact moments and the panel.
+pub fn card(moment: Moment, look: &Look) -> Option<Open> {
+    let inset = look.inset();
+    let line = Text::new(true, Hero::Text, 1.0);
+    Some(match moment {
+        // The 56 tile and the bars; the timeline with the transport under it (its times at
+        // the transport's ends), then the volume.
+        Moment::Music => {
+            let rows_h = component::progress::HEIGHT + rows::UNDER_BAR + component::button::TRANSPORT + row_gap(look, 1, false) + component::slider::HEIGHT;
+            open(look, Card::Regular, inset, (component::art::EXPANDED, component::bars::HEIGHT), line, (rows_h, false))
+        }
+        // The tile and the battery's ring.
+        Moment::Devices => open(look, Card::Regular, inset, (component::art::EXPANDED, component::ring::EXPANDED), line, (0.0, false)),
+        // The ring and the value, pause and cancel inline at the right.
+        Moment::Timer => open(look, Card::Regular, inset, (component::ring::EXPANDED, component::button::INLINE), Text::new(true, Hero::Value, 1.0), (0.0, false)),
+        // The strip, then a glyph and the code hero, then Deny / Always / Allow sitting like
+        // an alert's, a little nearer the bottom edge.
+        Moment::Permission => {
+            let top = inset + context_height() + island::expanded::CONTEXT_GAP;
+            open(look, Card::Roomy, top, (icon::TILE, 0.0), Text::new(true, Hero::Code, 1.0), (component::button::HEIGHT, true))
+        }
+        Moment::Compact | Moment::Meter | Moment::Toast | Moment::Clipboard => return None,
+    })
+}
+
+/// The session strip: its mark (compact art) or its line, whichever is taller.
 pub fn context_height() -> f32 {
-    component::art::COMPACT.max(typography::CONTEXT.line_height)
+    header::context_height(component::art::COMPACT)
 }
 
-/// The header of a card with a 56 leading tile and `trailing` at the right.
-fn header(trailing: f32, hero: f32) -> f32 {
-    component::art::EXPANDED.max(trailing).max(text_height(true, hero, true))
-}
-
-/// A card's height: its content, clamped as the island clamps it.
-fn card(look: &Look, natural: f32, roomy: bool) -> f32 {
-    let max = look.max_height(if roomy { island::expanded::ROOMY_MAX_HEIGHT } else { island::expanded::MAX_HEIGHT });
-    natural.clamp(island::expanded::MIN_HEIGHT, max)
+/// The clipboard panel's rows from the top: search, tabs, then the cards (no header).
+pub fn panel_rows(look: &Look) -> [f32; 3] {
+    let mut y = look.inset();
+    let mut tops = [0.0; 3];
+    for (i, h) in [component::search::HEIGHT, component::tabs::HEIGHT, component::card::HEIGHT].into_iter().enumerate() {
+        y += row_gap(look, i, true);
+        tops[i] = y;
+        y += h;
+    }
+    tops
 }
 
 /// The island's size for `moment` in `look`, in island units: the shape itself (a second
 /// activity beside the compact pill included).
 pub fn size(moment: Moment, look: &Look) -> (f32, f32) {
-    use island::expanded as ex;
-    let inset = look.inset();
     match moment {
-        Moment::Compact => {
-            let joint = if look.notch() { notch::JOIN_GAP } else { island::minimal::GAP };
-            (music_pill() + joint + island::minimal::SIZE, island::HEIGHT)
-        }
-        Moment::Meter => (island::compact::METER_WIDTH, island::HEIGHT),
+        Moment::Compact => (music_pill().width + compact::bubble_gap(look) + island::minimal::SIZE, island::HEIGHT),
+        Moment::Meter => (compact::meter(look, 0.0).width, island::HEIGHT),
         // As wide as its text: measured where it's drawn.
         Moment::Toast => (island::idle::WIDTH, island::HEIGHT),
-        Moment::Music => {
-            let head = header(component::bars::HEIGHT, typography::HEADLINE.line_height);
-            // The timeline with the transport under it (its times at the transport's
-            // ends), then the volume.
-            let rows = look.section_gap() + component::progress::HEIGHT + reui_design::tokens::space::SM + component::button::TRANSPORT + look.row_gap() + component::slider::HEIGHT;
-            (ex::WIDTH, card(look, inset + head + rows + inset, false))
-        }
         Moment::Clipboard => {
-            // No header: search, tabs, then the cards.
-            let rows = component::search::HEIGHT + look.row_gap() + component::tabs::HEIGHT + look.row_gap() + component::card::HEIGHT;
-            (ex::WIDE_WIDTH, card(look, inset + rows + inset, false))
+            let card = Card::Wide;
+            let bottom = panel_rows(look)[2] + component::card::HEIGHT;
+            (card.width(), card.height(look, bottom + card.bottom(look, false)))
         }
-        Moment::Devices => (ex::WIDTH, card(look, inset + header(component::ring::EXPANDED, typography::HEADLINE.line_height) + inset, false)),
-        Moment::Timer => {
-            let head = component::ring::EXPANDED.max(component::button::INLINE).max(text_height(true, typography::VALUE.line_height, true));
-            (ex::WIDTH, card(look, inset + head + inset, false))
-        }
-        Moment::Permission => {
-            // The strip, then a glyph and the text beside it, then Deny / Always / Allow
-            // sitting like an alert's, a little nearer the bottom edge.
-            let head = icon::TILE.max(text_height(true, code_height(), true));
-            let natural = inset + context_height() + ex::CONTEXT_GAP + head + look.section_gap() + component::button::HEIGHT + look.padded(component::button::ROOMY_INSET);
-            (ex::ROOMY_WIDTH, card(look, natural, true))
-        }
+        _ => card(moment, look).map_or((0.0, 0.0), |c| (c.card.width(), c.height)),
     }
 }
 
@@ -107,7 +113,7 @@ pub fn top(look: &Look) -> f32 {
 pub fn shown(preview: Preview, width: f32) -> Moment {
     let (w, _) = size(preview.moment, &preview.look);
     match preview.moment {
-        Moment::Clipboard if w * preview.look.size > width - 2.0 * header::PADDING => Moment::Toast,
+        Moment::Clipboard if w * preview.look.size > width - 2.0 * stage_header::PADDING => Moment::Toast,
         moment => moment,
     }
 }
@@ -115,7 +121,7 @@ pub fn shown(preview: Preview, width: f32) -> Moment {
 /// The stage's height: the gap, the island at its real size, and room under it.
 pub fn height(preview: Preview, width: f32) -> f32 {
     let (_, h) = size(shown(preview, width), &preview.look);
-    (top(&preview.look) + h * preview.look.size + header::STAGE_ROOM).max(header::STAGE_MIN).ceil()
+    (top(&preview.look) + h * preview.look.size + stage_header::STAGE_ROOM).max(stage_header::STAGE_MIN).ceil()
 }
 
 #[cfg(test)]
@@ -127,19 +133,18 @@ mod tests {
         Look::new(&a, false, None)
     }
 
+    // The island's own sizes are pinned in `reui_design::layout`'s tests; these check that
+    // each page asks for the card it shows.
     #[test]
-    fn todays_island_sizes() {
+    fn each_moment_is_its_cards_size() {
         let l = Look::default();
-        // Inset, search 32, gap, tabs 28, gap, cards 116, inset.
         assert_eq!(size(Moment::Clipboard, &l), (560.0, 20.0 + 32.0 + 12.0 + 28.0 + 12.0 + 116.0 + 20.0));
         assert_eq!(size(Moment::Meter, &l), (200.0, island::HEIGHT));
-        // A timer card: the value font's line sets the header.
-        let (w, h) = size(Moment::Timer, &l);
-        assert_eq!(w, 420.0);
-        assert!(h >= island::expanded::MIN_HEIGHT && h < 140.0, "{h}");
-        let (w, h) = size(Moment::Permission, &l);
-        assert_eq!(w, 480.0);
-        assert!(h > size(Moment::Timer, &l).1 && h <= island::expanded::ROOMY_MAX_HEIGHT, "{h}");
+        assert_eq!(size(Moment::Timer, &l).0, 420.0);
+        assert_eq!(size(Moment::Permission, &l).0, 480.0);
+        assert!(size(Moment::Permission, &l).1 > size(Moment::Timer, &l).1);
+        let music = card(Moment::Music, &l).unwrap();
+        assert_eq!(music.rows, l.inset() + music.header.height + l.section_gap());
     }
 
     #[test]
@@ -166,6 +171,6 @@ mod tests {
         let floating = look(Appearance { top_gap: 20.0, size: 1.25, ..Appearance::default() });
         assert_eq!(top(&floating), 20.0, "the gap is in DIPs at any size");
         let compact = Preview { moment: Moment::Meter, look: Look::default() };
-        assert_eq!(height(compact, 600.0), header::STAGE_MIN.max((island::TOP + island::HEIGHT + header::STAGE_ROOM).ceil()));
+        assert_eq!(height(compact, 600.0), stage_header::STAGE_MIN.max((island::TOP + island::HEIGHT + stage_header::STAGE_ROOM).ceil()));
     }
 }

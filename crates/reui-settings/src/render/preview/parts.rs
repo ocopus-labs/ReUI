@@ -1,33 +1,36 @@
 //! The island's pieces as the previews draw them: the shape (floating, or a notch with its
 //! ears), glyph tiles, rings, level bars, the header's text column, buttons, the timeline
-//! and the volume slider. Each follows the island's renderer (`reui-island/src/render`:
-//! `elements.rs`, `expanded.rs`, `rows/*`) line for line, with the user's [`Look`], so a
-//! preview is what the island draws. Island units, inside [`Painter::scaled`].
-//!
-//! Sharing this with the island (pure layout in `reui-design`) is the next step; for now
-//! the two are kept in step by hand, and `ui::stage` checks the sizes.
+//! and the volume slider. Where each piece goes is `reui_design::layout`, the maths the
+//! island's renderer (`reui-island/src/render`) lays out with, so a preview is where the
+//! island draws; only the drawing is this program's own (its Painter, its text). Island
+//! units, inside [`Painter::scaled`].
 
+use reui_design::layout::header::{self, Text};
+use reui_design::layout::{self, compact, rows};
 use reui_design::look::{concentric, Look};
-use reui_design::tokens::{component, icon, island, notch, opacity, space, typography};
+use reui_design::tokens::{component, icon, notch, opacity, typography};
 use reui_design::Color;
 use windows::core::Result;
 
 use crate::render::{Align, Painter};
 use crate::ui::layout::{Font, IslandFont, Rect};
 
-/// The level bars' resting heights while live (the island's `BAR_LEVELS_LIVE`).
-pub const BAR_LEVELS: [f32; 4] = [0.45, 0.9, 0.6, 0.75];
-
 /// An open card being drawn: the look, the activity's accent and the card's own geometry.
 pub struct Card<'a, 'p> {
     pub p: &'a Painter<'p>,
     pub look: &'a Look,
     pub accent: Color,
+    /// Its size: a roomy card's (agent moments) buttons sit like an alert's.
+    pub size: layout::Card,
     pub width: f32,
     /// The card's corner radius (the wide panel's is calmer).
     pub radius: f32,
-    /// A roomy card (agent moments): its buttons sit like an alert's.
-    pub roomy: bool,
+}
+
+impl<'a, 'p> Card<'a, 'p> {
+    pub fn new(p: &'a Painter<'p>, look: &'a Look, accent: Color, size: layout::Card) -> Self {
+        Card { p, look, accent, size, width: size.width(), radius: size.radius(look) }
+    }
 }
 
 /// What a header's hero is.
@@ -127,8 +130,7 @@ fn ear(p: &Painter, look: &Look, x: f32, top: f32, dir: f32) -> Result<()> {
 #[allow(clippy::too_many_arguments)]
 pub fn glyph_tile(p: &Painter, look: &Look, card_radius: f32, compact: bool, g: char, x: f32, top: f32, accent: Color) -> Result<()> {
     let (size, corner, glyph_size) = if compact {
-        let size = component::art::COMPACT;
-        (size, concentric(look.rounded(island::HEIGHT), island::compact::SIDE_MARGIN).min(size / 2.0), icon::TILE_COMPACT)
+        (component::art::COMPACT, compact::art_corner(look), icon::TILE_COMPACT)
     } else {
         (component::art::EXPANDED, concentric(card_radius, look.inset()), icon::TILE)
     };
@@ -148,7 +150,7 @@ pub fn ring(p: &Painter, look: &Look, cx: f32, cy: f32, size: f32, stroke: f32, 
 /// in as the page opens).
 pub fn bars(p: &Painter, x: f32, mid: f32, accent: Color, e: f32) -> Result<()> {
     let (w, gap, h) = (component::bars::WIDTH, component::bars::GAP, component::bars::HEIGHT);
-    for (i, level) in BAR_LEVELS.iter().enumerate() {
+    for (i, level) in compact::BAR_LEVELS.iter().enumerate() {
         let bh = h * level * (0.4 + 0.6 * e);
         let l = x + i as f32 * (w + gap);
         p.fill(Rect::new(l, mid - bh / 2.0, l + w, mid + bh / 2.0), w / 2.0, accent)?;
@@ -167,36 +169,29 @@ impl Card<'_, '_> {
         concentric(self.radius, self.look.inset())
     }
 
-    /// The text column: eyebrow (accent) → hero (primary) → detail (secondary), from
-    /// `top`, `w` wide.
-    pub fn text(&self, x: f32, top: f32, w: f32, eyebrow: &str, hero: Hero, detail: &str) -> Result<()> {
+    /// The text column: eyebrow (accent) → hero (primary) → detail (secondary), laid out
+    /// as `lines` (which has the eyebrow and detail the strings do), from `top`, `w` wide.
+    #[allow(clippy::too_many_arguments)]
+    pub fn text(&self, lines: &Text, x: f32, top: f32, w: f32, eyebrow: &str, hero: Hero, detail: &str) -> Result<()> {
         let (p, pal) = (self.p, &self.look.palette);
-        let gap = island::expanded::LINE_GAP;
         let mut y = top;
         if !eyebrow.is_empty() {
             line(p, eyebrow, IslandFont::Eyebrow, x, y, w, Align::Start, self.accent)?;
-            y += typography::EYEBROW.line_height + gap;
+            y += lines.eyebrow;
         }
-        y += match hero {
-            Hero::Text(t) => {
-                line(p, t, IslandFont::Headline, x, y, w, Align::Start, pal.label_primary)?;
-                typography::HEADLINE.line_height
-            }
-            Hero::Value(t) => {
-                line(p, t, IslandFont::Value, x, y, w, Align::Start, pal.label_primary)?;
-                typography::VALUE.line_height
-            }
+        match hero {
+            Hero::Text(t) => line(p, t, IslandFont::Headline, x, y, w, Align::Start, pal.label_primary)?,
+            Hero::Value(t) => line(p, t, IslandFont::Value, x, y, w, Align::Start, pal.label_primary)?,
             Hero::Code(t) => {
                 let (px, py) = (component::chip::PADDING_X, component::chip::PADDING_Y);
-                let h = typography::CODE.line_height + 2.0 * py;
                 let chip_w = (p.measure(t, Font::Island(IslandFont::Code)) + 2.0 * px).min(w);
-                p.fill(Rect::at(x, y, chip_w, h), reui_design::tokens::radius::CHIP.min(self.concentric()), pal.fill_tertiary)?;
+                p.fill(Rect::at(x, y, chip_w, lines.hero), reui_design::tokens::radius::CHIP.min(self.concentric()), pal.fill_tertiary)?;
                 line(p, t, IslandFont::Code, x + px, y + py, chip_w - 2.0 * px, Align::Start, pal.label_primary)?;
-                h
             }
-        };
+        }
+        y += lines.hero;
         if !detail.is_empty() {
-            line(p, detail, IslandFont::Detail, x, y + gap, w, Align::Start, pal.label_secondary)?;
+            line(p, detail, IslandFont::Detail, x, y + reui_design::tokens::island::expanded::LINE_GAP, w, Align::Start, pal.label_secondary)?;
         }
         Ok(())
     }
@@ -212,20 +207,11 @@ impl Card<'_, '_> {
         }
     }
 
-    /// The inset a button sits at (a roomy card's are nearer the edge).
-    fn button_inset(&self) -> f32 {
-        if self.roomy {
-            self.look.padded(component::button::ROOMY_INSET)
-        } else {
-            self.look.inset()
-        }
-    }
-
     /// A glyph button: a circle (or the concentric shape the roundness allows).
     pub fn glyph_button(&self, g: char, role: Role, x: f32, y: f32, size: f32) -> Result<()> {
         let (fill, ink) = self.colors(role);
         if let Some(fill) = fill {
-            self.p.fill(Rect::at(x, y, size, size), self.look.capsule(size, self.radius, self.button_inset()), fill)?;
+            self.p.fill(Rect::at(x, y, size, size), self.look.capsule(size, self.radius, rows::button_inset(self.look, self.size)), fill)?;
         }
         let s = icon::BUTTON;
         glyph(self.p, g, s, x + (size - s) / 2.0, y + (size - s) / 2.0, ink)
@@ -233,12 +219,10 @@ impl Card<'_, '_> {
 
     /// A row of text buttons, equal capsules across the card at `y`.
     pub fn text_buttons(&self, buttons: &[(&str, Role)], y: f32) -> Result<()> {
-        let h = component::button::HEIGHT;
-        let (inset, gap) = if self.roomy { (self.button_inset(), self.look.padded(component::button::ROOMY_GAP)) } else { (self.look.inset(), component::button::GAP) };
-        let n = buttons.len() as f32;
-        let w = (self.width - 2.0 * inset - gap * (n - 1.0)) / n;
+        let row = rows::text_buttons(self.look, self.size, self.width, buttons.len());
+        let (h, w, inset) = (row.height, row.width, rows::button_inset(self.look, self.size));
         for (i, (label, role)) in buttons.iter().enumerate() {
-            let x = inset + i as f32 * (w + gap);
+            let x = row.x(i);
             let (fill, ink) = self.colors(*role);
             if let Some(fill) = fill {
                 self.p.fill(Rect::at(x, y, w, h), self.look.capsule(h, self.radius, inset), fill)?;
@@ -258,47 +242,38 @@ impl Card<'_, '_> {
 
     /// A timeline's times at the card's insets, centred on `mid` (tertiary).
     pub fn captions(&self, leading: &str, trailing: &str, mid: f32) -> Result<()> {
-        let inset = self.look.inset();
-        let (l, r) = (inset, self.width - inset);
+        let (l, half) = rows::captions(self.look, self.width);
         let top = mid - typography::CAPTION.line_height / 2.0;
         let ink = self.look.palette.label_tertiary;
-        line(self.p, leading, IslandFont::Caption, l, top, (r - l) / 2.0, Align::Start, ink)?;
-        line(self.p, trailing, IslandFont::Caption, l + (r - l) / 2.0, top, (r - l) / 2.0, Align::End, ink)
+        line(self.p, leading, IslandFont::Caption, l, top, half, Align::Start, ink)?;
+        line(self.p, trailing, IslandFont::Caption, l + half, top, half, Align::End, ink)
     }
 
     /// Glyph buttons as transport circles, centred as a group at `y`; returns their height.
     pub fn transport(&self, buttons: &[(char, Role)], y: f32) -> Result<f32> {
-        let (size, gap) = (component::button::TRANSPORT, component::button::TRANSPORT_GAP);
-        let n = buttons.len() as f32;
-        let mut x = (self.width - (n * size + (n - 1.0) * gap)) / 2.0;
+        let t = rows::transport(self.width, buttons.len());
+        let mut x = t.left;
         for (g, role) in buttons {
-            self.glyph_button(*g, *role, x, y, size)?;
-            x += size + gap;
+            self.glyph_button(*g, *role, x, y, t.size)?;
+            x += t.size + t.gap;
         }
-        Ok(size)
+        Ok(t.size)
     }
 
     /// The volume row: the mute button, the bar, the output menu's button.
     pub fn slider(&self, leading: char, value: f32, trailing: char, y: f32) -> Result<()> {
-        let (h, gap) = (component::slider::HEIGHT, component::slider::GAP);
-        let inset = self.look.inset();
-        let (mut l, mut r) = (inset, self.width - inset);
-        self.glyph_button(leading, Role::Plain, l, y, h)?;
-        l += h + gap;
-        self.glyph_button(trailing, Role::Plain, r - h, y, h)?;
-        r -= h + gap;
-        self.meter(l, r, y + (h - component::progress::HEIGHT) / 2.0, value)
+        let row = rows::slider(self.look, self.width, true);
+        let h = row.size;
+        self.glyph_button(leading, Role::Plain, row.button, y, h)?;
+        if let Some(x) = row.menu {
+            self.glyph_button(trailing, Role::Plain, x, y, h)?;
+        }
+        self.meter(row.bar.0, row.bar.1, y + row.bar_top, value)
     }
 
     /// Where the header's text starts and how wide it is, beside a leading `lead` wide and
     /// a trailing `trail` wide.
     pub fn columns(&self, lead: f32, trail: f32) -> (f32, f32) {
-        let (inset, gap) = (self.look.inset(), self.look.column_gap());
-        let left = inset + if lead > 0.0 { lead + gap } else { 0.0 };
-        let right = self.width - inset - if trail > 0.0 { trail + gap } else { 0.0 };
-        (left, right - left)
+        header::columns(self.look, self.width, lead, trail)
     }
 }
-
-/// Space between two caption lines and what's under them (the island's `space.sm`).
-pub const SM: f32 = space::SM;

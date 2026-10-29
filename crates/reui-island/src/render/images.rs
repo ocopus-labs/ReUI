@@ -3,8 +3,7 @@
 
 use std::collections::HashSet;
 
-use reui_design::look::concentric;
-use reui_design::tokens::{component, island, opacity};
+use reui_design::tokens::{component, opacity};
 use reui_design::Color;
 use reui_protocol::{Art, ImageId};
 use windows::core::{Interface, Result};
@@ -205,11 +204,7 @@ impl Renderer {
     /// leading slot, its side in the trailing slot (a circle while that allows).
     pub(super) fn art_shape(&self, slot: Slot) -> (f32, f32) {
         match slot {
-            Slot::Compact | Slot::Minimal => {
-                let size = component::art::COMPACT;
-                let end = self.look.rounded(island::HEIGHT);
-                (size, concentric(end, island::compact::SIDE_MARGIN).min(size / 2.0))
-            }
+            Slot::Compact | Slot::Minimal => (component::art::COMPACT, reui_design::layout::compact::art_corner(&self.look)),
             Slot::Leading => (component::art::EXPANDED, self.concentric()),
             Slot::Trailing => (component::art::TRAILING, self.capsule(component::art::TRAILING, self.look.inset())),
         }
