@@ -80,6 +80,10 @@ Type `focus` for a focus session (25 minutes of work, 5-minute breaks, a 15-minu
 
 `reui-bridge timer 10m tea` starts one from a script or a coding agent.
 
+## Mic & camera
+
+While an app uses your microphone or camera, or shares or records your screen, the island shows its icon and what it uses: orange for the microphone, green for the camera, purple for the screen (and blue for location, if you turn it on in Settings → Mic & camera). Click it to see every app using something and since when, mute the microphone, or open Windows' privacy settings for it. A screenshot doesn't count; a camera that turns on for a moment still shows for a few seconds.
+
 ## Coding agents
 
 Claude Code, Codex and OpenCode show in the island only when they need you: a permission request you can answer with **Allow** / **Deny** (Claude Code also offers **Always**), a question or a plan from Claude Code, or a turn that failed. While they think and run tools, the island stays with your music and timers. Each card starts with a quiet line saying which session it is (the project, what you asked, how long it has been working); a long command or an edit's changed lines show underneath, and the mouse wheel scrolls them. Anything that looks like a password or token shows as dots.

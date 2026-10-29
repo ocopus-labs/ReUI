@@ -31,7 +31,8 @@ reui-settings.exe  the Settings window, opened from the tray; single instance
 ## `reui-hub/src`
 
 ```
-main.rs            flags (--no-agents, --no-media, --no-clipboard, --no-osd, --no-devices, --no-timers, …), module list
+main.rs            flags (--no-agents, --no-media, --no-clipboard, --no-osd, --no-devices, --no-timers,
+                   --no-privacy, …), module list
 hub.rs             activities, ordering, ModuleContext (publish, retract, focus, image store)
 ipc.rs             the pipe: snapshots + images to surfaces, actions/commands/hooks back
 island.rs          launches and supervises reui-island
@@ -74,6 +75,11 @@ modules/
   timers/          countdowns, focus sessions, stopwatch: launcher field parser, state
                    machines (fake-clock tests), timer-state.json, finish sound, Do Not
                    Disturb (WNF read, IQuietHoursSettings, checked), views, settings
+  privacy/         mic, camera, screen and location in use: the consent store (consent: what's
+                   live, pure; alive: which uses still have their process, pure; store: the
+                   reui-privacy thread, RegNotifyChangeKeyValue + process waits), tracker (screen
+                   settle, short uses linger, Briefs; fake-clock tests), views, mute via the
+                   shared audio module, settings (privacy.json)
   updates/         daily update check, the update card (an Alert: Later / Install, then
                    download progress, installing or why it failed), "Updated" brief:
                    update.json + offer/snooze rules, card phases (pure, tested), views,
@@ -180,7 +186,7 @@ stats.rs           idle cost: CPU and private memory of ReUI's processes
 | `%APPDATA%\ReUI\settings.json` | island `visibility`, `show_on_desktop`, `hide_in_fullscreen`, `monitor`, `paused_until` while ReUI is paused, and the look: `style` (island / notch), `theme` (auto / dark / light), `accent` (reui / windows), `roundness` (0..1), `top_gap` (0..24), `padding` (compact / regular / roomy), `scale` (0.9..1.25) |
 | `%APPDATA%\ReUI\onboarding.json` | first run done (`welcomed`), tips shown, offers answered |
 | `%APPDATA%\ReUI\clipboard.db`, `clipboard.json` | clipboard history and settings |
-| `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json`, `timers.json`, `coding.json` | music, OSD, Devices, Timers and coding agent settings (`coding.json` is read by all three agent modules) |
+| `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json`, `timers.json`, `privacy.json`, `coding.json` | music, OSD, Devices, Timers, privacy indicator and coding agent settings (`coding.json` is read by all three agent modules) |
 | `%APPDATA%\ReUI\timer-state.json` | running and paused timers, a focus session, the stopwatch, and whether ReUI turned Do Not Disturb on |
 | `%LOCALAPPDATA%\ReUI\lyrics\` | lyrics cache |
 | `%LOCALAPPDATA%\ReUI\hub.log` | panics |
