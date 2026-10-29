@@ -124,6 +124,12 @@ While an app uses your microphone or camera, or shares or records your screen, t
 
 Press **Win+Alt+S** (or Tray → System stats) to see how busy the PC is: CPU and memory side by side, each with a ring and a line of the last minute (since the card opened; it fills in from the right), then GPU, disk and network on one line. On a laptop the line under CPU says what the battery gives or takes. A number that stays at 90 % or more for three seconds turns orange. The button at the top right opens Task Manager. Press the shortcut again, or click elsewhere, to close it. The numbers update once a second while the card is open and aren't read at all otherwise. Settings → System stats changes the shortcut and which facts show. `reui-bridge stats` opens it from a script.
 
+## Downloads and screenshots
+
+While your browser downloads something into your Downloads folder, the island shows it: the name, how much has arrived and how fast. Browsers don't say how big a download will be, so there's no percentage. When it's done, **Downloaded** shows with **Open** and **Show in folder**; it goes after a few seconds, or once you've used it. Several at once share one card; ‹ › moves between them. A download you cancel just goes. A paused download leaves the island after half a minute and comes back when it resumes. If your browser saves somewhere else, add that folder in Settings → Downloads & screenshots.
+
+Take a screenshot (Win+Shift+S, PrtScn, or Win+PrtScn) and its thumbnail shows in the island: **Copied** when it's on the clipboard, and **Open** and **Show in folder** once Snipping Tool has saved it in Pictures\Screenshots. Clipboard history keeps it as usual. Each has its own switch in Settings → Downloads & screenshots. ReUI only reads file names and sizes (and a screenshot, once, for its thumbnail); nothing leaves your PC.
+
 ## Coding agents
 
 Claude Code, Codex and OpenCode show in the island only when they need you: a permission request you can answer with **Allow** / **Deny** (Claude Code and OpenCode also offer **Always**), a question from Claude Code or OpenCode, a plan or an MCP server's form from Claude Code, a question from Codex to answer in its terminal, or a turn that failed. While they think and run tools, the island stays with your music and timers. Each card starts with a quiet line saying which session it is (the project, what you asked, how long it has been working); a long command or an edit's changed lines show underneath, and the mouse wheel scrolls them. Anything that looks like a password or token shows as dots.

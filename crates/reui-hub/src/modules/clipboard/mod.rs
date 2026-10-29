@@ -280,6 +280,11 @@ impl App {
             return;
         }
         let image = matches!(captured.content, Content::Image { .. });
+        // A screenshot tool's image: its thumbnail, for the screenshot card.
+        let shot = match &captured.content {
+            Content::Image { thumb, .. } => Some((captured.exe.clone(), thumb.clone(), captured.size)),
+            _ => None,
+        };
         let now = now_ms();
         let saved = self
             .db
@@ -303,10 +308,12 @@ impl App {
             self.ocr_queue.push_front(id);
             self.kick_ocr();
         }
+        // The screenshot module shows a shot as its own card (one card, not two).
+        let claimed = shot.is_some_and(|(exe, thumb, size)| crate::modules::screenshots::claim(exe.as_deref(), &thumb, size));
         if self.open {
             // The new card slides in (W-10).
             self.send_state().await;
-        } else {
+        } else if !claimed {
             self.toast().await;
             crate::modules::onboarding::note(crate::modules::onboarding::Moment::Copy { hotkey: (!self.hotkey_taken).then(|| self.settings.hotkey.clone()) });
         }

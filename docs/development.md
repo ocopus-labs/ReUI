@@ -33,13 +33,13 @@ To drive a sandboxed island without touching the real mouse or keyboard, post to
 
 ## The hub's flags
 
-The hub starts the island plus every module. `--no-agents`, `--no-media`, `--no-clipboard`, `--no-osd`, `--no-devices`, `--no-timers`, `--no-privacy`, `--no-stats`, `--no-shelf` skip one; `--no-link-previews` keeps clipboard links offline; `--no-updates` never looks for updates or mentions them. `--no-island` runs the hub alone so you can start `reui-island.exe` yourself (under a debugger, say). `--no-onboarding` skips the first run and one-time tips; `--first-run` replays the demo and welcome. The full list is the doc comment at the top of `crates/reui-hub/src/main.rs`.
+The hub starts the island plus every module. `--no-agents`, `--no-media`, `--no-clipboard`, `--no-osd`, `--no-devices`, `--no-timers`, `--no-privacy`, `--no-stats`, `--no-shelf`, `--no-downloads`, `--no-screenshots` skip one; `--no-link-previews` keeps clipboard links offline; `--no-updates` never looks for updates or mentions them. `--no-island` runs the hub alone so you can start `reui-island.exe` yourself (under a debugger, say). `--no-onboarding` skips the first run and one-time tips; `--first-run` replays the demo and welcome. The full list is the doc comment at the top of `crates/reui-hub/src/main.rs`.
 
 `--demo` enables a module that shows now-playing, a 5-minute timer and, 25 s after each one is settled, the next agent moment: a permission with a scrolling script, a three-step question (one step multi-select) and a plan to approve. They take over the pill, answer nothing real, and time out and fail open (20 s for the permission, 60 s for the others). Hover to peek, click to expand, right-click the pill to quit ReUI.
 
 ## Settings' flags
 
-`reui-settings.exe --page <name>` opens on a page (general, now, clipboard, osd, devices, coding, privacy, about); `--welcome` opens the three welcome steps; `--perf` logs frame times. `--shots <dir>` saves every page as a PNG without showing the window; add `--backdrop-color #RRGGBB` to put that colour on the island stages instead of your wallpaper, and `--stages` to save only the stages, each alone at 200 % (`stage-<moment>[-light|-notch].png`). `pwsh -File tools\readme-images.ps1` renders the README's pictures that way, sandboxed, into `docs/images`.
+`reui-settings.exe --page <name>` opens on a page (general, now, clipboard, osd, devices, downloads, coding, privacy, about); `--welcome` opens the three welcome steps; `--perf` logs frame times. `--shots <dir>` saves every page as a PNG without showing the window; add `--backdrop-color #RRGGBB` to put that colour on the island stages instead of your wallpaper, and `--stages` to save only the stages, each alone at 200 % (`stage-<moment>[-light|-notch].png`). `pwsh -File tools\readme-images.ps1` renders the README's pictures that way, sandboxed, into `docs/images`.
 
 ## Install, by hand
 
@@ -56,6 +56,7 @@ Setup options: `--no-autostart` (don't start with Windows), `--no-launch`, `--qu
 | `%APPDATA%\ReUI\clipboard.json` | `hotkey`, `retention_days`, `ignored_apps`, `link_previews` |
 | `%APPDATA%\ReUI\calendar.json` | `lead_min`, `windows`, `sources` (`id`, `host`, `url` DPAPI-sealed, `on`) |
 | `%LOCALAPPDATA%\ReUI\calendar\` | Each calendar's last good copy (`<id>.cache`, DPAPI-encrypted) and `status.json` (each source's last refresh) |
+| `%APPDATA%\ReUI\downloads.json`, `screenshots.json` | Downloads: `enabled`, `folders` (watched besides Downloads); screenshots: `enabled` |
 | `%LOCALAPPDATA%\ReUI` | Caches and logs |
 | `%LOCALAPPDATA%\ReUI\update.json` | What the last update check found |
 | `%APPDATA%\ReUI\shelf.json` | File shelf: `keep` (`removed` \| `restart` \| `day` \| `week`), `saved_cap_mb` |
@@ -124,6 +125,12 @@ The hub's `calendar` module reads secret ICS links (Google's, Outlook's, any pro
 ## File shelf internals
 
 The island is the drop target and the drag source; the hub's `shelf` module holds the list. A drag from elsewhere near the island (`DragGuard` says a button that went down elsewhere is held, within `island.shelf.reach` of the shape) makes the window hit-testable for it, which is the only way OLE's `DoDragDrop` finds a `WS_EX_TRANSPARENT` layered window; away from it the island is click-through again at once. `dragdrop/target.rs` answers Copy, else Link, never Move, reads the formats once on the drop (`CF_HDROP`, `FileGroupDescriptorW`/`FileContents`, `UniformResourceLocatorW`, `PNG`, `CF_UNICODETEXT`) and sends `ClientMsg::Drop` to the destination with `drops`. Out: `SHDoDragDrop` of the shell's data object (`SHCreateDataObject` over absolute IDLists, so files from several folders go together, with `CF_HDROP`), or text and URL formats; marked `ReUI.Drag` so the island never takes its own drag back. Debug builds: `WM_APP + 21` posted to the island (wparam 1 over, 0 leave, 2 let go of `REUI_TEST_DROP`'s `;`-separated paths) shows the target and checks island → hub → shelf without a real drag. Real drags need a person: drag a file from Explorer to the island and back into another folder (it must copy, never move). `--no-shelf` turns it off. Spec: [docs/PRD-file-shelf.md](PRD-file-shelf.md).
+
+## Downloads and screenshots internals
+
+The hub's `downloads` and `screenshots` modules share `modules/folders/`: an overlapped `ReadDirectoryChangesW` per folder on one thread per module, so nothing runs between downloads or shots. Downloads are recognised by the browsers' partial files (`.crdownload`, `.opdownload`, `.part`, `.partial`, `.!qB`, `.!ut`), sized at most once a second after a write, and done when renamed to their final name; no browser records the total, so there's no percentage. Screenshots come from `Pictures\Screenshots` and from the clipboard module, which hands Snipping Tool's images over (`screenshots::claim`) instead of showing its own toast. Spec: [PRD-downloads-screenshots.md](PRD-downloads-screenshots.md). `--no-downloads` / `--no-screenshots` turn them off.
+
+To try them without touching your own folders, a sandboxed hub (`REUI_CONFIG_DIR` set) also reads `REUI_DOWNLOADS_DIR` and `REUI_SCREENSHOTS_DIR` and watches those instead; outside a sandbox they're ignored. Grow a file named `<name>.crdownload` there from a script (append and flush every 250 ms), rename it to `<name>`, or save a PNG into the screenshots folder.
 
 ## Adding a module
 

@@ -9,6 +9,7 @@ mod appearance;
 mod calendar;
 mod clipboard;
 mod devices;
+mod downloads;
 mod general;
 mod indicators;
 mod now_playing;
@@ -45,6 +46,8 @@ pub enum Page {
     Calendar,
     Indicators,
     Stats,
+    /// Downloads & screenshots: the file moments.
+    Downloads,
     Agents,
     Privacy,
     About,
@@ -56,7 +59,7 @@ pub enum Page {
 
 impl Page {
     /// The Settings window's pages, in the nav.
-    pub const ALL: [Page; 14] = [Page::General, Page::Appearance, Page::NowPlaying, Page::Clipboard, Page::Shelf, Page::Osd, Page::Devices, Page::Timers, Page::Calendar, Page::Indicators, Page::Stats, Page::Agents, Page::Privacy, Page::About];
+    pub const ALL: [Page; 15] = [Page::General, Page::Appearance, Page::NowPlaying, Page::Clipboard, Page::Shelf, Page::Osd, Page::Devices, Page::Timers, Page::Calendar, Page::Indicators, Page::Stats, Page::Downloads, Page::Agents, Page::Privacy, Page::About];
     /// The welcome's steps, in its nav.
     pub const WELCOME: [Page; 3] = [Page::WelcomeFeatures, Page::WelcomeShortcut, Page::WelcomeStartup];
 
@@ -73,6 +76,7 @@ impl Page {
             Page::Calendar => "Calendar",
             Page::Indicators => "Mic & camera",
             Page::Stats => "System stats",
+            Page::Downloads => "Downloads & screenshots",
             Page::Agents => "Coding agents",
             Page::Privacy => "Privacy & data",
             Page::About => "About",
@@ -103,7 +107,7 @@ impl Page {
     /// The sidebar's sections: General; the island's features; privacy and About.
     pub fn section(self) -> usize {
         match self {
-            Page::NowPlaying | Page::Clipboard | Page::Shelf | Page::Osd | Page::Devices | Page::Timers | Page::Calendar | Page::Indicators | Page::Stats | Page::Agents => 1,
+            Page::NowPlaying | Page::Clipboard | Page::Shelf | Page::Osd | Page::Devices | Page::Timers | Page::Calendar | Page::Indicators | Page::Stats | Page::Downloads | Page::Agents => 1,
             Page::Privacy | Page::About => 2,
             _ => 0,
         }
@@ -123,6 +127,7 @@ impl Page {
             Page::Calendar => icons::calendar(),
             Page::Indicators => icons::indicators(),
             Page::Stats => icons::stats(),
+            Page::Downloads => icons::downloads(),
             Page::Agents => icons::agents(),
             Page::Privacy => icons::privacy(),
             Page::About => Icon::Mark,
@@ -189,6 +194,7 @@ pub fn build(page: Page, state: &State) -> Vec<Block> {
         Page::Calendar => calendar::build(state),
         Page::Indicators => indicators::build(state),
         Page::Stats => stats::build(state),
+        Page::Downloads => downloads::build(state),
         Page::Agents => agents::build(state),
         Page::Privacy => privacy::build(state),
         Page::About => about::build(state),
@@ -232,6 +238,7 @@ pub fn act(page: Page, state: &mut State, target: &Target, act: Act) -> Effect {
         Page::Calendar => calendar::act(state, target, act),
         Page::Indicators => Effect::None,
         Page::Stats => stats::act(state, target, act),
+        Page::Downloads => downloads::act(state, target, act),
         Page::Agents => agents::act(state, target, act),
         Page::Privacy => privacy::act(state, target, act),
         Page::About => about::act(state, target, act),
@@ -362,6 +369,7 @@ pub mod tests {
         assert_eq!(Page::from_arg("what"), None, "welcome steps aren't Settings pages");
         assert_eq!((Page::WelcomeShortcut.index(), Page::About.index()), (1, 12));
         assert_eq!(Page::from_arg("calendar"), Some(Page::Calendar));
+        assert_eq!(Page::from_arg("downloads"), Some(Page::Downloads));
         assert_eq!(Page::from_arg("appearance"), Some(Page::Appearance));
         assert_eq!(Page::from_arg("timers"), Some(Page::Timers));
         assert_eq!(Page::from_arg("mic"), Some(Page::Indicators));
