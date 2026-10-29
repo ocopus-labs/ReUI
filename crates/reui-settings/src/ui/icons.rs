@@ -58,6 +58,8 @@ pub const SCREEN: char = MONITOR;
 pub const LOCATION: char = '\u{E81D}';
 /// A pulse line: the system stats.
 pub const DIAGNOSTIC: char = '\u{E9D9}';
+/// An arrow into a tray: downloads.
+pub const DOWNLOAD: char = '\u{E896}';
 
 pub fn tile(glyph: char, color: reui_design::Color) -> Icon {
     Icon::Glyph(glyph, color)
@@ -89,6 +91,12 @@ pub fn indicators() -> Icon {
 }
 pub fn stats() -> Icon {
     tile(DIAGNOSTIC, section::STATS)
+}
+pub fn downloads() -> Icon {
+    tile(DOWNLOAD, section::DOWNLOADS)
+}
+pub fn screenshots() -> Icon {
+    tile(CAMERA, section::DOWNLOADS)
 }
 pub fn agents() -> Icon {
     tile(CODE, section::AGENTS)

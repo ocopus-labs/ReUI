@@ -21,10 +21,13 @@ pub enum File {
     /// `coding.json`, read by the three coding agent modules.
     Coding,
     Stats,
+    Downloads,
+    /// `screenshots.json`: only `enabled`, read by the hub at start.
+    Screenshots,
 }
 
 impl File {
-    pub const ALL: [File; 9] = [File::Island, File::Media, File::Clipboard, File::Osd, File::Devices, File::Timers, File::Privacy, File::Coding, File::Stats];
+    pub const ALL: [File; 11] = [File::Island, File::Media, File::Clipboard, File::Osd, File::Devices, File::Timers, File::Privacy, File::Coding, File::Stats, File::Downloads, File::Screenshots];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -37,6 +40,8 @@ impl File {
             File::Privacy => "privacy.json",
             File::Coding => "coding.json",
             File::Stats => "stats.json",
+            File::Downloads => "downloads.json",
+            File::Screenshots => "screenshots.json",
         }
     }
 
@@ -53,6 +58,8 @@ impl File {
             File::Privacy => &["privacy"],
             File::Coding => &["claude", "codex", "opencode"],
             File::Stats => &["stats"],
+            File::Downloads => &["downloads"],
+            File::Screenshots => &["screenshots"],
         }
     }
 
@@ -68,6 +75,8 @@ impl File {
             File::Privacy => "privacy",
             File::Coding => "coding",
             File::Stats => "stats",
+            File::Downloads => "downloads",
+            File::Screenshots => "screenshots",
         }
     }
 
@@ -133,6 +142,8 @@ impl File {
             File::Privacy => json!({ "enabled": true, "microphone": true, "camera": true, "screen": true, "location": false }),
             File::Coding => json!({ "show_sessions": "needed", "show_finished": false }),
             File::Stats => json!({ "enabled": true, "shortcut": "Win+Alt+S", "gpu": true, "disk": true, "network": true, "power": true }),
+            File::Downloads => json!({ "enabled": true, "folders": [] }),
+            File::Screenshots => json!({ "enabled": true }),
         }
     }
 
@@ -253,6 +264,12 @@ impl Files {
         list.map(|apps| apps.iter().filter_map(Value::as_str).map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()).collect()).unwrap_or_default()
     }
 
+    /// The extra folders the downloads module watches, as it reads them (blanks dropped).
+    pub fn download_folders(&self) -> Vec<String> {
+        let list = self.doc(File::Downloads).get("folders").and_then(Value::as_array).cloned().unwrap_or_default();
+        list.iter().filter_map(Value::as_str).map(str::trim).filter(|s| !s.is_empty()).map(str::to_string).collect()
+    }
+
     /// Volume change per wheel notch; the module accepts (0, 0.5].
     pub fn scroll_step(&self) -> f64 {
         let doc = self.doc(File::Osd);
@@ -277,6 +294,22 @@ pub fn add_app(list: &[String], name: &str) -> Option<Vec<String>> {
     }
     let mut list = list.to_vec();
     list.push(name);
+    Some(list)
+}
+
+/// Adds a folder to the downloads list: a full path (`C:\…`, `\\server\share`), quotes
+/// and a trailing slash dropped; `None` if it isn't one or is already there (in any case).
+pub fn add_folder(list: &[String], path: &str) -> Option<Vec<String>> {
+    let path = path.trim().trim_matches('"').trim();
+    let path = if path.len() > 3 { path.trim_end_matches(['\\', '/']) } else { path };
+    let bytes = path.as_bytes();
+    let absolute = (bytes.len() >= 3 && bytes[0].is_ascii_alphabetic() && bytes[1] == b':' && matches!(bytes[2], b'\\' | b'/')) || path.starts_with(r"\\");
+    let valid = absolute && !path.chars().any(|c| matches!(c, '<' | '>' | '"' | '|' | '?' | '*') || c.is_control());
+    if !valid || list.iter().any(|f| f.eq_ignore_ascii_case(path)) {
+        return None;
+    }
+    let mut list = list.to_vec();
+    list.push(path.to_string());
     Some(list)
 }
 
@@ -330,5 +363,17 @@ mod tests {
         assert_eq!(add_app(&list, "KeePass.exe"), None);
         assert_eq!(add_app(&list, "  "), None);
         assert_eq!(add_app(&list, "a|b.exe"), None);
+    }
+
+    #[test]
+    fn folders_are_added_as_full_paths_once() {
+        let list = vec![r"D:\Saves".to_string()];
+        assert_eq!(add_folder(&list, r#" "E:\Torrents\" "#), Some(vec![r"D:\Saves".into(), r"E:\Torrents".into()]));
+        assert_eq!(add_folder(&list, r"\\nas\share").unwrap()[1], r"\\nas\share");
+        assert_eq!(add_folder(&list, r"F:\").unwrap()[1], r"F:\", "a drive keeps its slash");
+        assert_eq!(add_folder(&list, r"d:\saves\"), None, "already there");
+        for bad in ["Downloads", r"..\x", "  ", r"C:\a|b", "C:"] {
+            assert_eq!(add_folder(&list, bad), None, "{bad}");
+        }
     }
 }
