@@ -1,5 +1,6 @@
 //! One hook event into the module's state: the session's phase (thinking, a tool, done…)
-//! and the moments that need you (a permission, Claude's questions and plans).
+//! and the moments that need you (a permission, Claude's questions and plans, OpenCode's
+//! questions from its plugin's `Question` event).
 //!
 //! Claude's AskUserQuestion and ExitPlanMode come through `PreToolUse` twice: the blocking
 //! entry (`reui-bridge claude ask`, which waits for the answer) and the async `*` one;
@@ -93,8 +94,19 @@ pub(super) async fn on_hook(ctx: &ModuleContext, me: &Agentry, call: HookCall, s
             moments_changed = true;
             Some(Phase::WaitingPermission)
         }
-        // Other agents' questions are read-only for now (agent moments M5).
-        "PreToolUse" if matches!(tool, "AskUserQuestion" | "question") => Some(Phase::NeedsInput(question(&event))),
+        // OpenCode's question, through its `question.asked` event (the plugin's own
+        // "Question"): answerable when the plugin can post the answer back.
+        "Question" => {
+            let waiting = call.reply.is_some();
+            moments.queue.arrive(Moment::opencode_question(call.id, &session_id, event.clone(), waiting, Instant::now()));
+            if let Some(reply) = call.reply {
+                moments.replies.insert(call.id, reply);
+            }
+            moments_changed = true;
+            Some(Phase::WaitingPermission)
+        }
+        // OpenCode's question tool runs while its `question.asked` waits; that's the moment.
+        "PreToolUse" if tool == "question" => Some(Phase::WaitingPermission),
         "PreToolUse" => Some(Phase::Tool(short_tool_name(tool))),
         "PostToolUse" => Some(Phase::Thinking),
         "PreCompact" => Some(Phase::Compacting),
@@ -147,13 +159,6 @@ pub(super) async fn on_hook(ctx: &ModuleContext, me: &Agentry, call: HookCall, s
     }
 }
 
-/// The first question of an AskUserQuestion (Claude: `questions[].question`; OpenCode's
-/// `question` tool the same shape), as one line.
-pub(super) fn question(event: &Value) -> Option<String> {
-    let questions = event.get("tool_input")?.get("questions")?.as_array()?;
-    questions.first()?.get("question")?.as_str().and_then(first_line)
-}
-
 /// First non-empty line, without paste markers, cut to a readable length.
 pub(super) fn first_line(text: &str) -> Option<String> {
     let line = text.lines().map(str::trim).find(|l| !l.is_empty() && !l.starts_with("<pasted_content"))?;
@@ -171,8 +176,6 @@ pub(super) fn project_name(cwd: &str, fallback: &str) -> String {
 
 #[cfg(test)]
 mod tests {
-    use serde_json::json;
-
     use super::*;
 
     #[test]
@@ -180,13 +183,6 @@ mod tests {
         assert_eq!(project_name(r"\\?\D:\ocopus", "Codex"), "ocopus");
         assert_eq!(project_name("D:/fusion-proxy/", "OpenCode"), "fusion-proxy");
         assert_eq!(project_name("", "Codex"), "Codex");
-    }
-
-    #[test]
-    fn questions_are_read_from_the_tool_input() {
-        let event = json!({ "tool_input": { "questions": [{ "question": "Which framework?\nmore", "header": "Framework" }] } });
-        assert_eq!(question(&event), Some("Which framework?".into()));
-        assert_eq!(question(&json!({ "tool_input": {} })), None);
     }
 
     #[test]

@@ -59,7 +59,7 @@ pub(super) fn card(moment: &Moment, context: Context, position: (usize, usize), 
             }
             ("Allow?", accent(described.glyph), "Permission", described.headline, described.detail, rows)
         }
-        Kind::Question { questions, step, picked, typed } => {
+        Kind::Question { questions, step, picked, typed, .. } => {
             let step = (*step).min(questions.len().saturating_sub(1));
             let q = questions.get(step);
             let mut rows = Vec::new();
@@ -82,8 +82,10 @@ pub(super) fn card(moment: &Moment, context: Context, position: (usize, usize), 
             let mut buttons = vec![text("terminal", "Answer in terminal", if answerable { ButtonRole::Plain } else { ButtonRole::Secondary })];
             let mut detail = q.map(|q| q.header.clone()).filter(|h| !h.is_empty());
             if answerable {
-                // Claude always takes a typed answer ("Other").
-                rows.push(field("Type an answer".into()));
+                // Claude always takes a typed answer ("Other"); OpenCode when `custom`.
+                if q.is_some_and(|q| q.custom) {
+                    rows.push(field("Type an answer".into()));
+                }
                 if questions.len() > 1 {
                     match pager {
                         // The strip's pager is the steps when nothing else waits.

@@ -1,7 +1,8 @@
 //! `reui-bridge`: the program coding agents run as a hook.
 //!
 //! `reui-bridge claude` reads one hook event from stdin and forwards it to the hub. Only
-//! what needs you waits for an answer: permission requests, MCP elicitation, and, run as
+//! what needs you waits for an answer: permission requests, MCP elicitation, OpenCode's
+//! questions (`Question`, from our plugin), and, run as
 //! `reui-bridge claude ask` (the blocking `PreToolUse` entry), Claude's AskUserQuestion and
 //! ExitPlanMode. Everything else is fire-and-forget (and is installed with `async: true`,
 //! so the agent never waits at all); the async `PreToolUse` for those two tools forwards
@@ -107,6 +108,8 @@ fn reply_wait(event: &serde_json::Value, ask: bool) -> Option<Duration> {
     match field("hook_event_name") {
         "PermissionRequest" => Some(PERMISSION_WAIT),
         "Elicitation" => Some(ASK_WAIT),
+        // OpenCode's question (our plugin's event), when the plugin can post an answer.
+        "Question" if event.get("answerable").and_then(|a| a.as_bool()) == Some(true) => Some(ASK_WAIT),
         "PreToolUse" if ask && matches!(field("tool_name"), "AskUserQuestion" | "ExitPlanMode") => Some(ASK_WAIT),
         _ => None,
     }
@@ -216,6 +219,8 @@ mod tests {
         assert_eq!(reply_wait(&event("PreToolUse", "AskUserQuestion"), false), None);
         assert_eq!(reply_wait(&event("PreToolUse", "Bash"), true), None);
         assert_eq!(reply_wait(&event("Stop", ""), true), None);
+        assert_eq!(reply_wait(&json!({ "hook_event_name": "Question", "answerable": true }), false), Some(ASK_WAIT));
+        assert_eq!(reply_wait(&json!({ "hook_event_name": "Question", "answerable": false }), false), None, "shown read-only");
         // The hook timeouts the installer writes: 120 s and 300 s.
         assert!(PERMISSION_WAIT < Duration::from_secs(120) && ASK_WAIT < Duration::from_secs(300));
     }

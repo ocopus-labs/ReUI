@@ -83,7 +83,8 @@ pub struct Profile {
     pub logo: Option<&'static [u8]>,
     /// Tile glyph when there's no logo.
     pub glyph: char,
-    /// Whether the agent accepts "always allow" (Claude Code's `updatedPermissions`).
+    /// Whether the agent accepts "always allow" (Claude Code's `updatedPermissions`,
+    /// OpenCode's `always` reply).
     pub can_always: bool,
     pub usage: UsageSource,
 }
@@ -118,8 +119,9 @@ pub const OPENCODE: Profile = Profile {
     accent: Rgb(130, 170, 255),
     logo: Some(include_bytes!("../../../../../design/assets/agents/opencode.svg")),
     glyph: GLYPH_TERMINAL,
-    // `permission.ask` only takes allow / deny / ask.
-    can_always: false,
+    // Replies take "always" for the patterns `permission.asked` offers (the plugin sends
+    // them as the suggestion).
+    can_always: true,
     usage: UsageSource::OpenCodeSessions,
 };
 

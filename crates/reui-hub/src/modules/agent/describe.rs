@@ -88,7 +88,11 @@ fn describe(tool: &str, input: &Value) -> Described {
                 Some(edits) => edits.iter().map(|e| (str_of(e, "old_string"), str_of(e, "new_string"))).collect(),
                 None => vec![(text("old_string") + &text("oldString"), text("new_string") + &text("newString"))],
             };
-            let (diff, added, removed) = changed_lines(&edits);
+            // OpenCode's edit permission sends a unified diff instead (`metadata.diff`).
+            let (diff, added, removed) = match input.get("diff").and_then(Value::as_str) {
+                Some(unified) => unified_lines(unified),
+                None => changed_lines(&edits),
+            };
             let counts = if added + removed > 0 { format!("+{added} \u{2212}{removed}") } else { String::new() };
             let body = (!diff.is_empty()).then(|| (first_lines(&diff, BODY_LINES), BlockKind::Diff));
             Described { body, ..d(GLYPH_EDIT, Headline::Text(file(&p)), facts(&["Edit", &folder(&p), &counts])) }
@@ -164,6 +168,26 @@ fn changed_lines(edits: &[(String, String)]) -> (String, usize, usize) {
     (out.join("\n"), added, removed)
 }
 
+/// A unified diff's changed lines (its file headers and hunk markers left out, since the
+/// hero names the file), as `-` / `+` lines with how many were added and removed.
+fn unified_lines(diff: &str) -> (String, usize, usize) {
+    let (mut added, mut removed) = (0, 0);
+    let mut out = Vec::new();
+    for line in diff.lines() {
+        if line.starts_with("+++") || line.starts_with("---") || line.starts_with("Index:") || line.starts_with("===") {
+            continue;
+        }
+        if let Some(rest) = line.strip_prefix('+') {
+            added += 1;
+            out.push(format!("+ {rest}"));
+        } else if let Some(rest) = line.strip_prefix('-') {
+            removed += 1;
+            out.push(format!("- {rest}"));
+        }
+    }
+    (out.join("\n"), added, removed)
+}
+
 /// A Codex `apply_patch` read for a body: the files it names ("*** Update File: path"),
 /// its lines without the Begin / End markers (a file's header kept as its bare path only
 /// when there are several, since the hero names a lone one), and how many lines it adds
@@ -217,6 +241,12 @@ mod tests {
         assert_eq!(edit.headline, Headline::Text("main.rs".into()));
         assert_eq!(edit.detail.as_deref(), Some("Edit · src · +2 \u{2212}1"));
         assert_eq!(edit.body, Some(("- b\n+ B\n+ b2".into(), BlockKind::Diff)));
+
+        // OpenCode: `permission.asked` for "edit" with `metadata.filepath` and a unified diff.
+        let diff = "Index: D:/p/src/app.ts\n===================================================================\n--- D:/p/src/app.ts\n+++ D:/p/src/app.ts\n@@ -1,3 +1,3 @@\n a\n-b\n+B\n c\n";
+        let opencode = describe_tool("edit", &json!({ "filePath": "D:/p/src/app.ts", "diff": diff, "command": "src/app.ts" }));
+        assert_eq!((opencode.headline, opencode.detail.as_deref()), (Headline::Text("app.ts".into()), Some("Edit · src · +1 \u{2212}1")));
+        assert_eq!(opencode.body, Some(("- b\n+ B".into(), BlockKind::Diff)));
 
         let fetch = describe_tool("WebFetch", &json!({ "url": "https://code.claude.com/docs/en/hooks" }));
         assert_eq!(fetch.headline, Headline::Text("code.claude.com".into()));

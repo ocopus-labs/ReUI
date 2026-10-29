@@ -1,5 +1,5 @@
-//! The moments waiting for you (agent moments PRD §5): permission requests, Claude's
-//! questions and plans, one at a time. Each keeps its own state: a question's step and the
+//! The moments waiting for you (agent moments PRD §5): permission requests, questions
+//! (Claude's and OpenCode's) and Claude's plans, one at a time. Each keeps its own state: a question's step and the
 //! answers so far, the text typed into its field, and whether that field is open (deny
 //! with a message, a plan's feedback). Pure: `queue.rs` orders them, the module owns the
 //! bridges' reply channels, `answer.rs` the JSON, `card.rs` the look.
@@ -29,13 +29,24 @@ pub(super) struct Question {
     pub header: String,
     pub options: Vec<Opt>,
     pub multi: bool,
+    /// A typed answer is allowed (Claude: always; OpenCode: `custom`, true by default).
+    pub custom: bool,
+}
+
+/// Who asked, which decides how the answers go back.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub(super) enum Asker {
+    /// AskUserQuestion: answers keyed by question text in the tool's input.
+    Claude,
+    /// OpenCode's `question.asked`: one list of labels per question, in order.
+    OpenCode,
 }
 
 #[derive(Debug)]
 pub(super) enum Kind {
     Permission { tool: String, suggestion: Option<Value> },
     /// `picked[step][option]`; `typed[step]` is a typed answer, which wins over picks.
-    Question { questions: Vec<Question>, step: usize, picked: Vec<Vec<bool>>, typed: Vec<Option<String>> },
+    Question { questions: Vec<Question>, step: usize, picked: Vec<Vec<bool>>, typed: Vec<Option<String>>, asker: Asker },
     Plan,
 }
 
@@ -79,14 +90,18 @@ impl Moment {
     /// blocking hook. `None` for other tools.
     pub(super) fn ask(id: u64, session: &str, tool: &str, tool_use_id: Option<String>, input: Value, waiting: bool, now: Instant) -> Option<Self> {
         let kind = match tool {
-            "AskUserQuestion" => {
-                let questions = parse_questions(&input);
-                Kind::Question { step: 0, picked: questions.iter().map(|q| vec![false; q.options.len()]).collect(), typed: vec![None; questions.len()], questions }
-            }
+            "AskUserQuestion" => Kind::question(parse_questions(&input, "multiSelect", None), Asker::Claude),
             "ExitPlanMode" => Kind::Plan,
             _ => return None,
         };
         Some(Self::new(id, session, tool_use_id, input, kind, waiting, now + ASK_WAIT))
+    }
+
+    /// OpenCode's `question.asked` (`questions[]`: `question`, `header`, `options[]`,
+    /// `multiple`, `custom`); `waiting` when the plugin can send the answer back.
+    pub(super) fn opencode_question(id: u64, session: &str, input: Value, waiting: bool, now: Instant) -> Self {
+        let kind = Kind::question(parse_questions(&input, "multiple", Some("custom")), Asker::OpenCode);
+        Self::new(id, session, None, input, kind, waiting, now + ASK_WAIT)
     }
 
     fn new(id: u64, session: &str, tool_use_id: Option<String>, input: Value, kind: Kind, waiting: bool, deadline: Instant) -> Self {
@@ -98,12 +113,15 @@ impl Moment {
     pub(super) fn answerable(&self) -> bool {
         self.waiting
             && match &self.kind {
-                Kind::Question { questions, .. } => {
+                Kind::Question { questions, asker: Asker::Claude, .. } => {
                     let mut texts: Vec<&str> = questions.iter().map(|q| q.text.as_str()).collect();
                     texts.sort_unstable();
                     texts.dedup();
                     !questions.is_empty() && texts.len() == questions.len() && questions.iter().all(|q| !q.options.is_empty())
                 }
+                // Answers go by position, so alike texts are fine; each question needs
+                // something to pick or room to type.
+                Kind::Question { questions, asker: Asker::OpenCode, .. } => !questions.is_empty() && questions.iter().all(|q| !q.options.is_empty() || q.custom),
                 _ => true,
             }
     }
@@ -156,7 +174,7 @@ impl Moment {
                 false => Outcome::Reply(Some(answer::plan_revised(&text))),
             },
             (Kind::Plan, "approve") if !self.explaining => Outcome::Reply(Some(answer::plan_approved(&self.input))),
-            (Kind::Question { questions, step, picked, typed }, action) => {
+            (Kind::Question { questions, step, picked, typed, asker }, action) => {
                 let s = *step;
                 let advance = |step: &mut usize| {
                     *step += 1;
@@ -168,7 +186,7 @@ impl Moment {
                         false
                     }
                     "next" | "send" if picked[s].iter().any(|p| *p) || typed[s].is_some() => advance(step),
-                    "submit" if !text.is_empty() => {
+                    "submit" if !text.is_empty() && questions[s].custom => {
                         typed[s] = Some(text);
                         picked[s].iter_mut().for_each(|p| *p = false);
                         self.text.clear();
@@ -189,8 +207,11 @@ impl Moment {
                     },
                 };
                 if done {
-                    let answers: Vec<(String, String)> = questions.iter().zip(picked.iter()).zip(typed.iter()).map(|((q, p), t)| (q.text.clone(), answer_of(q, p, t))).collect();
-                    Outcome::Reply(Some(answer::questions(&self.input, &answers)))
+                    let each = questions.iter().zip(picked.iter()).zip(typed.iter());
+                    Outcome::Reply(Some(match asker {
+                        Asker::Claude => answer::questions(&self.input, &each.map(|((q, p), t)| (q.text.clone(), answer_of(q, p, t))).collect::<Vec<_>>()),
+                        Asker::OpenCode => answer::opencode_questions(&each.map(|((q, p), t)| labels_of(q, p, t)).collect::<Vec<_>>()),
+                    }))
                 } else {
                     // A new step's field starts empty.
                     if *step != s {
@@ -213,17 +234,34 @@ fn answer_of(q: &Question, picked: &[bool], typed: &Option<String>) -> String {
     }
 }
 
-/// AskUserQuestion's `questions[]`: `question`, `header`, `options[]` (`label`,
-/// `description`), `multiSelect`. What's missing reads as empty, so a malformed input is a
-/// question we can't answer rather than an error.
-fn parse_questions(input: &Value) -> Vec<Question> {
+/// One question's answer for OpenCode: the picked labels, or what was typed.
+fn labels_of(q: &Question, picked: &[bool], typed: &Option<String>) -> Vec<String> {
+    match typed {
+        Some(t) => vec![t.clone()],
+        None => q.options.iter().zip(picked).filter(|(_, on)| **on).map(|(o, _)| o.label.clone()).collect(),
+    }
+}
+
+impl Kind {
+    fn question(questions: Vec<Question>, asker: Asker) -> Self {
+        Kind::Question { step: 0, picked: questions.iter().map(|q| vec![false; q.options.len()]).collect(), typed: vec![None; questions.len()], questions, asker }
+    }
+}
+
+/// `questions[]`: `question`, `header`, `options[]` (`label`, `description`), whether
+/// several may be picked (`multi`: Claude's `multiSelect`, OpenCode's `multiple`) and
+/// whether one may be typed (`custom`: OpenCode's flag, true when absent; Claude always
+/// takes one). What's missing reads as empty, so a malformed input is a question we can't
+/// answer rather than an error.
+fn parse_questions(input: &Value, multi: &str, custom: Option<&str>) -> Vec<Question> {
     let s = |v: &Value, k: &str| v.get(k).and_then(Value::as_str).unwrap_or_default().trim().to_string();
     let Some(list) = input.get("questions").and_then(Value::as_array) else { return Vec::new() };
     list.iter()
         .map(|q| Question {
             text: s(q, "question"),
             header: s(q, "header"),
-            multi: q.get("multiSelect").and_then(Value::as_bool).unwrap_or(false),
+            multi: q.get(multi).and_then(Value::as_bool).unwrap_or(false),
+            custom: custom.and_then(|k| q.get(k)).and_then(Value::as_bool).unwrap_or(true),
             options: q
                 .get("options")
                 .and_then(Value::as_array)
@@ -292,6 +330,31 @@ pub(super) mod tests {
         assert_eq!(m.act("pick:0"), Outcome::Nothing);
         assert_eq!(m.act("terminal"), Outcome::Reply(None));
         assert!(!Moment::ask(1, "s1", "AskUserQuestion", None, json!({}), true, Instant::now()).unwrap().answerable());
+    }
+
+    #[test]
+    fn opencode_questions_answer_by_position() {
+        let input = json!({ "questions": [
+            { "question": "Which?", "header": "Pick", "options": [{ "label": "A", "description": "first" }, { "label": "B", "description": "" }] },
+            { "question": "Which?", "header": "Several", "options": [{ "label": "X", "description": "" }, { "label": "Y", "description": "" }], "multiple": true },
+            { "question": "Name it", "header": "Name", "options": [], "custom": true },
+            { "question": "Sure?", "header": "Confirm", "options": [{ "label": "Yes", "description": "" }], "custom": false }
+        ] });
+        let mut m = Moment::opencode_question(1, "s1", input, true, Instant::now());
+        assert!(m.answerable(), "alike texts are fine: answers go by position");
+        assert_eq!(m.act("pick:1"), Outcome::Changed);
+        m.act("pick:0");
+        m.act("pick:1");
+        assert_eq!(m.act("next"), Outcome::Changed);
+        m.text = "Island".into();
+        assert_eq!(m.act("submit"), Outcome::Changed);
+        m.text = "maybe".into();
+        assert_eq!(m.act("submit"), Outcome::Nothing, "no typed answer here");
+        let Outcome::Reply(Some(out)) = m.act("pick:0") else { panic!() };
+        assert_eq!(serde_json::from_str::<Value>(&out).unwrap()["hookSpecificOutput"]["answers"], json!([["B"], ["X", "Y"], ["Island"], ["Yes"]]));
+        let nothing = Moment::opencode_question(2, "s1", json!({ "questions": [{ "question": "?", "options": [], "custom": false }] }), true, Instant::now());
+        assert!(!nothing.answerable());
+        assert!(!Moment::opencode_question(3, "s1", json!({ "questions": [] }), true, Instant::now()).answerable());
     }
 
     #[test]

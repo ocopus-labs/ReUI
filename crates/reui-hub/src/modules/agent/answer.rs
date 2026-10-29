@@ -2,7 +2,8 @@
 //! shapes Claude Code documents (code.claude.com/docs/en/hooks): `PermissionRequest`'s
 //! `decision`, and `PreToolUse`'s `permissionDecision` + `updatedInput` for the tools that
 //! need you (AskUserQuestion, ExitPlanMode). Codex reads the permission shape as-is; the
-//! OpenCode plugin reads `decision.behavior` from it. "No decision" is no JSON at all
+//! OpenCode plugin reads `decision` from it (allow, allow with `updatedPermissions` for
+//! "always", deny with its `message`) and its questions' answers from our own shape. "No decision" is no JSON at all
 //! (`None` to the bridge), so it isn't here. Pure.
 
 use serde_json::{json, Map, Value};
@@ -37,6 +38,13 @@ pub(super) fn questions(input: &Value, answers: &[(String, String)]) -> String {
     let answers: Map<String, Value> = answers.iter().map(|(q, a)| (q.clone(), Value::String(a.clone()))).collect();
     updated.insert("answers".into(), Value::Object(answers));
     allow(Value::Object(updated))
+}
+
+/// OpenCode's questions answered: one list per question, in order (the picked labels, or
+/// the typed text alone), as the plugin posts them to `/question/{id}/reply`. ReUI's own
+/// shape, in the same envelope as the rest; only our plugin reads it.
+pub(super) fn opencode_questions(answers: &[Vec<String>]) -> String {
+    json!({ "hookSpecificOutput": { "hookEventName": "Question", "answers": answers } }).to_string()
 }
 
 /// ExitPlanMode approved: allow, echoing the input (the plan Claude Code injected). Which
@@ -90,6 +98,13 @@ mod tests {
                 "answers": { "Which framework?": "React", "Which features?": "Blog, Search" }
             } } })
         );
+    }
+
+    #[test]
+    fn opencode_answers_are_one_list_per_question() {
+        // `POST /question/{requestID}/reply` takes `{ answers: string[][] }` (OpenCode 1.19).
+        let out = parse(&opencode_questions(&[vec!["Astro".into()], vec!["Blog".into(), "Search".into()], vec!["typed".into()]]));
+        assert_eq!(out, json!({ "hookSpecificOutput": { "hookEventName": "Question", "answers": [["Astro"], ["Blog", "Search"], ["typed"]] } }));
     }
 
     #[test]
