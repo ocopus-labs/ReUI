@@ -19,6 +19,21 @@ fn art(glyph: char) -> Element {
     Element::Art(Art::Glyph(glyph))
 }
 
+/// How a device is drawn: ReUI's drawing of its kind (`small` for the pill and bubble, `full`
+/// for the card's tile), or its glyph in both where there's no drawing. The module makes
+/// these (the drawings are images sent to the island), so the views stay pure.
+#[derive(Debug, Clone, PartialEq)]
+pub struct Mark {
+    pub small: Element,
+    pub full: Element,
+}
+
+impl Mark {
+    pub fn glyph(glyph: char) -> Self {
+        Mark { small: art(glyph), full: art(glyph) }
+    }
+}
+
 fn ring(level: u8) -> Element {
     Element::Ring(f32::from(level.min(100)) / 100.0)
 }
@@ -77,8 +92,7 @@ fn pod_rows(pods: &Pods) -> Vec<Row> {
 /// name for it as the hero; the detail is the exact model when that adds something, and the
 /// level unless the buds and case have rows of their own ("AirPods Pro (2nd generation) ·
 /// 80%").
-pub fn connect_view(d: &DeviceInfo) -> View {
-    let glyph = art(d.kind.glyph());
+pub fn connect_view(d: &DeviceInfo, mark: &Mark) -> View {
     let level = d.level.map_or(Element::Empty, ring);
     let rows = d.pods.as_ref().map(pod_rows).unwrap_or_default();
     let percent = if rows.is_empty() { d.level.map(percent) } else { None };
@@ -86,28 +100,27 @@ pub fn connect_view(d: &DeviceInfo) -> View {
     let detail = (!parts.is_empty()).then(|| parts.join(" · "));
     View {
         accent: low_accent(d.level),
-        compact: CompactView { leading: glyph.clone(), trailing: level.clone() },
-        minimal: if d.level.is_some() { level.clone() } else { glyph.clone() },
-        expanded: Some(expanded(glyph, Some("Connected"), Headline::Text(d.name.clone()), detail, if rows.is_empty() { level } else { Element::Empty }, rows)),
+        compact: CompactView { leading: mark.small.clone(), trailing: level.clone() },
+        minimal: if d.level.is_some() { level.clone() } else { mark.small.clone() },
+        expanded: Some(expanded(mark.full.clone(), Some("Connected"), Headline::Text(d.name.clone()), detail, if rows.is_empty() { level } else { Element::Empty }, rows)),
         audio: None,
     }
 }
 
-/// Several devices at once: the first one's glyph and how many. Clicking opens the overview.
-pub fn merged_view(kinds: &[Kind]) -> View {
-    let glyph = art(kinds.first().copied().unwrap_or_default().glyph());
+/// Several devices at once: the first one's mark and how many. Clicking opens the overview.
+pub fn merged_view(first: &Mark, count: usize) -> View {
     View {
         accent: None,
-        compact: CompactView { leading: glyph.clone(), trailing: Element::Text { text: format!("{} devices", kinds.len()), tone: Tone::Secondary } },
-        minimal: glyph,
+        compact: CompactView { leading: first.small.clone(), trailing: Element::Text { text: format!("{count} devices"), tone: Tone::Secondary } },
+        minimal: first.small.clone(),
         expanded: None,
         audio: None,
     }
 }
 
-/// S2/S4: the device's glyph and its level in a red ring. Clicking opens the overview.
-pub fn low_view(glyph: char, level: u8) -> View {
-    View { accent: Some(RED), compact: CompactView { leading: art(glyph), trailing: ring(level) }, minimal: ring(level), expanded: None, audio: None }
+/// S2/S4: the device's mark and its level in a red ring. Clicking opens the overview.
+pub fn low_view(mark: &Mark, level: u8) -> View {
+    View { accent: Some(RED), compact: CompactView { leading: mark.small.clone(), trailing: ring(level) }, minimal: ring(level), expanded: None, audio: None }
 }
 
 /// S3: bolt and level; open: the level and, once stable, the time to full.
@@ -240,12 +253,12 @@ mod tests {
     fn devices_connect_card_names_the_model_when_it_adds_something() {
         let detail = |name: &str, model, level, pods| {
             let d = DeviceInfo { model, pods, ..device(name, Kind::Earbuds, level) };
-            connect_view(&d).expanded.unwrap().detail
+            connect_view(&d, &Mark::glyph(d.kind.glyph())).expanded.unwrap().detail
         };
         let pro2 = Some("AirPods Pro (2nd generation)");
         // The user's name stays the hero; the model and level are the detail.
         assert_eq!(detail("Rohit's AirPods", pro2, Some(82), None).as_deref(), Some("AirPods Pro (2nd generation) · 82%"));
-        let v = connect_view(&DeviceInfo { model: pro2, ..device("Rohit's AirPods", Kind::Earbuds, Some(82)) });
+        let v = connect_view(&DeviceInfo { model: pro2, ..device("Rohit's AirPods", Kind::Earbuds, Some(82)) }, &Mark::glyph(Kind::Earbuds.glyph()));
         assert_eq!(v.expanded.unwrap().headline, Headline::Text("Rohit's AirPods".into()));
         // With bud rows, the model alone.
         assert_eq!(detail("Rohit's AirPods", pro2, Some(70), Some(pods())).as_deref(), Some("AirPods Pro (2nd generation)"));
@@ -258,15 +271,15 @@ mod tests {
 
     #[test]
     fn devices_connect_card_upgrades_in_place() {
-        let unknown = connect_view(&device("MX Master", Kind::Mouse, None));
+        let unknown = connect_view(&device("MX Master", Kind::Mouse, None), &Mark::glyph(Kind::Mouse.glyph()));
         assert_eq!(unknown.compact.trailing, Element::Empty);
         assert_eq!(unknown.minimal, art(Kind::Mouse.glyph()));
-        let known = connect_view(&device("MX Master", Kind::Mouse, Some(15)));
+        let known = connect_view(&device("MX Master", Kind::Mouse, Some(15)), &Mark::glyph(Kind::Mouse.glyph()));
         assert_eq!(known.compact.trailing, Element::Ring(0.15));
         assert_eq!(known.accent, Some(RED));
         assert_eq!(known.expanded.as_ref().unwrap().detail.as_deref(), Some("15%"));
 
-        let buds = connect_view(&DeviceInfo { pods: Some(pods()), ..device("AirPods Pro", Kind::Earbuds, Some(70)) });
+        let buds = connect_view(&DeviceInfo { pods: Some(pods()), ..device("AirPods Pro", Kind::Earbuds, Some(70)) }, &Mark::glyph(Kind::Earbuds.glyph()));
         let rows = &buds.expanded.as_ref().unwrap().rows;
         assert_eq!(rows.len(), 2);
         assert_eq!(rows[0], Row::Progress { fraction: 0.8, leading: Some("Left".into()), trailing: Some("80%".into()) });
@@ -302,7 +315,7 @@ mod tests {
         let c = charging_view(64, Some("Full in 1 h".into()));
         let e = c.expanded.unwrap();
         assert_eq!((e.headline, e.detail.as_deref()), (Headline::Value("64%".into()), Some("Full in 1 h")));
-        assert_eq!(low_view(Kind::Mouse.glyph(), 10).minimal, Element::Ring(0.1));
+        assert_eq!(low_view(&Mark::glyph(Kind::Mouse.glyph()), 10).minimal, Element::Ring(0.1));
         let d = Drive { letter: 'F', label: String::new(), free: 1, total: 2, card: true };
         let one = drive_view(&[(d.clone(), None)]).unwrap();
         assert_eq!(one.compact.leading, art(GLYPH_SD_CARD));
@@ -310,6 +323,6 @@ mod tests {
         let two = drive_view(&[(d.clone(), None), (Drive { letter: 'G', ..d }, None)]).unwrap();
         assert_eq!(two.compact.trailing, Element::Text { text: "2 drives".into(), tone: Tone::Secondary });
         assert!(drive_view(&[]).is_none());
-        assert_eq!(merged_view(&[Kind::Mouse, Kind::Keyboard, Kind::Earbuds]).compact.trailing, Element::Text { text: "3 devices".into(), tone: Tone::Secondary });
+        assert_eq!(merged_view(&Mark::glyph(Kind::Mouse.glyph()), 3).compact.trailing, Element::Text { text: "3 devices".into(), tone: Tone::Secondary });
     }
 }

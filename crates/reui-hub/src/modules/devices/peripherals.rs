@@ -5,7 +5,7 @@
 use std::collections::HashMap;
 use std::time::Duration;
 
-use reui_protocol::Priority;
+use reui_protocol::{Art, Element, Priority};
 use tokio::time::Instant;
 
 use super::airpods::{self, Expect, Scan, Sighting};
@@ -16,7 +16,7 @@ use super::kinds::Kind;
 use super::low::CRITICAL;
 use super::registry::Change;
 use super::spam::Verdict;
-use super::{handoff, pnp, view, Burst, ConnectCard, State, Internal, Pad};
+use super::{art, handoff, pnp, view, Burst, ConnectCard, State, Internal, Pad};
 use crate::hub::ModuleContext;
 
 /// A connect card's time (S1)...
@@ -136,16 +136,18 @@ impl State {
     /// Publishes the connect card as it is now, keeping it at least `linger` longer.
     fn publish_connect(&mut self, ctx: &ModuleContext, linger: Duration) {
         let Some(card) = &self.connect else { return };
-        let devices: Vec<_> = card.members.iter().filter_map(|k| self.registry.get(*k)).collect();
+        let key = card.key.clone();
+        let members = card.members.clone();
+        let devices: Vec<_> = members.iter().filter_map(|k| self.registry.get(*k)).map(|d| (view::DeviceInfo::of(d), d.kind.is_audio())).collect();
+        let Some((first, _)) = devices.first() else { return };
+        let mark = self.mark(ctx, first.kind);
         let view = match devices.as_slice() {
-            [] => return,
-            [d] => view::connect_view(&view::DeviceInfo::of(d)),
-            many => view::merged_view(&many.iter().map(|d| d.kind).collect::<Vec<_>>()),
+            [(d, _)] => view::connect_view(d, &mark),
+            many => view::merged_view(&mark, many.len()),
         };
-        if devices.iter().any(|d| d.kind.is_audio()) {
+        if devices.iter().any(|(_, audio)| *audio) {
             handoff::claim_audio_connect();
         }
-        let key = card.key.clone();
         self.show(ctx, &key, Priority::Brief, view, linger);
     }
 
@@ -161,18 +163,34 @@ impl State {
         let Some(level) = device.level() else { return };
         let charging = device.charging();
         if let Some(threshold) = device.low.update(level, charging) {
-            let glyph = device.kind.glyph();
-            self.show_low(ctx, &format!("low:{key:016x}"), glyph, level, threshold);
+            let kind = device.kind;
+            let mark = self.mark(ctx, kind);
+            self.show_low(ctx, &format!("low:{key:016x}"), &mark, level, threshold);
         }
     }
 
-    pub(super) fn show_low(&mut self, ctx: &ModuleContext, key: &str, glyph: char, level: u8, threshold: u8) {
+    /// The drawing for a device of `kind` (ReUI's own, `design/assets/devices`), its glyph
+    /// where there's none. Made once per kind: each drawing goes to the island once.
+    pub(super) fn mark(&mut self, ctx: &ModuleContext, kind: Kind) -> view::Mark {
+        if let Some(mark) = self.marks.get(&kind) {
+            return mark.clone();
+        }
+        let logo = |small| art::svg(kind.id(), small).map(|svg| Element::Art(Art::Logo { image: ctx.image(svg.to_vec()), animated: false }));
+        let mark = match (logo(true), logo(false)) {
+            (Some(small), Some(full)) => view::Mark { small, full },
+            _ => view::Mark::glyph(kind.glyph()),
+        };
+        self.marks.insert(kind, mark.clone());
+        mark
+    }
+
+    pub(super) fn show_low(&mut self, ctx: &ModuleContext, key: &str, mark: &view::Mark, level: u8, threshold: u8) {
         if !self.settings.low_battery {
             return;
         }
         // Critical ones also show in "only when it needs me" mode (D8).
         let priority = if threshold <= CRITICAL { Priority::Alert } else { Priority::Brief };
-        self.show(ctx, key, priority, view::low_view(glyph, level), LOW);
+        self.show(ctx, key, priority, view::low_view(mark, level), LOW);
     }
 
     pub(super) fn read_batteries(&self) {
@@ -274,7 +292,8 @@ impl State {
         pad.identity = identity;
         let Some(level) = pad.reading.level else { return };
         if let Some(threshold) = pad.low.update(level, pad.reading.charging) {
-            self.show_low(ctx, &format!("low:pad:{key:016x}"), Kind::Gamepad.glyph(), level, threshold);
+            let mark = self.mark(ctx, Kind::Gamepad);
+            self.show_low(ctx, &format!("low:pad:{key:016x}"), &mark, level, threshold);
         }
     }
 

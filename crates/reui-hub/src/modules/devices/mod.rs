@@ -37,9 +37,6 @@ use tokio::time::{sleep_until, Instant};
 use windows::Gaming::Input::RawGameController;
 
 mod airpods;
-/// Device drawings; not shown yet (the views still use Fluent glyphs until the model
-/// mapping lands), so only the tests use it for now.
-#[allow(dead_code)]
 mod art;
 mod bluetooth;
 mod catalog;
@@ -181,6 +178,8 @@ struct State {
     drive_card: Option<DriveCard>,
     rescans: Vec<Instant>,
     phones_shown: HashMap<u64, Instant>,
+    /// Each kind's drawing, made once (see `mark`).
+    marks: HashMap<kinds::Kind, view::Mark>,
 }
 
 async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
@@ -220,6 +219,7 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
         drive_card: None,
         rescans: Vec::new(),
         phones_shown: HashMap::new(),
+        marks: HashMap::new(),
     };
     tokio::spawn(async move {
         let started = tokio::task::spawn_blocking(move || start(sys_tx, bt_tx, pad_tx, power_tx)).await;

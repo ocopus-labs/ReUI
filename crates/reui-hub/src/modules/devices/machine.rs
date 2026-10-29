@@ -70,7 +70,7 @@ impl State {
                 let level = percent.min(100) as u8;
                 // The first value is the baseline (startup at 15 % isn't news).
                 if let Some(threshold) = self.laptop_low.update(level, self.source == Some(PowerSource::Ac)) {
-                    self.show_low(ctx, "low:laptop", battery_glyph(percent), level, threshold);
+                    self.show_low(ctx, "low:laptop", &view::Mark::glyph(battery_glyph(percent)), level, threshold);
                 }
                 self.refresh_power(ctx);
                 self.refresh_overview(ctx);
