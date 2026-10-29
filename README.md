@@ -1,92 +1,124 @@
-# ReUI
+<p align="center">
+  <img src="design/logo/reui-256.png" width="96" height="96" alt="ReUI logo">
+</p>
 
-A unified dynamic island for Windows, and later our own Windows shell. See `PLAN.md` for the plan and `DESIGN.md` for the design system.
+<h1 align="center">ReUI</h1>
 
-## Layout
+<p align="center">The Dynamic Island for Windows.</p>
 
-| Path | What |
-| --- | --- |
-| `design/tokens.json` | Design tokens, the source of truth for the look (see `DESIGN.md`) |
-| `crates/reui-design` | Tokens compiled into typed Rust constants at build time |
-| `crates/reui-protocol` | Wire protocol between the hub and surfaces: a semantic view model after Apple's Live Activity presentations (compact, minimal, expanded), postcard frames |
-| `crates/reui-hub` | Background process. Owns every module's state, decides which activity is in front, serves surfaces over a per-user named pipe, supervises the island |
-| `crates/reui-island` | The pill, rendered natively with Windows.UI.Composition; renders whatever the hub puts in front and sends actions back |
-| `crates/reui-setup` | Per-user installer and uninstaller (`ReUI-Setup-<version>.exe`), with the programs embedded at build time |
-| `crates/reui-bridge` | The program coding agents run as a hook; forwards events to the hub, answers permission requests and Claude's questions and plans, and installs/uninstalls the hooks |
+<!--
+  Static badges only: shields.io can't read a private repository. When the repository is
+  public, add these dynamic ones:
+    https://img.shields.io/github/v/release/ocopus-labs/ReUI                  (latest release)
+    https://img.shields.io/github/downloads/ocopus-labs/ReUI/total            (downloads)
+    https://img.shields.io/github/actions/workflow/status/ocopus-labs/ReUI/release.yml  (build)
+  and a license badge once there is a LICENSE.
+-->
+<p align="center">
+  <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-3A3A3D?labelColor=1C1C1E" alt="Windows 10 | 11">
+  <img src="https://img.shields.io/badge/version-0.1.0-3A3A3D?labelColor=1C1C1E" alt="Version 0.1.0">
+  <img src="https://img.shields.io/badge/built%20with-Rust-3A3A3D?labelColor=1C1C1E" alt="Built with Rust">
+  <img src="https://img.shields.io/badge/install-no%20admin%20needed-3A3A3D?labelColor=1C1C1E" alt="No admin needed">
+</p>
+
+<p align="center">
+  <a href="https://github.com/ocopus-labs/ReUI/releases/latest"><b>Download for Windows</b></a>
+  &nbsp;·&nbsp;
+  <a href="docs/guide.md">Guide</a>
+  &nbsp;·&nbsp;
+  <a href="CHANGELOG.md">What's new</a>
+</p>
+
+<p align="center">
+  <img src="docs/images/hero.png" width="960" alt="The island open at the top of the screen, playing Clair de Lune">
+</p>
+
+ReUI puts a small black island at the top of your screen. It shows what's playing, what you copied, your timers, your devices and the coding agents waiting on you, and lets you act on them without leaving the window you're in. Rest the pointer on it to peek, click to open, scroll to step through everything that's going on. Clicks pass through to the window underneath until you pause on the island, so it never gets in the way of a browser tab.
+
+It's a native Windows app written in Rust, and it sits idle until something happens: it follows Windows' own events and draws nothing while nothing moves.
+
+## What it does
+
+### Now Playing
+
+<img src="docs/images/now-playing.png" width="403" alt="The pill with music playing and a timer in the bubble beside it">
+
+Whatever plays on your PC shows in the pill: Spotify, a browser, VLC, Media Player, anything in Windows' media controls. Open it for the artwork, a timeline you can scrub, the player's own controls and the volume. Swipe sideways on the pill to skip a track. Synced lyrics are there when you turn them on.
+
+### Clipboard history
+
+<img src="docs/images/clipboard.png" width="752" alt="Clipboard history open: a search field and a row of cards for a note, a link, a colour and a command">
+
+**Win+Alt+V** brings back everything you copied: text with its formatting, images, files, links with their page's title, colours, code. Type to search, press Enter to paste into the app you were in, or Alt+1 to Alt+9 to paste one of the first nine. Pin what you want to keep. Copies from password managers and anything that looks like a password, key or token are never saved, and the history is kept only on your PC.
+
+### Volume and brightness
+
+<img src="docs/images/volume.png" width="392" alt="The volume level in the island, at 56 %">
+
+The volume and brightness keys show their level in the island, and ReUI can replace Windows' own pop-up. Drag or scroll to change the level, click the icon to mute, switch the output device from its menu. Caps Lock, Num Lock, battery saver and microphone mute can show there too.
+
+### Devices
+
+<img src="docs/images/devices.png" width="612" alt="Wireless earbuds just connected, at 82 % battery">
+
+Bluetooth devices show their battery when they connect. Your PC and its devices warn at 20 % and 10 %, plugging in shows the time to full, and USB drives and memory cards come with **Eject**.
+
+### Timers and focus
+
+<img src="docs/images/timers.png" width="612" alt="A tea timer counting down, 3:42 left">
+
+Press **Win+Ctrl+T** and type how long: `10`, `90s`, `1h30`, `10m tea`. Run several at once; they keep going through sleep and restarts, and when one ends the island opens with a sound: **Stop**, or **+1 min**. Type `focus` for focus sessions (25 minutes of work, 5-minute breaks) that can turn on Do Not Disturb while you work, or `sw` for a stopwatch with laps.
+
+### Coding agents
+
+<img src="docs/images/agents.png" width="672" alt="Claude Code asking permission to run npm test, with Deny, Always and Allow">
+
+Claude Code, Codex and OpenCode show in the island only when they need you: a permission to allow or deny, a question or a plan from Claude Code, a turn that failed. Answer from the island and stay in your editor. Each card says which session is asking, shows the full command or the changed lines, and hides anything that looks like a secret. A card never takes your keyboard by itself, so a stray Enter can't allow anything. Connect an agent in Settings → Coding agents.
+
+### Appearance
+
+<p>
+  <img src="docs/images/appearance-light.png" width="49%" alt="The timer card in the light theme">
+  <img src="docs/images/appearance-notch.png" width="49%" alt="The timer card in Notch style, joined to the top edge of the screen">
+</p>
+
+Dark, light, or following Windows' own mode. *Island* floats just below the top edge; *Notch* joins it to the edge like a laptop's notch. Roundness, padding, size and the accent (ReUI blue or your Windows accent) are yours to set, and the island picks up a change at once.
+
+Every feature, shortcut and gesture is in the [guide](docs/guide.md).
 
 ## Install
 
-1. Download `ReUI-Setup-<version>.exe` from the repository's **Releases** page.
-2. Run it. It installs for your user only (no admin) into `%LOCALAPPDATA%\Programs\ReUI`, adds ReUI to the Start menu, starts it with Windows, and launches it.
-3. Releases aren't code-signed yet, so Windows SmartScreen may say "Windows protected your PC". Choose **More info → Run anyway**.
+1. Download `ReUI-Setup-<version>.exe` from the [Releases page](https://github.com/ocopus-labs/ReUI/releases/latest).
+2. Run it. It installs for your user only, so no admin rights are needed, adds ReUI to the Start menu, starts it with Windows and opens it.
+3. Releases aren't code-signed yet, so Windows SmartScreen may say "Windows protected your PC". Choose **More info**, then **Run anyway**.
 
-Running the setup again, or a newer one, upgrades in place; your settings and clipboard history (`%APPDATA%\ReUI`) are kept. Launching ReUI from the Start menu while it's running opens Settings. Prefer no installer? `ReUI-<version>-x64.zip` holds the same programs: unzip and run `reui-setup.exe` (it installs the files next to it), or run `reui-hub.exe` in place.
-
-Setup options: `--no-autostart` (don't start with Windows), `--no-launch`, `--quiet` (no message boxes).
-
-## Guide
-
-What each feature does, and every shortcut and gesture: [docs/guide.md](docs/guide.md). Settings → About → Replay the tour shows the three welcome steps again.
+Running a newer setup upgrades in place and keeps your settings and clipboard history. Settings opens from the tray icon, or by launching ReUI again from the Start menu. Prefer no installer? `ReUI-<version>-x64.zip` on the same page holds the same programs.
 
 ## Updates
 
-ReUI looks for a new GitHub release once a day (Settings → About → Check automatically, on by default; Privacy & data lists it): the hub runs `reui-settings.exe --check-updates`, which asks `api.github.com` for the latest release and notes it in `%LOCALAPPDATA%\ReUI\update.json`. A new version gets a card in the island that waits for an answer without taking over: **Later** puts that version off for a day (a newer one shows at once), **Install** runs `reui-settings.exe --install-update` (no window), which prints one line per step (`progress <0..1>`, `verifying`, `installing`, `error <message>`) that the card follows as a download bar, then "Installing", or "Couldn't update" with the reason and Try again. The tray menu's **Install update** does the same. Turning Check automatically off means no network and no card. **Install** in the island and in Settings → About both download `ReUI-Setup-<version>.exe` to `%TEMP%`, checks its size and its SHA-256 against the release's `sha256sums.txt`, and runs it with `--quiet` (it stops ReUI, upgrades and starts it again). On the first start of a new version, About shows that version's CHANGELOG entry once (Settings → About → What's new after updates). The repository is one constant, `REPOSITORY` in `crates/reui-settings/src/updates/mod.rs` (`ocopus-labs/ReUI`); checks and downloads are anonymous, so they find releases only once it is public. To try the island's flow, run a sandboxed hub (`REUI_CONFIG_DIR=<dir>`) with a hand-written `<dir>\local\update.json` (`available`, `setup_url`, `notes`) and `REUI_UPDATE_SIMULATE=ok` or `fail`: a sandbox never installs, and with that set `--install-update` plays the steps out without any network.
+ReUI checks GitHub for a new version once a day. When one is out, the island says so: **Install** downloads it, checks it against the release's checksums, installs it and restarts ReUI; **Later** puts it off for a day. After an update, Settings → About shows what changed. Turn the check off in Settings → About.
+
+## Privacy
+
+Your clipboard history, settings and logs stay on your PC. There's no account and no telemetry. ReUI goes online for three things only:
+
+- **Link previews:** the title and image of links you copy, from public sites only. Turn them off in Settings → Clipboard.
+- **Update check:** once a day, to GitHub. Nothing about you is sent. Turn it off in Settings → About.
+- **Synced lyrics:** off until you turn them on; then the song's title, artist and album go to lrclib.net.
+
+Settings → Privacy & data lists all of it and opens the folders.
 
 ## Uninstall
 
-**Settings → Apps → Installed apps → ReUI → Uninstall**, or run `%LOCALAPPDATA%\Programs\ReUI\reui-setup.exe --uninstall`. It stops ReUI, puts back Windows' volume pop-up if ReUI was replacing it, removes the coding-agent hooks it installed, start with Windows and the Start menu entry, then asks whether to delete your data too (clipboard history, settings, caches). `--quiet` uninstalls without asking and keeps your data.
+**Settings → Apps → Installed apps → ReUI → Uninstall.** It stops ReUI, puts back Windows' volume pop-up if ReUI was replacing it, removes the coding-agent hooks it installed, starting with Windows and the Start menu entry, then asks whether to delete your data too.
 
-## Build from source
+## Requirements
 
-```
-cargo build --release
-target\release\reui-hub.exe --demo
-```
+- Windows 11, or Windows 10 version 2004 or later
+- 64-bit (x64)
 
-Release builds of the hub have no console window; debug builds (`cargo build`) keep one for the logs. `pwsh scripts/package.ps1 -OutDir dist` builds the release assets (the setup and the zip) the way `.github/workflows/release.yml` does on a `v*` tag.
+## More
 
-The hub starts the island plus the coding-agent and Now Playing modules (`--no-agents`, `--no-media` to skip them). `--demo` enables a module that shows now-playing, a 5-minute timer and, 25 s after each one is settled, the next agent moment: a permission with a scrolling script, a three-step question (one step multi-select) and a plan to approve. They take over the pill, answer nothing real, and time out and fail open (20 s for the permission, 60 s for the others). Hover to peek, click to expand, right-click the pill to quit ReUI. `--no-island` runs the hub alone so you can start `reui-island.exe` yourself.
-
-## Coding agents (Claude Code, Codex, OpenCode)
-
-One `agent` module per agent tracks each session and shows it only when it needs you (see [docs/PRD-agent-moments.md](docs/PRD-agent-moments.md)): permission requests and Claude Code's questions and plans, answered from the island, and a failed turn. Each such card starts with the session strip (agent, project, what you asked, time in turn), so two sessions never get confused; several waiting share one card, oldest first, with a pager on the strip and the count in the pill. A permission shows the full command or an edit's changed lines in a scrolling block (introduced by what it's for, never repeated in the hero), with secrets masked by the clipboard's rules. Claude Code offers Deny / Always / Allow; Codex and OpenCode take Deny / Allow (their hooks don't accept "always"); Alt+click Deny (or Shift+Enter) denies with a message. Claude's questions (AskUserQuestion: steps, multi-select, a typed answer) and plans (ExitPlanMode: Approve, or Keep planning with feedback) are answered through a blocking `PreToolUse` hook; "Answer in terminal" hands any of them back at once. Sessions at work (thinking, running a tool) and finished turns stay out of the island unless `%APPDATA%\ReUI\coding.json` asks for them (`show_sessions`: `needed` | `working`, `show_finished`), which Settings → Coding agents sets. Token usage is still counted.
-
-```
-%LOCALAPPDATA%\ReUI\bin\reui-bridge.exe install claude   [--scope user|project|local] [--project DIR]
-%LOCALAPPDATA%\ReUI\bin\reui-bridge.exe install codex    [--scope user|project]   then trust the hooks in Codex: /hooks
-%LOCALAPPDATA%\ReUI\bin\reui-bridge.exe install opencode [--scope user|project]   loaded on OpenCode's next start
-%LOCALAPPDATA%\ReUI\bin\reui-bridge.exe uninstall <agent> [same options]
-%LOCALAPPDATA%\ReUI\bin\reui-bridge.exe test <agent>      the island answers "Connected" (exits 1 if ReUI isn't running)
-```
-
-Settings → Coding agents does the same with Connect / Disconnect / Send test, and shows each agent's status ("Connected · last event 2 min ago", "Agent not found on this PC"); the hub notes each agent's last event in `%LOCALAPPDATA%\ReUI\agents.json` (at most one write per 10 s).
-
-| Agent | What gets installed | Usage from |
-| --- | --- | --- |
-| Claude Code | Hooks in `.claude/settings(.local).json` (exec form). Blocking: `PermissionRequest` (120 s), `PreToolUse` for `AskUserQuestion\|ExitPlanMode` (run as `reui-bridge claude ask`, 300 s) and `Elicitation` (300 s, answered "no decision" at once until MCP forms are supported) | Session transcripts |
-| Codex | Hooks in `~/.codex/hooks.json` (command line; Codex has no `args`) | `~/.codex/state_N.sqlite` → `threads.tokens_used` |
-| OpenCode | Plugin `~/.config/opencode/plugins/reui.js` | `~/.local/share/opencode/opencode.db` → `session` tokens |
-
-The installer merges into existing settings (other tools' hooks are untouched), keeps the original as `*.reui-backup`, and uninstall removes exactly its own entries. The hub keeps the copy in `%LOCALAPPDATA%\ReUI\bin` in step with itself when it starts, so a protocol change never silently disconnects agents.
-
-Safety: status events are `async` (agents never wait for them). Only what needs you waits: permission requests (the hub gives up after 100 s, the bridge after 110 s, the hook after 120 s) and Claude's questions and plans (280 / 290 / 300 s). Every failure (hub not running, timeout, bridge killed) means "no decision", so the agent asks you itself as usual. The bridge prints nothing except a decision and always exits 0. Hooks installed by a build before agent moments M2 lack the blocking question entry: those questions show read-only ("Answer in terminal") and Settings → Coding agents offers **Update hooks**.
-
-Usage numbers are **fresh tokens** (cache reads, usually ~97 % of all tokens at ~10 % of the price, are left out). Codex records one running total per thread, so its "today" counts whole threads active today.
-
-## Now Playing
-
-The hub's `media` module follows Windows' media sessions (GSMTC), so any player that shows up in the Windows media flyout works: Spotify, browsers, VLC, Media Player. It shows the artwork (its most vivid colour becomes the accent), title, artist, the player's name, a timeline the island advances itself, and only the transport controls the player enables. Playing is ongoing; paused steps back; nothing playing removes it. `--no-media` turns it off.
-
-## Clipboard
-
-The hub's `clipboard` module keeps everything you copy (text with its formatting, images with transparency, files) in `%APPDATA%\ReUI\clipboard.db` and gives it back from the island. The full spec is [docs/PRD-clipboard.md](docs/PRD-clipboard.md).
-
-- **Win+Alt+V** opens the panel (press again to close): a search field, type tabs with counts (All, Pinned, Links, Images, Text, Code, Colors, Files) and a scrolling row of rich cards. Each card shows the thing itself plus the source app's icon, its age and one fact (size, line count, site, "Cut", "Missing").
-- Keys while it's open: type to search, ←/→ select, Enter paste, Shift+Enter paste as plain text, Ctrl+Enter copy only, Alt+1–9 paste the Nth card, Ctrl+P pin, Delete (Ctrl+Z undoes), Tab switches tabs, Esc clears or closes. The app you were in keeps focus, so the paste lands there; if it runs elevated, or you switched apps, the item is left on the clipboard and the island says "Press Ctrl+V". Terminals get Shift+Insert.
-- Mouse: click pastes, Shift+click pastes plain text, the star and bin on the card under the pointer pin and delete it (the panel stays open), right-click a card for its menu, the wheel scrolls the row.
-- Privacy: copies that apps mark private (password managers) are never read; copies from ignored apps and text that looks like a secret (private keys, API tokens, JWTs) are never stored; history older than 30 days is removed except pinned items; up to 1 000 items / 500 MB. Pause for an hour or clear history from the tray. Nothing leaves the machine except link previews (public sites only, fetched when the card is shown; links that look like reset/sign-in/signed URLs only fetch the site's name).
-- Settings: `%APPDATA%\ReUI\clipboard.json` (`hotkey`, `retention_days`, `ignored_apps`, `link_previews`). `--no-link-previews` and `--no-clipboard` turn previews / the module off.
-
-## Adding a module
-
-Implement `modules::Module` in `crates/reui-hub/src/modules/`. In `run`, publish activities with `ctx.publish(key, priority, View { accent, compact, minimal, expanded })`, retract them with `ctx.retract(key)`, and handle inputs (button presses, agent hook calls) from `ctx.next()`. Register it in `main.rs`. Modules stay event-driven (no polling where an event exists) and describe meaning only: never sizes, fonts or theme colours.
+- [Guide](docs/guide.md): every feature, shortcut and gesture
+- [Building from source](docs/development.md): build, flags, files on disk, the coding-agent hooks
+- [Changelog](CHANGELOG.md)

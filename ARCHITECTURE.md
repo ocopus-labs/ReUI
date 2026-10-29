@@ -139,12 +139,14 @@ main.rs            single instance, --page, --welcome, --check-updates and
 window.rs          the window: own caption (no system title bar), hit-testing, DWM corners,
                    per-monitor DPI v2
 gpu.rs             D3D11 device, D2D device context, flip swap chain + frame-latency waitable
-perf.rs            --perf frame timings      shots.rs   --shots <dir> page screenshots
+perf.rs            --perf frame timings
+shots.rs           --shots <dir> page screenshots; --backdrop-color, --stages (the
+                   README's pictures: tools/readme-images.ps1)
 app/               state machine: page, scroll, hover, focus, menus, drags
   input.rs         pointer and keyboard (Tab order, arrows, Space/Enter, Esc)
   motion.rs        springs and eases stepped once per presented frame
   search.rs        sidebar search over every row's title and line
-  shot.rs          offscreen rendering for --shots
+  shot.rs          offscreen rendering for --shots (pages, and stages alone)
 ui/                pages as data: blocks, rows, parts (controls)
   layout.rs        where everything goes (pure, tested): rows, controls, scrolling, nav
   stage.rs         each page's island in the user's Look (its size, an open card's header and

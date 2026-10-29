@@ -87,6 +87,18 @@ pub fn read_now() {
     }
 }
 
+/// A solid colour instead of the wallpaper (screenshots for a public page, which must not
+/// show the user's own desktop).
+pub fn set_solid(color: Color) {
+    let generation = GENERATION.lock().map(|mut g| {
+        *g += 1;
+        *g
+    });
+    if let Ok(mut current) = CURRENT.lock() {
+        *current = Some(Arc::new(Backdrop { color, strip: None, scale: 1.0, generation: generation.unwrap_or(0) }));
+    }
+}
+
 /// Whether a `WM_SETTINGCHANGE` is about the wallpaper.
 pub fn changed(wparam: WPARAM) -> bool {
     wparam.0 as u32 == SPI_SETDESKWALLPAPER.0
