@@ -95,6 +95,9 @@ async fn main() -> Result<()> {
     if !has("--no-downloads") && feature_on("downloads.json") {
         enabled.push(Box::new(modules::downloads::Downloads));
     }
+    if !has("--no-screenshots") && feature_on("screenshots.json") {
+        enabled.push(Box::new(modules::screenshots::Screenshots));
+    }
     if !has("--no-updates") {
         enabled.push(Box::new(modules::updates::Updates));
     }
