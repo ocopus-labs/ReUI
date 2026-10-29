@@ -44,6 +44,7 @@ pub struct Spring {
 }
 
 pub mod icon;
+pub mod layout;
 pub mod look;
 
 #[allow(clippy::excessive_precision, clippy::approx_constant)]
