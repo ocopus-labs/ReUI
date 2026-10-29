@@ -19,8 +19,10 @@ pub enum Icon {
     Claude,
 }
 
-/// Which feature's island a header card shows.
+/// Which feature's island a header card shows. The Look is carried whole (a few hundred
+/// bytes, one per page build) so the preview draws exactly what the island draws.
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum Preview {
     /// The resting pill.
     Idle,
@@ -151,6 +153,7 @@ impl Row {
 }
 
 #[derive(Clone, Debug, PartialEq)]
+#[allow(clippy::large_enum_variant)]
 pub enum Block {
     /// The page's header card: its icon, title (the hero) and one paragraph, with an
     /// optional eyebrow above the title ("Step 1 of 3"), the feature's island above it all,

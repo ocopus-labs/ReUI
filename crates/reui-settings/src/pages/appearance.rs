@@ -46,9 +46,7 @@ pub fn build(state: &State) -> Vec<Block> {
         .part(Part::Segmented { options: vec!["ReUI blue".into(), "Windows".into()], selected: a.accent.index() })
         .enabled(ok)
         .icon(icons::tile(icons::PALETTE, look.accent));
-    // The Notch style lands with the island's notch shape (PRD M2).
-    let _ = style;
-    blocks.push(group("Look", vec![theme, accent]));
+    blocks.push(group("Look", vec![style, theme, accent]));
 
     let roundness = Row::new("roundness", "Roundness")
         .detail("From square-ish corners to a capsule")

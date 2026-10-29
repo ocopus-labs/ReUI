@@ -46,6 +46,7 @@ mod expanded;
 mod fonts;
 mod images;
 mod minimal;
+mod notch;
 mod rows;
 mod text;
 
@@ -58,6 +59,7 @@ pub const COMPACT_SURFACE: (f32, f32) = (COMPACT_MAX_WIDTH, island::HEIGHT);
 pub fn expanded_surface(look: &Look) -> (f32, f32) {
     (island::expanded::WIDE_WIDTH, look.max_height(island::expanded::ROOMY_MAX_HEIGHT))
 }
+pub use self::notch::EAR_SURFACE;
 pub const MINIMAL_SURFACE: (f32, f32) = (island::minimal::SIZE, island::minimal::SIZE);
 
 pub const BARS: usize = 4;

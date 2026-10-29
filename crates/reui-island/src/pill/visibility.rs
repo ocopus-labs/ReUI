@@ -2,7 +2,7 @@
 //! click-through, visibility modes, reveal, fullscreen hiding and staying topmost.
 
 
-use reui_design::tokens::{island, motion};
+use reui_design::tokens::{island, motion, notch};
 use reui_design::Spring;
 use windows::core::{h, Interface, Result, HSTRING};
 use windows::Foundation::{IReference, PropertyValue, TimeSpan};
@@ -27,7 +27,7 @@ impl Pill {
         let core_h = island::HEIGHT;
         let grow = island::compact::PEEK_GROW;
         match state {
-            State::Idle => (island::idle::WIDTH, core_h),
+            State::Idle => super::setup::idle_size(&self.look),
             State::Compact => (self.compact_width, core_h),
             State::Peek => (self.compact_width + grow, core_h + grow),
             State::Expanded => (self.expanded_width, self.expanded_height),
@@ -116,7 +116,8 @@ impl Pill {
         let s = self.scale;
         let win_w = (self.window.right - self.window.left) as f32;
         let pill_w = self.state_size(self.state).0;
-        let left = self.window.left as f32 + (win_w + pill_w * s) / 2.0 + island::minimal::GAP * s;
+        let gap = if self.look.notch() { notch::JOIN_GAP } else { island::minimal::GAP };
+        let left = self.window.left as f32 + (win_w + pill_w * s) / 2.0 + gap * s;
         let top = self.window.top as f32 + self.look.top() * s;
         let size = island::minimal::SIZE * s;
         Some((left, top, left + size, top + size))
