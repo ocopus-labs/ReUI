@@ -37,8 +37,12 @@ pub fn build(state: &State) -> Vec<Block> {
         .enabled(doc_ok)
         .icon(icons::tile(icons::VIEW, palette::BLUE));
     let monitor = Row::new("monitor", "Display").detail("Where the island sits").part(Part::Dropdown { label: monitor_label(&state.files.monitor()) }).enabled(doc_ok).icon(icons::tile(icons::MONITOR, palette::TEAL));
+    // Only means something when the island would otherwise hide.
+    let desktop = flag(state, File::Island, "show_on_desktop", "Always show on the desktop", "In apps it shows only as chosen above")
+        .enabled(doc_ok && selected != 0)
+        .icon(icons::tile(icons::WALLPAPER, palette::GREEN));
     let fullscreen = flag(state, File::Island, "hide_in_fullscreen", "Hide in full screen", "Games, videos and presentations keep the whole screen").icon(icons::tile(icons::FULLSCREEN, palette::PURPLE));
-    blocks.push(group("Island", vec![visibility, monitor, fullscreen]));
+    blocks.push(group("Island", vec![visibility, desktop, monitor, fullscreen]));
 
     let left = state.files.paused_until().and_then(|until| until.checked_sub(reui_protocol::unix_ms())).filter(|&ms| ms > 0);
     let pause = match left {

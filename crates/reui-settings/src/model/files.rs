@@ -67,7 +67,7 @@ impl File {
 
     fn defaults(self) -> Value {
         match self {
-            File::Island => json!({ "visibility": "always", "hide_in_fullscreen": true, "monitor": "primary", "check_updates": true, "whats_new": true }),
+            File::Island => json!({ "visibility": "always", "hide_in_fullscreen": true, "show_on_desktop": true, "monitor": "primary", "check_updates": true, "whats_new": true }),
             File::Media => json!({ "enabled": true, "visualizer": "real", "lyrics": false, "retract_after_pause_min": 10, "swipe_to_skip": true, "show_video": true }),
             File::Clipboard => json!({
                 "enabled": true,

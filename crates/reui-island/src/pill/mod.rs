@@ -142,6 +142,10 @@ pub struct Pill {
     hovered: bool,
     /// A fullscreen app is in front.
     hidden: bool,
+    /// The desktop is in front rather than an app (see `desktop.rs`).
+    on_desktop: bool,
+    /// The `show_on_desktop` setting: on the desktop, show as if visibility were Always.
+    show_on_desktop: bool,
     /// The `hide_in_fullscreen` setting.
     hide_in_fullscreen: bool,
     /// The `monitor` setting.
@@ -289,7 +293,7 @@ impl Pill {
         let open = if self.state == State::Expanded { self.open_id.clone() } else { None };
         // "When needed" hides ongoing things, so a confirmation there leads instead of
         // waiting in the bubble beside something the user can't see.
-        let briefs_lead = self.visibility == Visibility::WhenNeeded && !self.raw.activities.iter().any(|a| a.priority >= reui_protocol::Priority::Alert);
+        let briefs_lead = self.visibility == Visibility::WhenNeeded && !self.desktop_shows() && !self.raw.activities.iter().any(|a| a.priority >= reui_protocol::Priority::Alert);
         let mut raw = self.raw.activities.clone();
         if self.paused {
             // Paused: only decisions show (see `wants_shown`), alone in the pill.

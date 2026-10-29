@@ -199,6 +199,8 @@ impl Pill {
             inside: false,
             hovered: false,
             hidden: false,
+            on_desktop: crate::desktop::on_desktop(crate::desktop::front(unsafe { windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow() }), false),
+            show_on_desktop: true,
             hide_in_fullscreen: true,
             monitor_choice: MonitorChoice::default(),
             drag_guard: DragGuard::default(),

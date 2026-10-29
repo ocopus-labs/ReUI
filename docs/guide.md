@@ -14,7 +14,7 @@ ReUI puts a dynamic island at the top of your screen: a small black pill that sh
 | Right-click the pill or the tray icon | Settings, Pause ReUI for 1 hour, Clipboard history, Devices, Quit |
 | Push the pointer against the top edge | Shows a hidden island (Settings → General → Show the island: When active / When needed) |
 
-The island hides while a game, video or presentation fills the screen (Settings → General → Hide in full screen), and can sit on your main display, the display the pointer is on, or one display you choose (Settings → General → Display).
+The island hides while a game, video or presentation fills the screen (Settings → General → Hide in full screen), and can sit on your main display, the display the pointer is on, or one display you choose (Settings → General → Display). In "When active" and "When needed" it still shows in full whenever the desktop is in front (you clicked the wallpaper or pressed Win+D), and keeps out of the way inside apps (Settings → General → Always show on the desktop).
 
 **Pause ReUI** (tray, or Settings → General) quiets the island and stops recording the clipboard for an hour. Permission requests from coding agents still show.
 

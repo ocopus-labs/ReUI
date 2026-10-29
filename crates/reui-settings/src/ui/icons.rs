@@ -23,6 +23,8 @@ pub const BUG: char = '\u{EBE8}';
 pub const PAGE: char = '\u{E7C3}';
 pub const MONITOR: char = '\u{E7F4}';
 pub const FULLSCREEN: char = '\u{E740}';
+/// A picture: the wallpaper, so the desktop.
+pub const WALLPAPER: char = '\u{E8B9}';
 pub const VIEW: char = '\u{E890}';
 pub const KEYBOARD: char = '\u{E765}';
 pub const MIC: char = '\u{E720}';

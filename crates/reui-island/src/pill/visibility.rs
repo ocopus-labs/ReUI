@@ -10,6 +10,7 @@ use windows::Win32::Foundation::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 use windows_numerics::{Vector2, Vector3};
 
+use crate::desktop;
 use crate::fullscreen;
 use crate::place::{self, MonitorChoice, Placement};
 use crate::settings::{self, Settings};
@@ -141,6 +142,7 @@ impl Pill {
             eprintln!("island: showing {:?}", settings.visibility);
         }
         self.visibility = settings.visibility;
+        self.show_on_desktop = settings.show_on_desktop;
         if self.hide_in_fullscreen != settings.hide_in_fullscreen {
             self.hide_in_fullscreen = settings.hide_in_fullscreen;
             self.update_fullscreen(unsafe { GetForegroundWindow() });
@@ -195,7 +197,12 @@ impl Pill {
         if self.paused {
             return self.snapshot.activities.iter().any(|a| a.priority == reui_protocol::Priority::Decision);
         }
-        self.revealed || self.visibility.shows(&self.snapshot.activities)
+        self.revealed || self.desktop_shows() || self.visibility.shows(&self.snapshot.activities)
+    }
+
+    /// On the desktop with "Always show on the desktop": the island shows as if Always.
+    pub(super) fn desktop_shows(&self) -> bool {
+        self.show_on_desktop && self.on_desktop
     }
 
     /// Fades the island in or out to match the visibility mode, reveal and fullscreen.
@@ -280,6 +287,11 @@ impl Pill {
         }
         // Switching apps means the summoned card is done with.
         self.dismiss_summoned();
+        let on_desktop = desktop::on_desktop(desktop::front(fg), self.on_desktop);
+        if on_desktop != self.on_desktop {
+            self.on_desktop = on_desktop;
+            self.refresh_visibility();
+        }
         if !self.update_fullscreen(fg) {
             self.raise();
         }

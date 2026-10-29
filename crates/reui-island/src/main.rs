@@ -5,6 +5,7 @@
 
 #![windows_subsystem = "windows"]
 
+mod desktop;
 mod drag_guard;
 mod features;
 mod fullscreen;

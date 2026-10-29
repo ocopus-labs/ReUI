@@ -5,7 +5,7 @@
 //! know are kept when saving, and a file that isn't a JSON object is never overwritten.
 //!
 //! Keys: `visibility` ("always" | "when-active" | "when-needed"), `paused_until` (Unix ms),
-//! `hide_in_fullscreen` (bool, default true), `monitor` ("primary" | "cursor" | a display's
+//! `hide_in_fullscreen` (bool, default true), `show_on_desktop` (bool, default true), `monitor` ("primary" | "cursor" | a display's
 //! device name such as `\\.\DISPLAY2`).
 
 use std::path::{Path, PathBuf};
@@ -77,13 +77,16 @@ pub struct Settings {
     pub paused_until: Option<u64>,
     /// Hide while a game, video or presentation is fullscreen.
     pub hide_in_fullscreen: bool,
+    /// While the desktop is in front, show as if `visibility` were Always: in apps the island
+    /// keeps out of the way, on the desktop there's nothing for it to cover.
+    pub show_on_desktop: bool,
     /// Which display the island sits on.
     pub monitor: MonitorChoice,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { visibility: Visibility::default(), paused_until: None, hide_in_fullscreen: true, monitor: MonitorChoice::default() }
+        Self { visibility: Visibility::default(), paused_until: None, hide_in_fullscreen: true, show_on_desktop: true, monitor: MonitorChoice::default() }
     }
 }
 
@@ -110,6 +113,7 @@ impl Settings {
             visibility: map.get("visibility").and_then(Value::as_str).and_then(Visibility::parse).unwrap_or_default(),
             paused_until: map.get("paused_until").and_then(Value::as_u64),
             hide_in_fullscreen: map.get("hide_in_fullscreen").and_then(Value::as_bool).unwrap_or(true),
+            show_on_desktop: map.get("show_on_desktop").and_then(Value::as_bool).unwrap_or(true),
             monitor: map.get("monitor").and_then(Value::as_str).map(MonitorChoice::parse).unwrap_or_default(),
         }
     }
