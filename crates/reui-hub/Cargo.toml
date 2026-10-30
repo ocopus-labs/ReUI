@@ -22,7 +22,7 @@ serde.workspace = true
 serde_json = { version = "1.0", features = ["preserve_order"] }
 windows-future = "0.3.2"
 # `IIterable<HSTRING>` from a Vec (device watcher properties).
-windows-collections = "0.3.2"
+windows-collections = "0.100.0"
 # `#[implement]`/`#[interface]` expand to `::windows_core` paths (audio callbacks, IPolicyConfig).
 windows-core = "0.62.2"
 tokio = { workspace = true, features = ["rt", "net", "io-util", "sync", "time", "macros", "process", "signal"] }
