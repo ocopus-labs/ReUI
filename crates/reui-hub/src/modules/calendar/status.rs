@@ -1,7 +1,8 @@
 //! How each source's last refresh went, for Settings' "Your calendars" rows
 //! (`%LOCALAPPDATA%\ReUI\calendar\status.json`): whether it worked, when, how many events
-//! it holds, or why not. Without it a mistyped link would fail in silence. Counts and
-//! reasons only: never a link, a title or a time of an event.
+//! it holds, when its body last changed, or why not. Without it a mistyped link would fail
+//! in silence, and a provider serving an hours-old copy would look "updated just now".
+//! Counts, times and reasons only: never a link, a title or a time of an event.
 
 use std::collections::BTreeMap;
 use std::path::PathBuf;
@@ -16,6 +17,13 @@ pub struct Refresh {
     /// Events in the feed (all of them, not just this week's).
     pub events: usize,
     pub error: Option<String>,
+    /// When the copy held last came with a different body (Unix ms): a 304, or the same
+    /// body again, checks a feed without changing it.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub changed: Option<u64>,
+    /// The server's own `Last-Modified` for that copy (Unix ms), when it sends one.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub modified: Option<u64>,
 }
 
 /// By source id ("windows" for Windows' store).

@@ -16,14 +16,16 @@
 //! (`windows_store.rs`) when turned on. Links and cached feeds are DPAPI-encrypted
 //! (`dpapi.rs`); logs never name a link or an event.
 //!
-//! Commands: `open`, `reload`, `refresh`. Files: `event.rs`, `ics/`, `links.rs`,
-//! `schedule.rs`, `fetch.rs`, `network.rs`, `windows_store.rs`, `dpapi.rs`,
-//! `settings.rs`, `status.rs`, `view.rs`.
+//! Commands: `open`, `reload`, `refresh` (from Settings: every source now, however
+//! recently it was tried). Files: `event.rs`, `ics/`, `links.rs`, `schedule.rs`,
+//! `line.rs`, `fetch.rs`, `network.rs`, `windows_store.rs`, `dpapi.rs`, `settings.rs`,
+//! `status.rs`, `view.rs`.
 
 mod dpapi;
 mod event;
 mod fetch;
 mod ics;
+mod line;
 mod links;
 mod network;
 mod schedule;
@@ -35,7 +37,6 @@ mod windows_store;
 use std::collections::{HashMap, HashSet};
 use std::future::Future;
 use std::pin::Pin;
-use std::sync::Arc;
 use std::time::Duration;
 
 use chrono::{Days, Local, NaiveTime};
@@ -45,8 +46,9 @@ use tokio::sync::mpsc::{self, UnboundedSender};
 use tokio::time::{sleep_until, Instant};
 
 use self::event::{Event, Source as _};
-use self::fetch::{Cached, Fetched, Validators};
+use self::fetch::{Cached, Fetched};
 use self::ics::Feed;
+use self::line::{Line, Outcome};
 use self::settings::Settings;
 use self::status::{Refresh, Status};
 use self::windows_store::Snapshot;
@@ -59,9 +61,6 @@ const NOW: &str = "now";
 const TODAY: &str = "today";
 const WINDOWS: &str = "windows";
 const DAY_MS: u64 = 86_400_000;
-/// A refresh asked for again sooner than this (resume, then the network, then unlock)
-/// is the same refresh.
-const DEBOUNCE_MS: u64 = 60_000;
 
 pub struct Calendar;
 
@@ -78,28 +77,18 @@ impl Module for Calendar {
 /// What comes back from the blocking and network work.
 enum Msg {
     Settings(Settings),
-    /// A source's copy from disk, parsed.
-    Cached { id: String, feed: Feed, validators: Validators },
-    /// A refresh: a new feed, `None` when unchanged, or why it failed.
-    Fetched { id: String, result: Result<Option<(Feed, Validators)>, String> },
+    /// A source's copy from disk, parsed, for the edit of its link it was loaded for.
+    Cached { id: String, generation: u64, feed: Feed, cached: Cached },
+    /// A refresh, tagged with the edit of the link it was for.
+    Fetched { id: String, generation: u64, outcome: Outcome },
     Store(Result<Vec<Event>, String>),
-}
-
-/// One ICS link and where its refreshing is.
-struct Line {
-    source: settings::Source,
-    feed: Option<Arc<Feed>>,
-    validators: Validators,
-    failures: u32,
-    /// Next refresh (Unix ms).
-    due: u64,
-    busy: bool,
-    tried: u64,
 }
 
 struct State {
     settings: Option<Settings>,
     lines: Vec<Line>,
+    /// Tags each line (and each edit of its link) so stale fetches can be told apart.
+    generation: u64,
     store: Option<Snapshot>,
     store_due: u64,
     store_busy: bool,
@@ -128,6 +117,7 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
     let mut state = State {
         settings: None,
         lines: Vec::new(),
+        generation: 0,
         store: None,
         store_due: 0,
         store_busy: false,
@@ -156,7 +146,7 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
             Some(msg) = msgs.recv() => state.receive(msg),
             Some(event) = events.recv() => match event {
                 // Waits don't count sleep: look again now, and the feeds may have changed.
-                SystemEvent::Resumed => state.refresh_all(),
+                SystemEvent::Resumed => state.refresh_all(false),
                 // All-day and floating times are the PC's zone: work them out again.
                 SystemEvent::TimeChanged => state.dirty = true,
                 _ => continue,
@@ -193,17 +183,24 @@ impl State {
         }
         self.lines.retain(|l| ids.contains(l.source.id.as_str()));
         for source in &settings.sources {
+            self.generation += 1;
+            let generation = self.generation;
             match self.lines.iter_mut().find(|l| l.source.id == source.id) {
-                // Same id, new link: start over.
-                Some(line) if line.source.url != source.url => *line = Line::new(source.clone()),
+                // Same id, new link: start over (a fetch still out for the old one is
+                // dropped when it lands), and the old link's copy goes.
+                Some(line) if line.source.url != source.url => {
+                    *line = Line::new(source.clone(), generation);
+                    let id = source.id.clone();
+                    tokio::task::spawn_blocking(move || fetch::forget_cache(&id));
+                }
                 Some(line) => line.source = source.clone(),
                 None => {
-                    self.lines.push(Line::new(source.clone()));
+                    self.lines.push(Line::new(source.clone(), generation));
                     let (id, tx) = (source.id.clone(), self.tx.clone());
                     tokio::task::spawn_blocking(move || {
-                        if let Some(c) = fetch::load_cache(&id) {
-                            let feed = Feed::parse(&id, &c.text);
-                            _ = tx.send(Msg::Cached { id, feed, validators: c.validators });
+                        if let Some(cached) = fetch::load_cache(&id) {
+                            let feed = Feed::parse(&id, &cached.text);
+                            _ = tx.send(Msg::Cached { id, generation, feed, cached });
                         }
                     });
                 }
@@ -223,38 +220,32 @@ impl State {
         let now = unix_ms();
         match msg {
             Msg::Settings(s) => self.apply_settings(s),
-            Msg::Cached { id, feed, validators } => {
-                if let Some(line) = self.lines.iter_mut().find(|l| l.source.id == id && l.feed.is_none()) {
-                    line.feed = Some(Arc::new(feed));
-                    line.validators = validators;
-                    self.dirty = true;
+            Msg::Cached { id, generation, feed, cached } => {
+                if let Some(line) = self.lines.iter_mut().find(|l| l.source.id == id) {
+                    self.dirty |= line.cached(generation, feed, cached);
                 }
             }
-            Msg::Fetched { id, result } => {
+            Msg::Fetched { id, generation, outcome } => {
+                match &outcome {
+                    Outcome::Body { feed, .. } if feed.unsupported > 0 => println!("calendar: {} recurring event(s) in a feed repeat in a way only their first time is shown for", feed.unsupported),
+                    _ => {}
+                }
                 let Some(line) = self.lines.iter_mut().find(|l| l.source.id == id) else { return };
-                line.busy = false;
-                let refresh = match result {
-                    Ok(fresh) => {
-                        if let Some((feed, validators)) = fresh {
-                            if feed.unsupported > 0 {
-                                println!("calendar: {} recurring event(s) in a feed repeat in a way only their first time is shown for", feed.unsupported);
-                            }
-                            println!("calendar: a feed refreshed ({} events)", feed.len());
-                            line.feed = Some(Arc::new(feed));
-                            line.validators = validators;
-                            self.dirty = true;
-                        }
-                        line.failures = 0;
-                        Refresh { ok: true, at: now, events: line.feed.as_ref().map_or(0, |f| f.len()), error: None }
-                    }
-                    Err(why) => {
-                        line.failures += 1;
-                        eprintln!("calendar: a feed didn't refresh: {why}");
-                        Refresh { ok: false, at: now, events: line.feed.as_ref().map_or(0, |f| f.len()), error: Some(why) }
-                    }
+                let Some(landed) = line.land(generation, now, outcome) else {
+                    println!("calendar: dropped a refresh for a link since changed");
+                    return;
                 };
-                line.due = now + fetch::retry_after(line.failures);
-                self.status.insert(id, refresh);
+                match &landed.refresh.error {
+                    Some(why) => eprintln!("calendar: a feed didn't refresh: {why}"),
+                    None if landed.new_feed => println!("calendar: a feed refreshed ({} events)", landed.refresh.events),
+                    None => {}
+                }
+                if let Some(cached) = landed.save {
+                    let id = id.clone();
+                    tokio::task::spawn_blocking(move || fetch::save_cache(&id, &cached));
+                }
+                self.dirty |= landed.new_feed;
+                self.status.insert(id, landed.refresh);
                 self.save_status();
             }
             Msg::Store(result) => {
@@ -265,11 +256,11 @@ impl State {
                         let n = events.len();
                         self.store = Some(Snapshot(events));
                         self.dirty = true;
-                        Refresh { ok: true, at: now, events: n, error: None }
+                        Refresh { ok: true, at: now, events: n, error: None, changed: None, modified: None }
                     }
                     Err(why) => {
                         eprintln!("calendar: Windows' calendar store can't be read: {why}");
-                        Refresh { ok: false, at: now, events: 0, error: Some(why) }
+                        Refresh { ok: false, at: now, events: 0, error: Some(why), changed: None, modified: None }
                     }
                 };
                 if self.settings.as_ref().is_some_and(|s| s.windows) {
@@ -285,11 +276,12 @@ impl State {
         tokio::task::spawn_blocking(move || status::save(&status));
     }
 
-    /// Resume: every source again, now.
-    fn refresh_all(&mut self) {
+    /// Every source again, now: on resume (`force` false: folded with the network and
+    /// unlock that follow), or asked for from Settings (`force`: whenever it was tried).
+    fn refresh_all(&mut self, force: bool) {
         let now = unix_ms();
-        for line in self.lines.iter_mut().filter(|l| now.saturating_sub(l.tried) > DEBOUNCE_MS) {
-            line.due = now;
+        for line in &mut self.lines {
+            line.ask(now, force);
         }
         self.store_due = now;
         self.dirty = true;
@@ -298,33 +290,28 @@ impl State {
     /// The internet is back: the sources that failed, now.
     fn retry_failed(&mut self) {
         let now = unix_ms();
-        for line in self.lines.iter_mut().filter(|l| l.failures > 0 && now.saturating_sub(l.tried) > DEBOUNCE_MS) {
-            line.due = now;
+        for line in &mut self.lines {
+            line.retry(now);
         }
     }
 
     fn start_due(&mut self, now: u64) {
         let Some(client) = self.client.clone() else { return };
-        for line in self.lines.iter_mut().filter(|l| l.source.on && !l.busy && l.due <= now) {
-            line.busy = true;
-            line.tried = now;
+        for line in &mut self.lines {
+            let Some(generation) = line.start(now) else { continue };
             let (id, url, known, tx, client) = (line.source.id.clone(), line.source.url.clone(), line.validators.clone(), self.tx.clone(), client.clone());
             tokio::spawn(async move {
-                let result = match fetch::get(&client, &url, &known).await {
-                    Ok(Fetched::NotModified) => Ok(None),
+                let outcome = match fetch::get(&client, &url, &known).await {
+                    Ok(Fetched::NotModified) => Outcome::NotModified,
+                    // Parsed off the hub thread; kept on disk only once it's known to be
+                    // for the link as it is now.
                     Ok(Fetched::Body { text, validators }) => {
                         let id = id.clone();
-                        tokio::task::spawn_blocking(move || {
-                            let feed = Feed::parse(&id, &text);
-                            fetch::save_cache(&id, &Cached { validators: validators.clone(), text });
-                            Some((feed, validators))
-                        })
-                        .await
-                        .map_err(|_| "couldn't be read".to_string())
+                        tokio::task::spawn_blocking(move || Outcome::Body { feed: Feed::parse(&id, &text), text, validators }).await.unwrap_or_else(|_| Outcome::Failed("couldn't be read".into()))
                     }
-                    Err(why) => Err(why),
+                    Err(why) => Outcome::Failed(why),
                 };
-                _ = tx.send(Msg::Fetched { id, result });
+                _ = tx.send(Msg::Fetched { id, generation, outcome });
             });
         }
         if self.settings.as_ref().is_some_and(|s| s.windows) && !self.store_busy && self.store_due <= now {
@@ -399,7 +386,7 @@ impl State {
     fn act(&mut self, ctx: &ModuleContext, ModuleAction { key, action }: ModuleAction) {
         match (key.as_str(), action.as_str()) {
             ("", "reload") => self.load_settings(),
-            ("", "refresh") => self.refresh_all(),
+            ("", "refresh") => self.refresh_all(true),
             ("", "open") => self.open(ctx),
             (_, view::ACTION_JOIN) => self.join(&key),
             (_, view::ACTION_SETTINGS) => open_settings(),
@@ -442,12 +429,6 @@ impl State {
         println!("calendar: joining a {} meeting", link.service.name());
         self.seen.insert(k);
         tokio::task::spawn_blocking(move || open_link(&link.url));
-    }
-}
-
-impl Line {
-    fn new(source: settings::Source) -> Self {
-        Self { source, feed: None, validators: Validators::default(), failures: 0, due: 0, busy: false, tried: 0 }
     }
 }
 

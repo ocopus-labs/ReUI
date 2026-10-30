@@ -5,7 +5,6 @@
 use serde_json::Value;
 
 use super::{button, enable, flag, footed, group, head, Effect, Page};
-use crate::model::agents::ago;
 use crate::model::calendar::{self, Refresh};
 use crate::model::files::File;
 use crate::state::State;
@@ -25,6 +24,9 @@ pub fn build(state: &State) -> Vec<Block> {
         .into_iter()
         .map(|s| {
             let row = Row::new(&format!("source:{}", s.id), if s.host.is_empty() { "Calendar" } else { &s.host }).icon(icons::calendar()).part(Part::Toggle { on: s.on }).part(Part::Remove).enabled(ok);
+            let failing = s.on && status.get(&s.id).is_some_and(|r| !r.ok);
+            // Last, so the toggle and Remove keep their places whether it's there or not.
+            let row = if failing { row.part(button("Try again", Role::Secondary)) } else { row };
             refreshed(row, status.get(&s.id), s.on)
         })
         .collect();
@@ -52,14 +54,10 @@ pub fn build(state: &State) -> Vec<Block> {
 fn refreshed(row: Row, refresh: Option<&Refresh>, on: bool) -> Row {
     match refresh {
         _ if !on => row,
-        Some(Refresh { ok: true, events, at, .. }) => row.detail(format!("{} · updated {}", events_text(*events), ago(reui_protocol::unix_ms(), *at))),
-        Some(Refresh { error, .. }) => row.detail(format!("Couldn't refresh: {}", error.as_deref().unwrap_or("unknown"))).tone(Tone::Warning),
+        Some(r) if r.ok => row.detail(r.line(reui_protocol::unix_ms())),
+        Some(r) => row.detail(r.line(reui_protocol::unix_ms())).tone(Tone::Warning),
         None => row,
     }
-}
-
-fn events_text(n: u64) -> String {
-    if n == 1 { "1 event".into() } else { format!("{n} events") }
 }
 
 fn lead_min(state: &State) -> u64 {
@@ -106,6 +104,8 @@ pub fn act(state: &mut State, target: &Target, act: Act) -> Effect {
                 state.set(File::Calendar, "lead_min", Value::from(m));
             }
         }
+        // Try again: every source, now, however recently the hub last asked.
+        (_, 2, Act::Press) if row.starts_with("source:") => state.tell_hub("calendar", "refresh"),
         (_, part, Act::Press) => {
             if let Some(id) = row.strip_prefix("source:") {
                 let doc = state.files.doc(File::Calendar);
@@ -136,6 +136,17 @@ mod tests {
         let written = std::fs::read_to_string(dir.join("roaming").join("calendar.json")).unwrap();
         assert!(written.contains("dpapi:") && !written.contains("private-xyz"));
         let id = calendar::sources(state.files.doc(File::Calendar))[0].id.clone();
+        // A source that keeps failing says why on its row, with Try again after its toggle
+        // and Remove; pressing it removes nothing.
+        let status = dir.join("local").join("calendar");
+        std::fs::create_dir_all(&status).unwrap();
+        std::fs::write(status.join("status.json"), format!(r#"{{ "{id}": {{ "ok": false, "at": 0, "events": 3, "error": "timed out" }} }}"#)).unwrap();
+        let blocks = build(&state);
+        let row = blocks.iter().flat_map(|b| if let Block::Group { rows, .. } = b { rows.iter().collect() } else { Vec::new() }).find(|r| r.id == format!("source:{id}")).unwrap();
+        assert_eq!((row.detail.as_deref(), row.tone), (Some("Couldn't refresh: timed out"), Tone::Warning));
+        assert!(matches!(&row.parts[2], Part::Button { label, .. } if label == "Try again"));
+        act(&mut state, &Target::new(&format!("source:{id}"), 2), Act::Press);
+        assert_eq!(calendar::sources(state.files.doc(File::Calendar)).len(), 1);
         act(&mut state, &Target::new(&format!("source:{id}"), 0), Act::Press);
         assert!(!calendar::sources(state.files.doc(File::Calendar))[0].on);
         act(&mut state, &Target::new(&format!("source:{id}"), 1), Act::Press);

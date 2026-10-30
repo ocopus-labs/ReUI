@@ -28,6 +28,33 @@ pub struct Refresh {
     pub at: u64,
     pub events: u64,
     pub error: Option<String>,
+    /// When the feed's body last changed (unix ms), as the hub saw it.
+    pub changed: Option<u64>,
+    /// The server's `Last-Modified` for it (unix ms), when it sends one.
+    pub modified: Option<u64>,
+}
+
+impl Refresh {
+    /// A source's one line: how many events, and how fresh they really are. A check that
+    /// found nothing new isn't an update, so the time the calendar last changed is said
+    /// apart from the time it was asked whenever the two differ. A failure says why (the
+    /// island quietly goes on with the last good copy, so this row is where it shows).
+    pub fn line(&self, now: u64) -> String {
+        if !self.ok {
+            return format!("Couldn't refresh: {}", self.error.as_deref().unwrap_or("unknown"));
+        }
+        let events = if self.events == 1 { "1 event".into() } else { format!("{} events", self.events) };
+        let checked = super::agents::ago(now, self.at);
+        // The server knows best when it changed; never later than when it came.
+        let changed = match (self.modified, self.changed) {
+            (Some(m), Some(c)) => Some(m.min(c)),
+            (m, c) => m.or(c),
+        };
+        match changed.map(|c| super::agents::ago(now, c)) {
+            Some(changed) if changed != checked => format!("{events} · checked {checked} · changed {changed}"),
+            _ => format!("{events} · updated {checked}"),
+        }
+    }
 }
 
 pub fn sources(doc: &Doc) -> Vec<Source> {
@@ -75,6 +102,8 @@ pub fn status(paths: &Paths) -> HashMap<String, Refresh> {
                 at: r.get("at").and_then(Value::as_u64).unwrap_or(0),
                 events: r.get("events").and_then(Value::as_u64).unwrap_or(0),
                 error: r.get("error").and_then(Value::as_str).map(str::to_string),
+                changed: r.get("changed").and_then(Value::as_u64),
+                modified: r.get("modified").and_then(Value::as_u64),
             };
             (id, refresh)
         })
@@ -130,5 +159,20 @@ mod tests {
         assert!(add(&doc, "http://example.com/cal.ics").is_err());
         assert!(add(&doc, "not a link").is_err());
         _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn a_check_is_told_apart_from_a_change() {
+        const MIN: u64 = 60_000;
+        let now = 1_000 * MIN;
+        let ok = |at, changed, modified| Refresh { ok: true, at, events: 12, error: None, changed, modified };
+        assert_eq!(ok(now - 2 * MIN, Some(now - 180 * MIN), None).line(now), "12 events · checked 2 min ago · changed 3 h ago");
+        assert_eq!(ok(now, Some(now), None).line(now), "12 events · updated just now", "a new body is an update");
+        assert_eq!(ok(now, None, None).line(now), "12 events · updated just now", "an older hub's status");
+        assert_eq!(ok(now, Some(now), Some(now - 300 * MIN)).line(now), "12 events · checked just now · changed 5 h ago", "the server's own date when older");
+        let failed = Refresh { ok: false, at: now, events: 12, error: Some("was sent to a web page".into()), changed: Some(0), modified: None };
+        assert_eq!(failed.line(now), "Couldn't refresh: was sent to a web page");
+        let single = Refresh { events: 1, ..ok(now, None, None) };
+        assert_eq!(single.line(now), "1 event · updated just now");
     }
 }
