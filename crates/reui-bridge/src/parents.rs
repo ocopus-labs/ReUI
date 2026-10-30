@@ -46,13 +46,29 @@ pub fn console() -> isize {
 }
 
 fn processes() -> Vec<(u32, u32)> {
+    named().into_iter().map(|(pid, parent, _)| (pid, parent)).collect()
+}
+
+/// The program that ran this bridge, without `.exe` and lower-cased ("pwsh", "python"):
+/// a script activity's source when the script doesn't name one.
+pub fn parent_name() -> Option<String> {
+    let table = named();
+    let me = std::process::id();
+    let parent = table.iter().find(|(pid, _, _)| *pid == me)?.1;
+    let name = table.iter().find(|(pid, _, _)| *pid == parent)?.2.to_lowercase();
+    Some(name.strip_suffix(".exe").unwrap_or(&name).to_string())
+}
+
+/// Every process: (pid, parent pid, exe name).
+fn named() -> Vec<(u32, u32, String)> {
     let mut table = Vec::new();
     unsafe {
         let Ok(snapshot) = CreateToolhelp32Snapshot(TH32CS_SNAPPROCESS, 0) else { return table };
         let mut entry = PROCESSENTRY32W { dwSize: std::mem::size_of::<PROCESSENTRY32W>() as u32, ..Default::default() };
         let mut more = Process32FirstW(snapshot, &mut entry).is_ok();
         while more {
-            table.push((entry.th32ProcessID, entry.th32ParentProcessID));
+            let len = entry.szExeFile.iter().position(|&c| c == 0).unwrap_or(entry.szExeFile.len());
+            table.push((entry.th32ProcessID, entry.th32ParentProcessID, String::from_utf16_lossy(&entry.szExeFile[..len])));
             more = Process32NextW(snapshot, &mut entry).is_ok();
         }
         _ = CloseHandle(snapshot);
