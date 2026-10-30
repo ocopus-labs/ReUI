@@ -25,7 +25,7 @@ target\release\reui-hub.exe --demo
 cargo test --workspace
 ```
 
-Release builds of the hub have no console window; debug builds (`cargo build`) keep one for the logs. `pwsh scripts/package.ps1 -OutDir dist` builds the release assets (the setup and the zip) the way `.github/workflows/release.yml` does on a `v*` tag. A tagged release needs a `## <version>` entry in `CHANGELOG.md`, and the tag must match the `reui-hub` crate version.
+Release builds of the hub have no console window; debug builds (`cargo build`) keep one for the logs. `pwsh scripts/package.ps1 -OutDir dist` builds the release assets (the setup and the zip) the way `.github/workflows/release.yml` does on a `v*` tag. A tagged release needs a `## <version>` entry in `CHANGELOG.md`, and the tag must match the `reui-hub` crate version. A tag with a `-` (`v0.2.0-beta.1`) becomes a pre-release, which the update check skips. `.github/workflows/ci.yml` builds, tests, runs clippy and the OpenCode plugin test on every push to `main` and every pull request; Dependabot opens a weekly PR for crates and one for actions. No workflow needs a secret yet: code signing waits (it's paid).
 
 **Run test instances sandboxed:** `REUI_CONFIG_DIR=<dir>` gives the hub, island and Settings their own files, named pipe and single-instance lock, so they run beside an installed ReUI without touching its data.
 

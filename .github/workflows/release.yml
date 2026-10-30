@@ -13,9 +13,19 @@ on:
 permissions:
   contents: write
 
+# Never two releases of the same ref at once; a running one is left to finish.
+concurrency:
+  group: release-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
+
 jobs:
   release:
     runs-on: windows-latest
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
 
@@ -29,6 +39,13 @@ jobs:
         run: |
           $version = ((cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).packages | Where-Object name -eq "reui-hub").version
           if ("v$version" -ne "${{ github.ref_name }}") { throw "tag ${{ github.ref_name }} != Cargo version $version" }
+
+      # Before the long build: a release without its CHANGELOG entry would fail at the end.
+      - name: Check the CHANGELOG has this version
+        shell: pwsh
+        run: |
+          $version = ((cargo metadata --no-deps --format-version 1 | ConvertFrom-Json).packages | Where-Object name -eq "reui-hub").version
+          if (-not (Select-String -Path CHANGELOG.md -Pattern "^## v?$([regex]::Escape($version))(\s|$)" -Quiet)) { throw "CHANGELOG.md has no entry for $version" }
 
       - name: Test
         run: cargo test --workspace
@@ -61,6 +78,8 @@ jobs:
             dist/ReUI-*-x64.zip
             dist/sha256sums.txt
           body_path: dist/release-notes.md
+          # v0.2.0-beta.1 and the like are pre-releases, which the update check skips.
+          prerelease: ${{ contains(github.ref_name, '-') }}
 
       - name: Keep the build (manual runs)
         if: ${{ !startsWith(github.ref, 'refs/tags/v') }}

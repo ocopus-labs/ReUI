@@ -8,7 +8,7 @@ ReUI is a dynamic island for Windows (later, a Windows shell), written in Rust. 
 
 ```
 cargo build --release                       # all programs into target\release
-cargo test --workspace                      # what CI runs before packaging
+cargo test --workspace                      # what CI runs (ci.yml on push/PR, release.yml before packaging)
 cargo test -p reui-hub timers               # one crate, tests whose path matches "timers"
 cargo test -p reui-hub -- --exact <module::path::tests::name>   # a single test
 target\release\reui-hub.exe --demo          # hub + island with demo activities

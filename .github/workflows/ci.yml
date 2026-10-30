@@ -1,0 +1,52 @@
+# Checks every push to main and every pull request: the workspace builds, its tests pass
+# (what the release workflow runs before packaging), clippy finds no errors, and the
+# OpenCode plugin still answers a fake OpenCode. No secrets: nothing is published here.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+# A newer push to the same branch or PR makes the older run pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_INCREMENTAL: 0
+  CARGO_TERM_COLOR: always
+
+jobs:
+  test:
+    runs-on: windows-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - uses: Swatinem/rust-cache@v2
+
+      - name: Build
+        run: cargo build --workspace --all-targets
+
+      - name: Test
+        run: cargo test --workspace
+
+      # Warnings are reported, not fatal: a few predate CI. Errors fail the run.
+      - name: Clippy
+        run: cargo clippy --workspace --all-targets
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: OpenCode plugin
+        run: node tools/opencode-plugin-test.mjs

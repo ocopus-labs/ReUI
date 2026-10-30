@@ -11,7 +11,7 @@
   public, add these dynamic ones:
     https://img.shields.io/github/v/release/ocopus-labs/ReUI                  (latest release)
     https://img.shields.io/github/downloads/ocopus-labs/ReUI/total            (downloads)
-    https://img.shields.io/github/actions/workflow/status/ocopus-labs/ReUI/release.yml  (build)
+    https://img.shields.io/github/actions/workflow/status/ocopus-labs/ReUI/ci.yml  (build)
 -->
 <p align="center">
   <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-3A3A3D?labelColor=1C1C1E" alt="Windows 10 | 11">
