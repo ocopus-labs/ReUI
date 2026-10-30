@@ -33,7 +33,7 @@ To drive a sandboxed island without touching the real mouse or keyboard, post to
 
 ## The hub's flags
 
-The hub starts the island plus every module. `--no-agents`, `--no-media`, `--no-clipboard`, `--no-osd`, `--no-devices`, `--no-timers`, `--no-privacy`, `--no-stats`, `--no-shelf`, `--no-downloads`, `--no-screenshots` skip one; `--no-link-previews` keeps clipboard links offline; `--no-updates` never looks for updates or mentions them. `--no-island` runs the hub alone so you can start `reui-island.exe` yourself (under a debugger, say). `--no-onboarding` skips the first run and one-time tips; `--first-run` replays the demo and welcome. The full list is the doc comment at the top of `crates/reui-hub/src/main.rs`.
+The hub starts the island plus every module. `--no-agents`, `--no-media`, `--no-clipboard`, `--no-osd`, `--no-devices`, `--no-timers`, `--no-privacy`, `--no-stats`, `--no-shelf`, `--no-downloads`, `--no-screenshots`, `--no-activities` skip one; `--no-link-previews` keeps clipboard links offline; `--no-updates` never looks for updates or mentions them. `--no-island` runs the hub alone so you can start `reui-island.exe` yourself (under a debugger, say). `--no-onboarding` skips the first run and one-time tips; `--first-run` replays the demo and welcome. The full list is the doc comment at the top of `crates/reui-hub/src/main.rs`.
 
 `--demo` enables a module that shows now-playing, a 5-minute timer and, 25 s after each one is settled, the next agent moment: a permission with a scrolling script, a three-step question (one step multi-select) and a plan to approve. They take over the pill, answer nothing real, and time out and fail open (20 s for the permission, 60 s for the others). Hover to peek, click to expand, right-click the pill to quit ReUI. `--demo-music` runs only its music (no timer, no moments): what `tools/perf-sample.ps1` measures for "music playing".
 
@@ -61,6 +61,8 @@ Setup options: `--no-autostart` (don't start with Windows), `--no-launch`, `--qu
 | `%APPDATA%\ReUI\downloads.json`, `screenshots.json` | Downloads: `enabled`, `folders` (watched besides Downloads); screenshots: `enabled` |
 | `%APPDATA%\ReUI\privacy.json` | The indicator's kinds (`microphone`, `camera`, `screen`, `location`), `calls` and each call app (`call_teams`, `call_zoom`, `call_discord`, `call_slack`, `call_webex`, `call_messengers`, `call_browsers`) |
 | `%APPDATA%\ReUI\osd.json` | The HUDs and states, `scroll_step`, and `mixer` (each app's level in the open volume card; its button there flips it) |
+| `%APPDATA%\ReUI\timer-state.json` | Running timers, a focus session, the stopwatch, and reminders (`reminders`: text, `due_at_unix_ms`, a repeat's `every` and `time`, `ringing`) |
+| `%APPDATA%\ReUI\activities.json` | Script activities: `enabled`, `stale_min` (10), `per_source` (3), `blocked` (sources never shown) |
 | `%LOCALAPPDATA%\ReUI` | Caches and logs |
 | `%LOCALAPPDATA%\ReUI\update.json` | What the last update check found |
 | `%APPDATA%\ReUI\shelf.json` | File shelf: `keep` (`removed` \| `restart` \| `day` \| `week`), `saved_cap_mb` |
@@ -144,6 +146,62 @@ To try them without touching your own folders, a sandboxed hub (`REUI_CONFIG_DIR
 ## Notifications internals (spike, off by default)
 
 The hub's `notifications` module shows a Brief (app icon, title) for new toasts from apps on an allow-list. It never runs unless `--notifications` is passed or `%APPDATA%\ReUI\notifications.json` says `"enabled": true` (`apps`: AUMIDs to show, `hide_content`, `seen`: apps that notified lately, AUMID and name only). It reads with `UserNotificationListener` (works without package identity) and lists only when the shell's notification-count WNF state changes, so it costs nothing between toasts (measured 0.0 ms CPU in 120 s idle, ~8 ms per toast); if that state ever misses a toast it falls back to polling (5 s, 2 s after activity, 15 s when quiet, paused while locked). Nothing about a toast is stored or logged. `cargo run -p reui-hub --example notifications_probe -- <mode>` reproduces the measurements with test toasts of its own. Spec and measurements: [PRD-notifications.md](PRD-notifications.md).
+
+## Scripts
+
+`reui-bridge activity` gives a script a live activity in the island ([PRD-reminders-activities.md](PRD-reminders-activities.md)). The bridge is at `%LOCALAPPDATA%\ReUI\bin\reui-bridge.exe` (the hub keeps it current); put that folder on `PATH` or call it by its full path.
+
+```
+reui-bridge activity <id> --title "Build" [--detail "…"] [--progress 0.42|42%]
+                         [--state running|done|failed] [--glyph <name>] [--done-after 5s]
+                         [--keep] [--source <name>]
+reui-bridge activity <id> --end
+reui-bridge activity --json          one JSON object per line on stdin
+```
+
+- **`<id>`** names the activity (`a-z 0-9 - _ .`, up to 40); later calls with the same id update it. Only the id is required; an update says only what changed.
+- **Running** is an Ongoing activity: a ring and the percentage in the pill when there's `--progress` (else the glyph and the title); open, the title, the detail (else how long it has run, counting by itself) and a progress bar.
+- **`--state done|failed`** shows it as a Brief with a check or a cross and the detail (else how long it took), for `--done-after` (default 6 s, failed 20 s, at most 10 min).
+- **It ends by itself** when nothing is heard for `stale_min` minutes (10), unless `--keep`. `--end` takes it away now.
+- **Glyphs:** `build`, `test`, `download`, `upload` (or `deploy`), `sync`, `backup`, `package` (or `install`, `update`), `script` (the default).
+- **Limits:** title 40 and detail 80 characters (control characters dropped), at most `per_source` (3) at once per source and 8 in all (the oldest makes way), at most four updates a second reach the island. The source is `--source`, else the program that ran the bridge (`pwsh`, `python`, `bash`); `blocked` in `activities.json` hides a source.
+- **Never above Alert:** a script can't ask a question, take the keyboard or open the card by itself. Everything is text: no links are opened, nothing is run, no files or images are read. The pipe is the user's own (its ACL allows only them), and the hub checks every field again.
+- **`--json`**: `{"id":"build","title":"Build","detail":"…","progress":0.42,"state":"running","glyph":"build","done_after_s":5,"keep":false,"end":false}`, one per line, so a job can pipe its progress straight in. Exits 1 if ReUI isn't running or an argument doesn't read.
+
+A build (PowerShell):
+
+```powershell
+reui-bridge activity build --title Build --glyph build
+cargo build --release
+if ($LASTEXITCODE -eq 0) { reui-bridge activity build --state done }
+else { reui-bridge activity build --state failed --detail "exit $LASTEXITCODE" }
+```
+
+`winget upgrade`, one package at a time (with the `Microsoft.WinGet.Client` PowerShell module):
+
+```powershell
+$updates = @(Get-WinGetPackage | Where-Object IsUpdateAvailable)
+for ($i = 0; $i -lt $updates.Count; $i++) {
+    reui-bridge activity winget --title "Updating apps" --glyph package --detail $updates[$i].Name --progress ($i / $updates.Count)
+    Update-WinGetPackage -Id $updates[$i].Id -Mode Silent | Out-Null
+}
+reui-bridge activity winget --state done --detail "$($updates.Count) apps updated"
+```
+
+A nightly backup that can take an hour per folder (`--keep`, so a slow folder isn't taken for a dead script):
+
+```powershell
+$folders = 'Documents', 'Pictures', 'Projects'
+for ($i = 0; $i -lt $folders.Count; $i++) {
+    reui-bridge activity backup --title Backup --glyph backup --keep --detail $folders[$i] --progress ($i / $folders.Count)
+    robocopy "$HOME\$($folders[$i])" "E:\Backup\$($folders[$i])" /MIR /NFL /NDL | Out-Null
+}
+reui-bridge activity backup --state done --done-after 30s
+```
+
+From Python, streaming: `print(json.dumps({"id": "train", "title": "Training", "progress": step / steps}), flush=True)` piped into `reui-bridge activity --json`.
+
+Reminders go through the timer path: `reui-bridge timer call mom at 6`.
 
 ## Adding a module
 

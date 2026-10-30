@@ -2,6 +2,7 @@
 //! [`ModuleContext`], and handles the actions surfaces send back. A disabled module is
 //! never constructed, so its adapters never run.
 
+pub mod activities;
 pub mod agent;
 pub mod calendar;
 mod audio;

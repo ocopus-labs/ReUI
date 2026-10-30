@@ -24,7 +24,13 @@
 //! nothing after it, it opens that field. `reui-bridge stats` opens the system stats card;
 //! `reui-bridge hide` hides the island until asked again, or shows it (its shortcut's path).
 //! Both exit 1 if ReUI isn't running.
+//!
+//! `reui-bridge activity <id> --title … [--progress …] [--state …]` shows a script's live
+//! activity, `--end` takes it away, `--json` reads one update per line from stdin
+//! (`activity.rs`); a reminder is `reui-bridge timer call mom at 6`. Exits 1 if ReUI isn't
+//! running or the arguments don't read.
 
+mod activity;
 mod install;
 mod parents;
 
@@ -89,12 +95,19 @@ fn main() {
                 1
             }
         },
+        Some("activity") => match activity(&args[1..]) {
+            Ok(()) => 0,
+            Err(e) => {
+                eprintln!("reui-bridge: {e}");
+                1
+            }
+        },
         Some(agent) => {
             hook(agent, args.get(1).is_some_and(|a| a == install::ASK));
             0
         }
         None => {
-            eprintln!("usage: reui-bridge <agent>  |  reui-bridge install|uninstall <agent> [--scope user|project|local] [--project DIR]  |  reui-bridge test <agent>  |  reui-bridge timer <length> [label]  |  reui-bridge stats  |  reui-bridge hide");
+            eprintln!("usage: reui-bridge <agent>  |  reui-bridge install|uninstall <agent> [--scope user|project|local] [--project DIR]  |  reui-bridge test <agent>  |  reui-bridge timer <length> [label]  |  reui-bridge stats  |  reui-bridge hide  |  reui-bridge activity <id> --title <text> [--detail <text>] [--progress 0.42] [--state running|done|failed] [--glyph <name>] [--done-after 5s] [--keep] [--end]  |  reui-bridge activity --json");
             0
         }
     };
@@ -175,6 +188,16 @@ fn test(agent: Option<&str>) -> Result<String, String> {
 fn timer(text: &str) -> Result<(), String> {
     let action = if text.trim().is_empty() { "launcher".to_string() } else { format!("start:{}", text.trim()) };
     command("timers", &action)
+}
+
+/// `reui-bridge activity …`: one update from the arguments, or (`--json`) one per line of
+/// stdin. The source is the program that ran the bridge unless `--source` names one.
+fn activity(args: &[String]) -> Result<(), String> {
+    let source = parents::parent_name();
+    if args.first().is_some_and(|a| a == "--json") {
+        return activity::stream(source.as_deref(), |action| command("activities", action));
+    }
+    command("activities", &activity::from_args(args, source.as_deref())?)
 }
 
 /// Sends one module command, as the Settings window does.

@@ -48,7 +48,7 @@ fn label(words: &[&str]) -> Option<String> {
 }
 
 /// Words that together are one length ("1h", "30m" / "10", "min").
-fn length(words: &[&str]) -> Option<u64> {
+pub(super) fn length(words: &[&str]) -> Option<u64> {
     let joined: String = words.concat().to_lowercase();
     if joined.contains(':') {
         return colon(&joined);

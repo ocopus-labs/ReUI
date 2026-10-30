@@ -1,6 +1,7 @@
 //! Coding agents: per agent, its status (connected, when ReUI last heard from it, or that
 //! it isn't on this PC), Connect / Disconnect with the file that changes, and a test event;
-//! then what the island shows of sessions (`coding.json`).
+//! then what the island shows of sessions (`coding.json`), and live activities from
+//! scripts (`activities.json`), which come through the same bridge.
 
 use serde_json::Value;
 
@@ -50,6 +51,8 @@ pub fn build(state: &State) -> Vec<Block> {
     let sessions = Row::new("sessions", "Show sessions").detail(detail).part(Part::Segmented { options: vec!["When needed".into(), "While working".into()], selected }).enabled(ok);
     let finished = flag(state, File::Coding, "show_finished", "Finished turns", "A moment when a turn ends, with how long it took");
     blocks.push(group("In the island", vec![sessions, finished]));
+    blocks.extend(file_error(state, File::Activities));
+    blocks.push(group("Scripts", vec![flag(state, File::Activities, "enabled", "Activities from scripts", "reui-bridge activity shows a build, a backup or a download in the island")]));
     blocks
 }
 
@@ -142,6 +145,17 @@ mod tests {
         crate::pages::act(Page::Agents, &mut state, &Target::new("coding:show_finished", 0), Act::Press);
         let saved: Value = serde_json::from_str(&std::fs::read_to_string(dir.join("roaming").join("coding.json")).unwrap()).unwrap();
         assert_eq!((saved["show_sessions"].as_str(), saved["show_finished"].as_bool()), (Some("working"), Some(true)));
+        _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn script_activities_switch_off_without_a_restart() {
+        let (mut state, dir) = state("agents-scripts");
+        assert!(matches!(row(&build(&state), "activities:enabled").parts[0], Part::Toggle { on: true }));
+        crate::pages::act(Page::Agents, &mut state, &Target::new("activities:enabled", 0), Act::Press);
+        let saved: Value = serde_json::from_str(&std::fs::read_to_string(dir.join("roaming").join("activities.json")).unwrap()).unwrap();
+        assert_eq!((saved["enabled"].as_bool(), saved["stale_min"].as_u64()), (Some(false), Some(10)));
+        assert!(!state.restart_note, "the module reads it on reload");
         _ = std::fs::remove_dir_all(&dir);
     }
 }

@@ -16,7 +16,8 @@
 //!   a page away; `done` (Decision while it rings, then Alert, until stopped);
 //! - `focus` (Ongoing) while a phase runs; `focus-next` (Decision while it rings, then
 //!   Alert) when a phase ended and the next waits to be started;
-//! - `stopwatch` (Ongoing).
+//! - `stopwatch` (Ongoing);
+//! - `reminder` (Alert) while reminders that fired wait for Done or Snooze (`remind/`).
 //!
 //! Do Not Disturb (opt-in, `dnd.rs`): turned on when a work phase starts if it was off,
 //! put back when the work stops (a break, the end), never touched when the user had it on
@@ -28,21 +29,24 @@
 //! system-events window.
 //!
 //! Files: `parse.rs`, `model.rs` (countdowns), `focus.rs`, `stopwatch.rs`, `dnd.rs`,
-//! `store.rs`, `sound.rs`, `view.rs`, `settings.rs`.
+//! `store.rs`, `sound.rs`, `view.rs`, `settings.rs`, `launcher.rs` (the field),
+//! `remind/` (reminders).
 
 use std::future::Future;
 use std::path::PathBuf;
 use std::pin::Pin;
 use std::time::Duration;
 
-use reui_protocol::{unix_ms, Priority, Quiet, ACTION_COLLAPSED, ACTION_EXPANDED, ACTION_SEARCH, ACTION_SUBMIT, ACTION_UNDO};
+use reui_protocol::{unix_ms, Priority, Quiet, ACTION_EXPANDED, ACTION_UNDO};
 use tokio::sync::mpsc;
 use tokio::time::{sleep_until, Instant};
 
 pub(crate) mod dnd;
 mod focus;
+mod launcher;
 mod model;
 pub mod parse;
+mod remind;
 mod settings;
 mod sound;
 mod stopwatch;
@@ -53,7 +57,6 @@ mod view;
 pub(crate) use self::view::time_of_day;
 use self::focus::{Focus, Phase, Plan};
 use self::model::{Cancelled, Finished, Timers, LATE_MS};
-use self::parse::Parsed;
 use self::settings::Settings;
 use self::stopwatch::Stopwatch;
 use super::hotkey::Hotkey;
@@ -101,13 +104,6 @@ struct Done {
     late_at: Option<u64>,
 }
 
-/// The open launcher: what's typed, and why the last try didn't start anything.
-#[derive(Default)]
-struct Launcher {
-    query: String,
-    refused: Option<&'static str>,
-}
-
 struct State {
     epoch: Instant,
     settings: Settings,
@@ -127,11 +123,12 @@ struct State {
     events: Option<Subscription>,
     /// The hotkey as registered.
     hotkey: Option<Hotkey>,
-    launcher: Option<Launcher>,
+    launcher: Option<launcher::Launcher>,
     /// The last length typed into the launcher: its placeholder, and what a bare Enter
     /// starts (T4).
     last_typed: Option<String>,
     dnd: Dnd,
+    remind: remind::Desk,
 }
 
 /// Do Not Disturb as far as focus sessions go.
@@ -172,6 +169,7 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
         launcher: None,
         last_typed: None,
         dnd: Dnd { ours: loaded.dnd_ours, pending: false, failed: false, results: dnd_tx },
+        remind: remind::Desk::new(loaded.reminders),
     };
     state.register_hotkey();
     // Also puts back a Do Not Disturb that a crashed run left on (E-T14).
@@ -182,7 +180,7 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
     state.publish(ctx);
 
     loop {
-        let due = [state.timers.next_end(), state.focus.as_ref().and_then(Focus::next_due), state.ring_until];
+        let due = [state.timers.next_end(), state.focus.as_ref().and_then(Focus::next_due), state.ring_until, state.reminder_due()];
         let deadline = due.into_iter().flatten().min().map(|ms| state.epoch + Duration::from_millis(ms));
         tokio::select! {
             input = ctx.next() => match input {
@@ -220,7 +218,7 @@ impl State {
     /// one giving up), a ring that has rung long enough.
     fn tick(&mut self, ctx: &ModuleContext) {
         let now = self.now();
-        let mut changed = false;
+        let mut changed = self.fire_reminders();
         let finished = self.timers.take_finished(now);
         if !finished.is_empty() {
             self.finish(finished);
@@ -310,6 +308,11 @@ impl State {
                 }
             }
             (LAUNCHER, _) => return self.act_launcher(ctx, &action),
+            (remind::KEY, a) => {
+                if !self.act_reminder(a) {
+                    return;
+                }
+            }
             (DONE, view::ACTION_STOP) => self.stop_done(ctx),
             (DONE, view::ACTION_MORE) => {
                 let label = self.done.list.last().and_then(|d| d.label.clone());
@@ -373,69 +376,6 @@ impl State {
         self.publish(ctx);
     }
 
-    /// The launcher's field and presets. Enter on an empty field starts the last length
-    /// typed (the placeholder); anything refused says why in place of the detail line.
-    fn act_launcher(&mut self, ctx: &ModuleContext, action: &str) {
-        let Some(launcher) = self.launcher.as_mut() else { return };
-        let text = if let Some(query) = action.strip_prefix(ACTION_SEARCH) {
-            launcher.query = query.to_string();
-            launcher.refused = None;
-            return self.publish_launcher(ctx);
-        } else if action == ACTION_SUBMIT {
-            let typed = launcher.query.trim().to_string();
-            if typed.is_empty() { self.placeholder() } else { typed }
-        } else if let Some(minutes) = action.strip_prefix("preset:").and_then(|m| m.parse::<u32>().ok()) {
-            format!("{minutes}m")
-        } else if action == ACTION_COLLAPSED {
-            // Closed without starting anything.
-            self.launcher = None;
-            return ctx.retract(LAUNCHER);
-        } else {
-            return;
-        };
-        match self.start(&text) {
-            Ok(()) => {
-                if action == ACTION_SUBMIT && matches!(parse::parse(&text), Parsed::Timer { .. }) {
-                    self.last_typed = Some(text);
-                }
-                self.launcher = None;
-                ctx.retract(LAUNCHER);
-                self.publish(ctx);
-            }
-            Err(why) => {
-                if let Some(l) = self.launcher.as_mut() {
-                    l.refused = Some(why);
-                }
-                self.publish_launcher(ctx);
-            }
-        }
-    }
-
-    /// Starts what `text` asks for, or says why it can't.
-    fn start(&mut self, text: &str) -> Result<(), &'static str> {
-        let now = self.now();
-        match parse::parse(text) {
-            Parsed::Timer { ms, label } => {
-                let id = self.timers.start(label, ms, now).ok_or("10 timers is the limit")?;
-                println!("timers: started a {} timer", view::length_text(ms));
-                self.page = Some(id);
-            }
-            Parsed::Focus => {
-                if self.focus.is_some() {
-                    return Err("A focus session is already on");
-                }
-                println!("timers: focus session started");
-                self.focus = Some(Focus::start(plan(&self.settings), now));
-            }
-            // There's one stopwatch; asking again just shows it.
-            Parsed::Stopwatch => _ = self.stopwatch.get_or_insert_with(|| Stopwatch::start(now)),
-            Parsed::TooLong => return Err("Up to 24 hours"),
-            Parsed::Empty | Parsed::Unknown => return Err("Type a length, like 10m"),
-        }
-        self.save();
-        Ok(())
-    }
-
     /// Asks for the Do Not Disturb a focus session wants now: on while working (unless the
     /// user has it on already, or it failed before), back off when ReUI turned it on and the
     /// work stopped. A user who turns it off by hand mid-phase keeps it off (E-T12).
@@ -496,29 +436,6 @@ impl State {
         self.hush();
     }
 
-    /// Opens the launcher (the hotkey, the tray's "New timer…"). Pressing the hotkey again
-    /// while it's open closes it (the island does that).
-    fn open_launcher(&mut self, ctx: &ModuleContext) {
-        self.launcher.get_or_insert_with(Launcher::default);
-        self.publish_launcher(ctx);
-        ctx.focus(LAUNCHER);
-    }
-
-    /// What an empty field offers: the last length typed, else the longest preset.
-    fn placeholder(&self) -> String {
-        self.last_typed.clone().unwrap_or_else(|| format!("{}m", self.settings.presets.iter().max().copied().unwrap_or(25)))
-    }
-
-    fn publish_launcher(&self, ctx: &ModuleContext) {
-        let Some(l) = &self.launcher else { return };
-        // An empty field reads as what Enter would start.
-        let parsed = match parse::parse(&l.query) {
-            Parsed::Empty => parse::parse(&self.placeholder()),
-            parsed => parsed,
-        };
-        ctx.publish(LAUNCHER, Priority::Passive, view::launcher(&l.query, &parsed, &self.placeholder(), &self.settings.presets, l.refused));
-    }
-
     /// (Re)registers the launcher hotkey from settings; one it can't read is the default.
     fn register_hotkey(&mut self) {
         let wanted = Hotkey::parse(&self.settings.shortcut).or_else(|| Hotkey::parse(DEFAULT_HOTKEY));
@@ -538,7 +455,7 @@ impl State {
     }
 
     fn save(&self) {
-        let state = store::State { timers: &self.timers, focus: self.focus.as_ref(), stopwatch: self.stopwatch.as_ref(), dnd_ours: self.dnd.ours };
+        let state = store::State { timers: &self.timers, focus: self.focus.as_ref(), stopwatch: self.stopwatch.as_ref(), dnd_ours: self.dnd.ours, reminders: &self.remind.list };
         store::save(&self.store, &state, self.now(), unix_ms());
     }
 
@@ -574,5 +491,8 @@ impl State {
             Some(s) => ctx.publish(STOPWATCH, Priority::Ongoing, view::stopwatch(s, now, now_unix)),
             None => ctx.retract(STOPWATCH),
         }
+        self.publish_reminders(ctx);
+        // An open timer field lists the next reminders, which may just have fired.
+        self.publish_launcher(ctx);
     }
 }

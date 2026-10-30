@@ -19,6 +19,9 @@ pub struct Settings {
     pub sound: Option<String>,
     /// How long the finish sound rings; 0 rings until stopped.
     pub ring_for_s: u32,
+    /// Play the sound (once) when a reminder fires; off by default, a reminder's card is
+    /// enough for most.
+    pub reminder_sound: bool,
     pub focus: Focus,
 }
 
@@ -42,6 +45,7 @@ impl Default for Settings {
             presets: vec![1, 5, 10, 25],
             sound: Some(sound::DEFAULT.into()),
             ring_for_s: 60,
+            reminder_sound: false,
             focus: Focus { work_min: 25, short_break_min: 5, long_break_min: 15, rounds: 4, auto_start: false, dnd: false },
         }
     }
@@ -97,6 +101,7 @@ impl Settings {
             presets,
             sound,
             ring_for_s: map.get("ring_for_s").and_then(Value::as_u64).filter(|s| *s <= 600).map_or(d.ring_for_s, |s| s as u32),
+            reminder_sound: flag("reminder_sound", d.reminder_sound),
             focus: Focus {
                 work_min: minutes("focus_work_min", d.focus.work_min),
                 short_break_min: minutes("focus_short_break_min", d.focus.short_break_min),
@@ -115,6 +120,7 @@ impl Settings {
             "presets": self.presets,
             "sound": self.sound.as_deref().unwrap_or("none"),
             "ring_for_s": self.ring_for_s,
+            "reminder_sound": self.reminder_sound,
             "focus_work_min": self.focus.work_min,
             "focus_short_break_min": self.focus.short_break_min,
             "focus_long_break_min": self.focus.long_break_min,

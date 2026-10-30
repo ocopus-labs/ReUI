@@ -28,10 +28,12 @@ pub enum File {
     Downloads,
     /// `screenshots.json`: only `enabled`, read by the hub at start.
     Screenshots,
+    /// `activities.json`: live activities from scripts (`reui-bridge activity`).
+    Activities,
 }
 
 impl File {
-    pub const ALL: [File; 13] = [File::Island, File::Media, File::Clipboard, File::Osd, File::Devices, File::Timers, File::Privacy, File::Coding, File::Stats, File::Calendar, File::Shelf, File::Downloads, File::Screenshots];
+    pub const ALL: [File; 14] = [File::Island, File::Media, File::Clipboard, File::Osd, File::Devices, File::Timers, File::Privacy, File::Coding, File::Stats, File::Calendar, File::Shelf, File::Downloads, File::Screenshots, File::Activities];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -48,6 +50,7 @@ impl File {
             File::Shelf => "shelf.json",
             File::Downloads => "downloads.json",
             File::Screenshots => "screenshots.json",
+            File::Activities => "activities.json",
         }
     }
 
@@ -68,6 +71,7 @@ impl File {
             File::Shelf => &["shelf"],
             File::Downloads => &["downloads"],
             File::Screenshots => &["screenshots"],
+            File::Activities => &["activities"],
         }
     }
 
@@ -87,6 +91,7 @@ impl File {
             File::Shelf => "shelf",
             File::Downloads => "downloads",
             File::Screenshots => "screenshots",
+            File::Activities => "activities",
         }
     }
 
@@ -147,6 +152,7 @@ impl File {
                 "presets": [1, 5, 10, 25],
                 "sound": "Alarm01",
                 "ring_for_s": 60,
+                "reminder_sound": false,
                 "focus_work_min": 25,
                 "focus_short_break_min": 5,
                 "focus_long_break_min": 15,
@@ -175,6 +181,7 @@ impl File {
             File::Shelf => json!({ "enabled": true, "keep": "removed", "saved_cap_mb": 512 }),
             File::Downloads => json!({ "enabled": true, "folders": [] }),
             File::Screenshots => json!({ "enabled": true }),
+            File::Activities => json!({ "enabled": true, "stale_min": 10, "per_source": 3, "blocked": [] }),
         }
     }
 

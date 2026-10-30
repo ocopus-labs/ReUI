@@ -1,5 +1,6 @@
 //! Timers (`timers.json`): the shortcut that opens the timer field, the finish sound and how
-//! long it rings, and focus sessions (lengths, auto-start, Do Not Disturb).
+//! long it rings, reminders' sound, and focus sessions (lengths, auto-start, Do Not
+//! Disturb).
 
 use serde_json::Value;
 
@@ -22,18 +23,19 @@ const LONG_BREAK: [u64; 5] = [10, 15, 20, 30, 45];
 const ROUNDS: [u64; 5] = [2, 3, 4, 5, 6];
 
 pub fn build(state: &State) -> Vec<Block> {
-    let mut blocks = head(state, File::Timers, Page::Timers, "Countdowns, focus sessions and a stopwatch, running in the island where you can see them. Type how long, like 10m tea, and press Enter.");
+    let mut blocks = head(state, File::Timers, Page::Timers, "Countdowns, reminders, focus sessions and a stopwatch, in the island where you can see them. Type how long, like 10m tea, or when, like call mom at 6, and press Enter.");
     enable(&mut blocks, state, File::Timers, "Timers");
     let ok = state.files.doc(File::Timers).error().is_none();
     let f = &state.files;
 
-    let start = Row::new("start", "Timer field").detail("Type a length, a label, focus or stopwatch").icon(icons::timers()).part(button("Open", Role::Secondary)).enabled(ok);
+    let start = Row::new("start", "Timer field").detail("A length, a time to be reminded, focus or stopwatch").icon(icons::timers()).part(button("Open", Role::Secondary)).enabled(ok);
     blocks.push(group("", vec![shortcut::row(state, File::Timers, "Opens the timer field"), start]));
 
     let sound = f.timer_sound();
     let sound_row = Row::new("sound", "Sound").part(Part::Dropdown { label: sound_name(&sound) }).part(button("Play", Role::Secondary)).enabled(ok);
     let ring = Row::new("ring", "Ring for").detail("Then the card waits quietly until you stop it").part(Part::Dropdown { label: seconds(f.ring_for()) }).enabled(ok);
     blocks.push(group("When a timer ends", vec![sound_row, ring]));
+    blocks.push(group("Reminders", vec![flag(state, File::Timers, "reminder_sound", "Sound for reminders", "Plays the timer sound once when a reminder is due")]));
 
     let dropdown = |id: &str, title: &str, label: String| Row::new(id, title).part(Part::Dropdown { label }).enabled(ok);
     blocks.push(group(
