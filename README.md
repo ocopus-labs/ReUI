@@ -98,9 +98,9 @@ The same field takes reminders: `call mom at 6`, `in 2h check build`, `tomorrow 
 
 A build, a backup or `winget upgrade` can show its progress in the island with one line: `reui-bridge activity build --title Build --progress 0.42`, then `--state done`. A ring and the percentage sit in the pill while it runs, and the result shows for a moment when it ends. Scripts send text and a number, nothing more; see [Scripts](docs/development.md#scripts).
 
-### Calendar
+### Calendar (Beta)
 
-Your next meeting comes to the island in its last ten minutes, a ring counting down beside its title. When it starts, the island says so, and **Join** opens the Teams, Zoom, Meet or Webex link found in the invitation, wherever it hides. All-day, declined and cancelled events stay out of the way, and the Calendar view lists what's left of your day. Add your Google or Outlook calendar by its secret iCal address in Settings → Calendar: ReUI keeps it encrypted and asks only your calendar's own server.
+Your next meeting comes to the island in its last ten minutes, a ring counting down beside its title. When it starts, the island says so, and **Join** opens the Teams, Zoom, Meet or Webex link found in the invitation, wherever it hides. All-day, declined and cancelled events stay out of the way, and the Calendar view lists what's left of your day. Add your Google or Outlook calendar by its secret iCal address in Settings → Calendar: ReUI keeps it encrypted and asks only your calendar's own server. In beta: ReUI reads calendars only by these links, which are as fresh as Google or Outlook rebuild them (sometimes hours behind); signing in with your account is planned.
 
 ### Coding agents
 

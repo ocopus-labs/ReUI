@@ -311,7 +311,7 @@ impl App {
     fn with_view<R>(&mut self, f: impl FnOnce(&mut Renderer, &View) -> R) -> R {
         let (width, height) = self.dips();
         let knobs = self.motion.knobs();
-        let nav: Vec<NavItem> = self.nav.iter().map(|&page| NavItem { title: page.title(), icon: page.icon(), section: page.section() }).collect();
+        let nav: Vec<NavItem> = self.nav.iter().map(|&page| NavItem { title: page.title(), badge: page.badge(), icon: page.icon(), section: page.section() }).collect();
         let typing = match (&self.focus, &self.menu) {
             (Some(Focus::Search), None) => Some(Focus::Search),
             (Some(Focus::Part(t)), None) if matches!(self.part(t), Some(Part::Field { .. })) => Some(Focus::Part(t.clone())),

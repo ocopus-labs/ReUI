@@ -33,6 +33,9 @@ pub fn draw(p: &Painter, v: &View) -> Result<()> {
         tiles::tile(p, item.icon, tile, s::sidebar::ICON_RADIUS, s::sidebar::ICON_GLYPH)?;
         let text = Rect::new(tile.r + s::sidebar::LABEL_GAP, r.t, r.r - s::sidebar::ITEM_PADDING, r.b);
         p.text(item.title, Font::Nav, text, Align::Start, color::label::PRIMARY)?;
+        if let Some(badge) = item.badge {
+            p.text(badge, Font::RowDetail, text, Align::End, color::label::SECONDARY)?;
+        }
         if selected && v.focus == Some(&Focus::Nav) {
             super::controls::ring(p, *r, radius)?;
         }

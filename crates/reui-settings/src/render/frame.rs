@@ -14,6 +14,8 @@ use crate::ui::{chrome, icons, Block, Focus, Hover, Icon, Menu, Target};
 /// A page in the sidebar.
 pub struct NavItem {
     pub title: &'static str,
+    /// A word after the title ("Beta").
+    pub badge: Option<&'static str>,
     pub icon: Icon,
     pub section: usize,
 }

@@ -1,6 +1,6 @@
 # PRD: Calendar (the next meeting, a countdown, Join)
 
-Status: M0–M1 built · Owner: Rohit · Feature #10 in [PLAN.md](../PLAN.md) ("Calendar and tasks") · Oct 30, 2026
+Status: M0–M1 built, **Beta** (ICS links only: as fresh as the provider rebuilds a published feed, which can be hours; account sign-in, M2–M3, is planned) · Owner: Rohit · Feature #10 in [PLAN.md](../PLAN.md) ("Calendar and tasks") · Oct 30, 2026
 
 **References:**
 - **Mac notch apps.** NotchNook, Alcove and boring.notch show the next event in the open notch (title, time, a coloured calendar bar), and NotchNook and Alcove add a "Join" button for Zoom/Meet/Teams links. They read macOS's EventKit, which the OS fills from every account the user has added, so they never ask for a password. Alcove counts down the last minutes before a meeting in the closed notch.
@@ -104,7 +104,7 @@ Only `https` links on these hosts are offered, so an invitation can't make Join 
 
 - **A place:** Calendar (`E787`) after Timers in `destinations.rs`, always available while the module runs; `open` brings the countdown or start card forward if one is out, else the day's card.
 - **Tray:** "Calendar" beside Devices and System stats.
-- **Settings → Calendar** (`calendar.json`): the on/off switch; **Your calendars** (each source by its host, "calendar.google.com", with a toggle, the state of its last refresh, and Remove); **Add an ICS link** (a field and Add); **Windows calendar** (the Windows store toggle, off by default); **Count down from** (5 / 10 / 15 min).
+- **Settings → Calendar** (`calendar.json`), marked **Beta** in the sidebar and above its title: the on/off switch; **Your calendars** (each source by its host, "calendar.google.com", with a toggle, the state of its last refresh, and Remove). The state is one line: "42 events · checked 2 min ago · changed 3 h ago", or "· updated just now" when the check brought a new body; changed is the server's `Last-Modified` when it sends one, else when the hub first saw that body, so a 304 never reads as an update. A source that failed says why in the warning tone ("Couldn't refresh: was sent to a web page") with **Try again**, which sends the module `refresh` (every source now, past the resume debounce); the island stays quiet and keeps the last good copy; **Add an ICS link** (a field and Add); **Windows calendar** (the Windows store toggle, off by default); **Count down from** (5 / 10 / 15 min).
 
 | Key | Default | |
 |---|---|---|
@@ -149,7 +149,8 @@ What a non-packaged Win32 app (ReUI: no package identity, a per-user exe) can re
 - Google: Settings → the calendar → "Secret address in iCal format" ([help](https://support.google.com/calendar/answer/37648)). Outlook.com / Microsoft 365: Settings → Calendar → Shared calendars → Publish a calendar → "Can view all details" → ICS ([help](https://support.microsoft.com/en-us/office/introduction-to-publishing-internet-calendars-a25e68d6-695a-41c6-a701-103d44ba151d)). iCloud, Fastmail, Proton and most others have the same.
 - **No registration, no sign-in, works for every provider.** The link is a password (anyone who has it can read the calendar), so it's stored with DPAPI and shown only by its host.
 - **Caveats:** a published Microsoft 365 feed may leave out `X-MICROSOFT-SKYPETEAMSMEETINGURL` and wraps every link in Safe Links ([omarchy-calendar #51](https://github.com/tmn73/omarchy-calendar/pull/51), [DavMail #536](https://github.com/mguessan/davmail/issues/536)), hence §5.4's unwrapping; providers may refresh a published feed only every few minutes to hours (*to verify* per provider); some tenants disable publishing.
-- **Polling:** every 15 min with `If-None-Match` / `If-Modified-Since` (a 304 costs a few hundred bytes), immediately on resume, on unlock after more than 15 min, and when the network comes back (`NotifyNetworkConnectivityHintChange`). Failures back off (1, 5, 15 min). `webcal://` is read as `https://`; plain `http` only to loopback (tests).
+- **Outlook and clients it doesn't know:** since about August 2025 `outlook.office365.com` / `outlook.live.com` answer a published calendar requested by an unrecognised User-Agent with a redirect to an OWA error page (`OwaBasicUnsupportedException`) instead of the feed ([nextcloud/server#54799](https://github.com/nextcloud/server/issues/54799), fixed there by a browser User-Agent for Outlook). ReUI sends a current Chrome User-Agent to `outlook.*` / `*.outlook.com` hosts only and `ReUI/<version>` everywhere else, since a browser's name can get other servers to answer with a web page about the calendar instead of the calendar. A successful answer that is HTML reads "was sent to a web page" (redirected) or "answered with a web page", apart from "isn't a calendar".
+- **Polling:** every 15 min with `If-None-Match` / `If-Modified-Since` (a 304 costs a few hundred bytes) and `Cache-Control: no-cache` / `Pragma: no-cache` (so a corporate proxy asks the provider instead of serving its own old copy), immediately on resume, on unlock after more than 15 min, and when the network comes back (`NotifyNetworkConnectivityHintChange`); those automatic triggers fold into one within 60 s, Settings' **Try again** doesn't wait. Failures back off (1, 5, 15 min). Editing a link starts over: a fetch still out for the old link is tagged with the old generation and dropped when it lands, and the old link's copy is deleted. `webcal://` is read as `https://`; plain `http` only to loopback (tests).
 
 ### 6.6 The plan
 
@@ -177,11 +178,12 @@ All sources sit behind one trait (`source.rs`: a name, a fetch that returns even
 | `ics/mod.rs` | A feed into occurrences in a window: EXDATE, RDATE, RECURRENCE-ID overrides, STATUS:CANCELLED, the user's own PARTSTAT=DECLINED |
 | `links.rs` | Meeting-link detection (pure, tested against real formats) |
 | `schedule.rs` | What's due when: the countdown, the start alert, the day's list, the next wake-up (pure, fake clock) |
-| `fetch.rs` | ICS over HTTPS with ETag / Last-Modified, backoff; the encrypted cache |
+| `line.rs` | One link's refreshing: due, busy, the link's generation (stale fetches dropped), the resume debounce, checked vs changed (pure, fake clock) |
+| `fetch.rs` | ICS over HTTPS with ETag / Last-Modified, no-cache, Outlook's User-Agent, web-page answers told apart, backoff; the encrypted cache |
 | `windows_store.rs` | `AppointmentStore` on its own thread |
 | `network.rs` | Connectivity hints → "try again now" |
 | `dpapi.rs` | `CryptProtectData` / `CryptUnprotectData` |
-| `settings.rs`, `status.rs`, `view.rs` | `calendar.json`; per-source refresh state for Settings; the views |
+| `settings.rs`, `status.rs`, `view.rs` | `calendar.json`; per-source refresh state for Settings (`ok`, `at`, `events`, `error`, `changed`, `modified`); the views |
 
 **Why our own ICS parser:** the maintained crates either don't parse (`icalendar` mostly writes), or expand recurrences only with `chrono-tz`'s IANA names (`rrule`), while Outlook feeds name zones in Windows terms with a `VTIMEZONE` block ("(UTC+01:00) Amsterdam, Berlin…"), which is the feed's own authoritative definition (RFC 5545 §3.6.5). What the island needs (a few days of events) is a small, testable subset; Windows' ICU covers zone data without bundling a tz database.
 

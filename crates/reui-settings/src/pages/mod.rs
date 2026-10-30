@@ -87,6 +87,13 @@ impl Page {
         }
     }
 
+    /// A feature still finding its form, said beside its name in the sidebar and above its
+    /// title: Calendar reads only secret ICS links for now (no account sign-in), so it's as
+    /// fresh as the provider rebuilds them.
+    pub fn badge(self) -> Option<&'static str> {
+        matches!(self, Page::Calendar).then_some("Beta")
+    }
+
     /// The pages in the same nav as this one.
     pub fn nav(self) -> &'static [Page] {
         if self.is_welcome() {
@@ -297,7 +304,7 @@ pub fn look(state: &State) -> Look {
 
 /// The page's header card: its tile, title, paragraph and island.
 fn intro(state: &State, page: Page, body: &str) -> Block {
-    Block::Intro { eyebrow: None, title: page.title().into(), body: (!body.is_empty()).then(|| body.into()), icon: Some(page.icon()), preview: page.preview(state), row: None }
+    Block::Intro { eyebrow: page.badge().map(Into::into), title: page.title().into(), body: (!body.is_empty()).then(|| body.into()), icon: Some(page.icon()), preview: page.preview(state), row: None }
 }
 
 /// A feature's on/off switch (`enabled` in its file), in its header card.
