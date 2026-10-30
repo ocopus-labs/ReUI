@@ -56,9 +56,11 @@ pub fn want_autostart(upgrade: bool, currently_on: bool, no_autostart: bool) -> 
 }
 
 fn ignore_missing(result: windows_registry::Result<()>) -> windows_registry::Result<()> {
-    const FILE_NOT_FOUND: windows::core::HRESULT = windows::core::HRESULT(0x8007_0002u32 as i32);
+    // The raw value, not a typed HRESULT: windows-registry and windows can be on different
+    // windows-result versions, whose HRESULT types don't compare.
+    const FILE_NOT_FOUND: i32 = 0x8007_0002u32 as i32;
     match result {
-        Err(e) if e.code() == FILE_NOT_FOUND => Ok(()),
+        Err(e) if e.code().0 == FILE_NOT_FOUND => Ok(()),
         other => other,
     }
 }

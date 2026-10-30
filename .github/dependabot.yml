@@ -7,9 +7,27 @@ updates:
     schedule:
       interval: weekly
     groups:
+      # The windows-rs family moves as one: the crates share types, so a single one bumped
+      # alone splits them into two incompatible versions. Any bump to them, together.
+      windows:
+        patterns: ["windows", "windows-*"]
       crates:
         patterns: ["*"]
+        exclude-patterns: ["windows", "windows-*"]
         update-types: [minor, patch]
+    # windows-rs 0.100 reworks the native APIs (generated from the SDK headers) and hasn't
+    # published the `windows` crate itself yet (windows-rs issue #4867). The crates used
+    # with it wait for that migration, planned on its own; windows-registry, used alone by
+    # the installer, is free to move.
+    ignore:
+      - dependency-name: "windows"
+        versions: [">= 0.100"]
+      - dependency-name: "windows-core"
+        versions: [">= 0.100"]
+      - dependency-name: "windows-numerics"
+        versions: [">= 0.100"]
+      - dependency-name: "windows-future"
+        versions: [">= 0.100"]
 
   - package-ecosystem: github-actions
     directory: /

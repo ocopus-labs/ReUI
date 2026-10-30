@@ -1,0 +1,6 @@
+# rustc runs out of stack compiling the `windows` crate with this workspace's feature list
+# (and then the hub's tests), from Rust 1.99 on: it dies with STATUS_STACK_BUFFER_OVERRUN
+# (0xc0000409). 1.93 managed with its default. A 256 MB minimum stack for rustc's threads
+# fixes it, for every build: here, CI and the release workflow alike.
+[env]
+RUST_MIN_STACK = "268435456"

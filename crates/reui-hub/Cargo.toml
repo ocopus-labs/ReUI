@@ -15,7 +15,7 @@ anyhow.workspace = true
 blake3 = { version = "1.8", features = ["pure"] }
 chrono = "0.4.45"
 encoding_rs = "0.8"
-rusqlite = { version = "0.40", features = ["bundled"] }
+rusqlite = { version = "0.41", features = ["bundled"] }
 reqwest = { version = "0.13", default-features = false, features = ["native-tls", "charset"] }
 serde.workspace = true
 # `preserve_order`: an MCP form's fields are asked in its schema's order.
