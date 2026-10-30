@@ -16,7 +16,7 @@ windows-numerics.workspace = true
 # Band levels for the real visualizer (per-process loopback capture).
 realfft = "3.5"
 # `#[implement]` expands to `::windows_core` paths (the audio activation callback).
-windows-core = "0.62.2"
+windows-core = "0.100.0"
 # The clipboard window (WebView2, created on demand). Links the static WebView2 loader, so
 # there is no WebView2Loader.dll to ship; the runtime itself comes with Windows 11.
 

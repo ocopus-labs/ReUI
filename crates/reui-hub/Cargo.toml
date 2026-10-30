@@ -24,7 +24,7 @@ windows-future = "0.3.2"
 # `IIterable<HSTRING>` from a Vec (device watcher properties).
 windows-collections = "0.3.2"
 # `#[implement]`/`#[interface]` expand to `::windows_core` paths (audio callbacks, IPolicyConfig).
-windows-core = "0.62.2"
+windows-core = "0.100.0"
 tokio = { workspace = true, features = ["rt", "net", "io-util", "sync", "time", "macros", "process", "signal"] }
 
 [dependencies.windows]
