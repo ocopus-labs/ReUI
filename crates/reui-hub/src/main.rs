@@ -1,9 +1,9 @@
 //! ReUI hub: owns all module state, decides what's in front, and serves it to surfaces.
 //!
 //! Flags: `--demo` enables the demo module, `--no-agents` / `--no-media` / `--no-osd` /
-//! `--no-devices` / `--no-timers` / `--no-privacy` / `--no-stats` disable the coding agent
-//! (Claude Code, Codex, OpenCode) / Now Playing / system OSD / Devices / Timers / privacy
-//! indicator / System stats modules, `--no-link-previews` keeps clipboard links offline,
+//! `--no-devices` / `--no-timers` / `--no-privacy` / `--no-stats` / `--no-activities` disable
+//! the coding agent (Claude Code, Codex, OpenCode) / Now Playing / system OSD / Devices /
+//! Timers / privacy indicator / System stats / script activity modules, `--no-link-previews` keeps clipboard links offline,
 //! `--no-island` doesn't launch the island (run `reui-island` yourself, e.g. under a
 //! debugger). `--no-updates` never looks for updates or mentions them. Clipboard, Now
 //! Playing, Devices, Timers, the privacy indicators and System stats also stay off when their
@@ -88,6 +88,11 @@ async fn main() -> Result<()> {
     }
     if !has("--no-stats") && feature_on("stats.json") {
         enabled.push(Box::new(modules::stats::SystemStats));
+    }
+    // Always started (it costs nothing until a script speaks): `enabled` in its file is
+    // read on every reload, so switching it off needs no restart.
+    if !has("--no-activities") {
+        enabled.push(Box::new(modules::activities::ScriptActivities));
     }
     if !has("--no-updates") {
         enabled.push(Box::new(modules::updates::Updates));
