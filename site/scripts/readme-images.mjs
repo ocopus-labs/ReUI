@@ -5,6 +5,7 @@
 // a place's card) plus a margin, as at the top of a screen.
 import puppeteer from 'puppeteer-core';
 import { join, resolve } from 'node:path';
+import sharp from 'sharp';
 
 const out = resolve(import.meta.dirname, '../../docs/images');
 const shots = [
@@ -37,7 +38,12 @@ for (const [name, moment, o = {}] of shots) {
   const margin = 48;
   const width = o.wide ? 960 : Math.round(box.right - box.left + margin * 2);
   const clip = { x: Math.round(700 - width / 2), y: 0, width, height: Math.round(Math.max(o.wide ? 256 : 0, box.bottom + 24)) };
-  await page.screenshot({ path: join(out, `${name}.png`), clip });
+  // Rounded corners baked in (GitHub can't round an image), so a picture sits on the
+  // page as a card rather than a slab, on the light theme and the dark one.
+  const shot = await page.screenshot({ clip });
+  const [w, h, r] = [clip.width * 2, clip.height * 2, 32];
+  const mask = Buffer.from(`<svg width="${w}" height="${h}"><rect width="${w}" height="${h}" rx="${r}" ry="${r}"/></svg>`);
+  await sharp(shot).composite([{ input: mask, blend: 'dest-in' }]).png().toFile(join(out, `${name}.png`));
   console.log(`${name}.png`, `${clip.width * 2}×${clip.height * 2}`);
   await page.close();
 }

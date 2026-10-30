@@ -51,7 +51,9 @@ const links: { name: string; icon: IconName; label: string }[] = [
   .pill .ico { width: 15px; height: 15px; color: #ebebf0; }
   .pill b { font-weight: 600; }
   .pill em { font-style: normal; font-weight: 500; color: #8e8d94; }
-  .link { padding-right: 15px; }
+  /* Guide and What's new sit beside the download button: the same height, black. */
+  .link { gap: 9px; height: 44px; padding: 0 20px 0 16px; border-radius: 22px; font-size: 15px; }
+  .link .ico { width: 18px; height: 18px; }
   .download {
     display: inline-flex;
     align-items: center;

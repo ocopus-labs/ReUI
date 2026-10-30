@@ -20,8 +20,8 @@
 
 <p align="center">
   <a href="https://github.com/ocopus-labs/ReUI/releases/latest"><img src="docs/images/badges/download.png" height="44" alt="Download for Windows"></a>
-  <a href="docs/guide.md"><img src="docs/images/badges/guide.png" height="30" alt="Guide"></a>
-  <a href="CHANGELOG.md"><img src="docs/images/badges/changelog.png" height="30" alt="What's new"></a>
+  <a href="docs/guide.md"><img src="docs/images/badges/guide.png" height="44" alt="Guide"></a>
+  <a href="CHANGELOG.md"><img src="docs/images/badges/changelog.png" height="44" alt="What's new"></a>
 </p>
 
 <p align="center">
