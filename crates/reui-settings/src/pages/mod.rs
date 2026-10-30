@@ -203,8 +203,9 @@ pub fn act(page: Page, state: &mut State, target: &Target, act: Act) -> Effect {
         if act == Act::Press {
             let on = state.files.doc(file).bool(key);
             state.set(file, key, Value::Bool(!on));
-            if key == "enabled" {
-                // Modules are started (or not) with the hub.
+            if key == "enabled" && file != File::Activities {
+                // Modules are started (or not) with the hub (script activities read theirs
+                // on reload).
                 state.restart_note = state.hub_running();
             }
             return Effect::None;

@@ -21,10 +21,12 @@ pub enum File {
     /// `coding.json`, read by the three coding agent modules.
     Coding,
     Stats,
+    /// `activities.json`: live activities from scripts (`reui-bridge activity`).
+    Activities,
 }
 
 impl File {
-    pub const ALL: [File; 9] = [File::Island, File::Media, File::Clipboard, File::Osd, File::Devices, File::Timers, File::Privacy, File::Coding, File::Stats];
+    pub const ALL: [File; 10] = [File::Island, File::Media, File::Clipboard, File::Osd, File::Devices, File::Timers, File::Privacy, File::Coding, File::Stats, File::Activities];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -37,6 +39,7 @@ impl File {
             File::Privacy => "privacy.json",
             File::Coding => "coding.json",
             File::Stats => "stats.json",
+            File::Activities => "activities.json",
         }
     }
 
@@ -53,6 +56,7 @@ impl File {
             File::Privacy => &["privacy"],
             File::Coding => &["claude", "codex", "opencode"],
             File::Stats => &["stats"],
+            File::Activities => &["activities"],
         }
     }
 
@@ -68,6 +72,7 @@ impl File {
             File::Privacy => "privacy",
             File::Coding => "coding",
             File::Stats => "stats",
+            File::Activities => "activities",
         }
     }
 
@@ -123,6 +128,7 @@ impl File {
                 "presets": [1, 5, 10, 25],
                 "sound": "Alarm01",
                 "ring_for_s": 60,
+                "reminder_sound": false,
                 "focus_work_min": 25,
                 "focus_short_break_min": 5,
                 "focus_long_break_min": 15,
@@ -133,6 +139,7 @@ impl File {
             File::Privacy => json!({ "enabled": true, "microphone": true, "camera": true, "screen": true, "location": false }),
             File::Coding => json!({ "show_sessions": "needed", "show_finished": false }),
             File::Stats => json!({ "enabled": true, "shortcut": "Win+Alt+S", "gpu": true, "disk": true, "network": true, "power": true }),
+            File::Activities => json!({ "enabled": true, "stale_min": 10, "per_source": 3, "blocked": [] }),
         }
     }
 
