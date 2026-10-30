@@ -141,6 +141,10 @@ The hub's `downloads` and `screenshots` modules share `modules/folders/`: an ove
 
 To try them without touching your own folders, a sandboxed hub (`REUI_CONFIG_DIR` set) also reads `REUI_DOWNLOADS_DIR` and `REUI_SCREENSHOTS_DIR` and watches those instead; outside a sandbox they're ignored. Grow a file named `<name>.crdownload` there from a script (append and flush every 250 ms), rename it to `<name>`, or save a PNG into the screenshots folder.
 
+## Notifications internals (spike, off by default)
+
+The hub's `notifications` module shows a Brief (app icon, title) for new toasts from apps on an allow-list. It never runs unless `--notifications` is passed or `%APPDATA%\ReUI\notifications.json` says `"enabled": true` (`apps`: AUMIDs to show, `hide_content`, `seen`: apps that notified lately, AUMID and name only). It reads with `UserNotificationListener` (works without package identity) and lists only when the shell's notification-count WNF state changes, so it costs nothing between toasts (measured 0.0 ms CPU in 120 s idle, ~8 ms per toast); if that state ever misses a toast it falls back to polling (5 s, 2 s after activity, 15 s when quiet, paused while locked). Nothing about a toast is stored or logged. `cargo run -p reui-hub --example notifications_probe -- <mode>` reproduces the measurements with test toasts of its own. Spec and measurements: [PRD-notifications.md](PRD-notifications.md).
+
 ## Adding a module
 
 Implement `modules::Module` in `crates/reui-hub/src/modules/`. In `run`, publish activities with `ctx.publish(key, priority, View { accent, compact, minimal, expanded })`, retract them with `ctx.retract(key)`, and handle inputs (button presses, agent hook calls) from `ctx.next()`. Register it in `main.rs`. Modules stay event-driven (no polling where an event exists) and describe meaning only: never sizes, fonts or theme colours. New features get a PRD in `docs/` first.

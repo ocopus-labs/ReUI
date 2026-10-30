@@ -123,6 +123,12 @@ modules/
                    (countdown, start alert, the day's card, the next wake-up; fake clock),
                    views, settings (calendar.json, links DPAPI-sealed: dpapi.rs), status
                    (each source's last refresh, for Settings)
+  notifications/   opt-in (off by default; --notifications or notifications.json): toasts from
+                   allow-listed apps as a Brief. wnf (the shell's notification count as the
+                   trigger), listener (UserNotificationListener on its own thread: list, read
+                   only what's new), schedule (debounce, safety list, polling fallback with
+                   backoff; tested), diff (new and gone ids; tested), view, settings
+                   (notifications.json); examples/notifications_probe.rs measures it all
   updates/         daily update check, the update card (an Alert: Later / Install, then
                    download progress, installing or why it failed), "Updated" brief:
                    update.json + offer/snooze rules, card phases (pure, tested), views,
@@ -267,6 +273,7 @@ stats.rs           idle cost: CPU and private memory of ReUI's processes
 | `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json`, `timers.json`, `privacy.json`, `stats.json`, `shelf.json`, `coding.json`, `downloads.json`, `screenshots.json` | music, OSD (and the volume card's `mixer`), Devices, Timers, privacy indicator, System stats, downloads, screenshots, file shelf and coding agent settings (`coding.json` is read by all three agent modules) |
 | `%APPDATA%\ReUI\calendar.json` | Calendar: `lead_min`, `windows`, `sources` (each link DPAPI-sealed, shown by `host`) |
 | `%LOCALAPPDATA%\ReUI\calendar\` | each calendar's last good copy (`<id>.cache`, DPAPI-encrypted) and `status.json` (each source's last refresh, read by Settings) |
+| `%APPDATA%\ReUI\notifications.json` | notifications (off unless `enabled`): `apps` allowed (AUMIDs), `hide_content`, `seen` (apps that notified lately: AUMID and name, never a toast's text) |
 | `%APPDATA%\ReUI\timer-state.json` | running and paused timers, a focus session, the stopwatch, and whether ReUI turned Do Not Disturb on |
 | `%LOCALAPPDATA%\ReUI\lyrics\` | lyrics cache |
 | `%LOCALAPPDATA%\ReUI\shelf\held.json`, `shelf\files\<card>\` | what the file shelf holds (paths, links, text), and the copies it made itself (dropped images, files from temporary folders), deleted with their card |

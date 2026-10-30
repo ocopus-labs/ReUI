@@ -237,7 +237,7 @@ These come first because the most-reacted items on every tracker are behaviour a
 1. **Notifications, opt-in per app**
    - **Problem:** Windows toasts land in a corner you don't watch, and Windows won't let you move them.
    - **Evidence:** boring.notch's most-reacted open feature (#592), windhawk #4194, exuupery; DynamicLake's flagship; 8 Windows competitors ship it.
-   - **Windows:** `UserNotificationListener`. Read and remove work unpackaged; live events need identity (sparse package after T2). Until then, a database-change trigger (spike) or polling only while unlocked.
+   - **Windows:** `UserNotificationListener`. Read and remove work unpackaged; live events need identity (sparse package after T2). Until then, the spike found a free trigger: the shell's notification-count WNF state moves with every toast, so ReUI lists only then. The database file is written too late to use. Measurements and plan: [PRD-notifications.md](PRD-notifications.md).
    - **Effort:** L.
    - **Better than competitors:**
      - Off until you pick apps, and nothing leaves the PC.

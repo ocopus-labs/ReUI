@@ -14,6 +14,7 @@ mod folders;
 pub mod hide;
 pub mod hotkey;
 pub mod media;
+pub mod notifications;
 pub mod onboarding;
 pub mod osd;
 pub mod privacy;
