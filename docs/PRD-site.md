@@ -139,7 +139,8 @@ The storyboard. Each is built, shown to the owner, adjusted, then the next start
 | 8 | **Private by default** | — | "Your PC. *Your data.*" · no account, no telemetry; the four times ReUI goes online as a settings-like list (what it sends, on/off) | Built |
 | 9 | **Download** | The hero's photograph again as a bookend; resting on (or focusing) the button plays a download arriving on the island (ReUI-Setup.exe, green ring) | "Free. *Open source.*" · MIT or Apache 2.0 · requirements · the SmartScreen note | Built |
 | 10 | **Questions** | — | "Before you *install.*" · eight answers; the tabs answer is about hiding and the reveal zone, never clicks going through | Built |
-| 11 | **Footer** | — | Links, the CC BY 4.0 credit (Super Visuals, linked; the author's name to add), the giant wordmark | Built |
+| 11 | **Footer** | — | Links (Download, Guide, What's new, Privacy, License, the GitHub mark), "Product names and logos belong to their owners", the CC BY 4.0 credit (Super Visuals, linked; the author's name to add), the giant wordmark | Built |
+| 12 | **/privacy** | — | Its own page (`src/pages/privacy.astro`): ReUI collects nothing; what stays on the PC; the four times the app goes online, to whom; this website (no cookies, analytics or trackers; the host's server logs); changes and questions. Facts from the README's Privacy section and the guide: keep the three in step. No terms of service: the MIT / Apache 2.0 licence is the terms | Built |
 
 ## 8. Content rules
 

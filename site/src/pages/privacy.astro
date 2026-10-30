@@ -1,0 +1,99 @@
+---
+// The privacy page: what ReUI (the app) and this website collect, which is nothing, and
+// the four times the app goes online, to whom and what they see. Facts from README.md
+// "Privacy" and docs/guide.md; keep the three in step.
+import Base from '../layouts/Base.astro';
+import Footer from '../sections/Footer.astro';
+
+const repo = 'https://github.com/ocopus-labs/ReUI';
+const online = [
+  {
+    what: 'Link previews',
+    who: 'The website of a link you copy',
+    detail: 'To show the page’s title and image, ReUI asks that website for it, from public sites only. The site sees an ordinary request from your PC. Turn it off in Settings → Clipboard.',
+  },
+  {
+    what: 'Update check',
+    who: 'GitHub',
+    detail: 'Once a day, ReUI asks GitHub whether a newer version is out. Nothing about you is sent with it. Turn it off in Settings → About.',
+  },
+  {
+    what: 'Synced lyrics',
+    who: 'lrclib.net',
+    detail: 'Off until you turn it on. Then the song’s title, artist and album go to lrclib.net to find its lyrics.',
+  },
+  {
+    what: 'Calendar',
+    who: 'Your calendar’s own server',
+    detail: 'Only once you add a calendar’s link. ReUI then asks that server for it every 15 minutes. The link and the copy kept for offline use are encrypted for your Windows account.',
+  },
+];
+---
+<Base title="Privacy · ReUI" description="ReUI collects nothing about you: no account, no telemetry. What stays on your PC, and the four times the app goes online.">
+  <header class="bar">
+    <a class="brand" href="/"><img src="/favicon.png" width="22" height="22" alt="" />ReUI</a>
+  </header>
+
+  <main class="page">
+    <p class="eyebrow">Updated 30 October 2026</p>
+    <h1>Privacy</h1>
+    <p class="lead">ReUI collects nothing about you. There’s no account, no telemetry, no analytics and no ads, and we never receive your data, because nothing is sent to us.</p>
+
+    <section>
+      <h2>On your PC</h2>
+      <p>Your clipboard history and settings are kept in <code>%APPDATA%\ReUI</code>; caches, logs and what the shelf holds in <code>%LOCALAPPDATA%\ReUI</code>. They stay there. Copies from password managers, and anything that looks like a password, key or token, are never saved. Settings → Privacy &amp; data lists all of it and opens the folders, and uninstalling asks whether to delete it.</p>
+      <p>Coding agents (Claude Code, Codex, OpenCode) talk to ReUI through a connection that never leaves your PC. Their requests and your answers aren’t sent anywhere.</p>
+    </section>
+
+    <section>
+      <h2>When the app goes online</h2>
+      <p>Only for these four things. Each service sees your IP address, as with any connection, and has its own privacy policy.</p>
+      <ul class="rows">
+        {online.map((o) => (
+          <li>
+            <h3>{o.what}</h3>
+            <p class="who">{o.who}</p>
+            <p>{o.detail}</p>
+          </li>
+        ))}
+      </ul>
+    </section>
+
+    <section>
+      <h2>This website</h2>
+      <p>No cookies, no analytics and no trackers. Fonts and images are served from this site itself. The company hosting it keeps the usual server logs (your IP address, the time and the page asked for) to run and protect the service. Downloads come from GitHub Releases, under <a href="https://docs.github.com/en/site-policy/privacy-policies/github-general-privacy-statement">GitHub’s privacy statement</a>.</p>
+    </section>
+
+    <section>
+      <h2>Changes and questions</h2>
+      <p>If this changes, this page will say so, with a new date at the top. Questions are welcome as an <a href={`${repo}/issues`}>issue on GitHub</a>.</p>
+    </section>
+  </main>
+
+  <Footer />
+</Base>
+
+<style>
+  .bar { display: flex; align-items: center; height: 58px; padding: 0 var(--gutter); }
+  .brand { display: inline-flex; align-items: center; gap: 9px; font-weight: 600; font-size: 15px; }
+  .brand img { border-radius: 5px; }
+
+  .page { max-width: 760px; margin: 0 auto; padding: clamp(64px, 10vh, 120px) var(--gutter) clamp(96px, 14vh, 160px); }
+  .eyebrow { color: var(--ink-3); font: 500 13px/1 var(--mono); letter-spacing: 0.04em; }
+  h1 { margin-top: 14px; font-size: clamp(48px, 7vw, 96px); font-weight: 600; line-height: 0.95; letter-spacing: -0.055em; }
+  .lead { margin-top: 24px; color: var(--ink); font-size: clamp(18px, 1.6vw, 22px); line-height: 1.45; letter-spacing: -0.01em; }
+
+  section { margin-top: 56px; padding-top: 28px; border-top: 1px solid var(--line); }
+  h2 { font-size: 22px; font-weight: 600; letter-spacing: -0.02em; }
+  section > p { margin-top: 12px; color: var(--ink-2); font-size: 16px; line-height: 1.6; }
+  code { padding: 1px 6px; border-radius: 6px; background: rgb(14 14 16 / 0.06); color: var(--ink); font: 500 0.88em var(--mono); }
+  a { text-decoration: underline; text-underline-offset: 3px; }
+  .brand { text-decoration: none; }
+
+  .rows { margin: 20px 0 0; padding: 0; list-style: none; }
+  .rows li { padding: 18px 0; border-top: 1px solid var(--line); }
+  .rows li:first-child { border-top: 0; padding-top: 4px; }
+  h3 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+  .who { margin-top: 2px; color: var(--ink-3); font: 500 13px/1.4 var(--mono); }
+  .rows li > p:last-child { margin-top: 8px; color: var(--ink-2); font-size: 15.5px; line-height: 1.55; }
+</style>
