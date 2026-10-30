@@ -29,6 +29,13 @@ import plan from '@fluentui/svg-icons/icons/task_list_ltr_20_regular.svg?raw';
 import globe from '@fluentui/svg-icons/icons/globe_20_regular.svg?raw';
 import cast from '@fluentui/svg-icons/icons/speaker_bluetooth_20_regular.svg?raw';
 import bin from '@fluentui/svg-icons/icons/delete_20_regular.svg?raw';
+import desktop from '@fluentui/svg-icons/icons/desktop_20_regular.svg?raw';
+import tag from '@fluentui/svg-icons/icons/tag_20_regular.svg?raw';
+import shield from '@fluentui/svg-icons/icons/shield_checkmark_20_regular.svg?raw';
+import scales from '@fluentui/svg-icons/icons/scales_20_regular.svg?raw';
+import downloadFilled from '@fluentui/svg-icons/icons/arrow_download_20_filled.svg?raw';
+import book from '@fluentui/svg-icons/icons/book_open_20_regular.svg?raw';
+import sparkle from '@fluentui/svg-icons/icons/sparkle_20_regular.svg?raw';
 
 import claude from '../../../design/assets/agents/claude.svg?raw';
 import openai from '../../../design/assets/agents/openai.svg?raw';
@@ -49,12 +56,13 @@ import firefox from 'simple-icons/icons/firefoxbrowser.svg?raw';
 import brave from 'simple-icons/icons/brave.svg?raw';
 import opera from 'simple-icons/icons/opera.svg?raw';
 import github from 'simple-icons/icons/github.svg?raw';
+import rust from 'simple-icons/icons/rust.svg?raw';
 
 export const icons = {
   paste, box, timer, calendar, devices, pulse, music, mic, alert, check, dismiss, download, play, pause, previous, next,
-  speaker, search, document, question, terminal, plan, globe, cast, bin,
+  speaker, search, document, question, terminal, plan, globe, cast, bin, desktop, tag, shield, scales, downloadFilled, book, sparkle,
   claude, openai, opencode, earbuds, headphones,
-  zoom, discord, webex, whatsapp, telegram, signal, spotify, vlc, chrome, firefox, brave, opera, github,
+  zoom, discord, webex, whatsapp, telegram, signal, spotify, vlc, chrome, firefox, brave, opera, github, rust,
 };
 export type IconName = keyof typeof icons;
 

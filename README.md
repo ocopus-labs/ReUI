@@ -7,26 +7,21 @@
 <p align="center">The Dynamic Island for Windows.</p>
 
 <!--
-  Static badges only: shields.io can't read a private repository. When the repository is
-  public, add these dynamic ones:
-    https://img.shields.io/github/v/release/ocopus-labs/ReUI                  (latest release)
-    https://img.shields.io/github/downloads/ocopus-labs/ReUI/total            (downloads)
-    https://img.shields.io/github/actions/workflow/status/ocopus-labs/ReUI/ci.yml  (build)
+  The badges are images drawn like the island (site/src/pages/badges.astro, `npm run badges`
+  in site/ with its dev server running). Update the version badge with each release.
 -->
 <p align="center">
-  <img src="https://img.shields.io/badge/Windows-10%20%7C%2011-3A3A3D?labelColor=1C1C1E" alt="Windows 10 | 11">
-  <img src="https://img.shields.io/badge/version-0.1.0-3A3A3D?labelColor=1C1C1E" alt="Version 0.1.0">
-  <img src="https://img.shields.io/badge/built%20with-Rust-3A3A3D?labelColor=1C1C1E" alt="Built with Rust">
-  <img src="https://img.shields.io/badge/install-no%20admin%20needed-3A3A3D?labelColor=1C1C1E" alt="No admin needed">
-  <img src="https://img.shields.io/badge/license-MIT%20%2F%20Apache--2.0-3A3A3D?labelColor=1C1C1E" alt="MIT or Apache-2.0">
+  <img src="docs/images/badges/windows.png" height="30" alt="Windows 10 and 11">
+  <img src="docs/images/badges/version.png" height="30" alt="Version 0.1.0">
+  <img src="docs/images/badges/rust.png" height="30" alt="Built with Rust">
+  <img src="docs/images/badges/install.png" height="30" alt="Installs without admin rights">
+  <img src="docs/images/badges/license.png" height="30" alt="MIT or Apache 2.0">
 </p>
 
 <p align="center">
-  <a href="https://github.com/ocopus-labs/ReUI/releases/latest"><b>Download for Windows</b></a>
-  &nbsp;·&nbsp;
-  <a href="docs/guide.md">Guide</a>
-  &nbsp;·&nbsp;
-  <a href="CHANGELOG.md">What's new</a>
+  <a href="https://github.com/ocopus-labs/ReUI/releases/latest"><img src="docs/images/badges/download.png" height="44" alt="Download for Windows"></a>
+  <a href="docs/guide.md"><img src="docs/images/badges/guide.png" height="30" alt="Guide"></a>
+  <a href="CHANGELOG.md"><img src="docs/images/badges/changelog.png" height="30" alt="What's new"></a>
 </p>
 
 <p align="center">

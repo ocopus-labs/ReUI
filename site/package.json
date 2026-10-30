@@ -11,7 +11,8 @@
     "preview": "astro preview",
     "astro": "astro",
     "images": "node scripts/island-images.mjs",
-    "readme-images": "node scripts/readme-images.mjs"
+    "readme-images": "node scripts/readme-images.mjs",
+    "badges": "node scripts/badges.mjs"
   },
   "dependencies": {
     "@fluentui/svg-icons": "^1.1.344",

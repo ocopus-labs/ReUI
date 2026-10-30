@@ -1,0 +1,69 @@
+---
+// The README's badges, not part of the site: capsules styled like the island (black, a
+// hairline edge so they hold on GitHub's dark theme too), each with a real icon. The
+// download button is the site's own white capsule. scripts/badges.mjs photographs each
+// into docs/images/badges as a transparent PNG at 2×.
+import Base from '../layouts/Base.astro';
+import { icons, type IconName } from '../scripts/icons';
+
+const facts: { name: string; icon: IconName; label: string; value?: string; tint?: string }[] = [
+  { name: 'windows', icon: 'desktop', label: 'Windows', value: '10 · 11' },
+  { name: 'version', icon: 'tag', label: 'Version', value: '0.1.0' },
+  { name: 'rust', icon: 'rust', label: 'Built with Rust', tint: '#f74c00' },
+  { name: 'install', icon: 'shield', label: 'Install', value: 'no admin' },
+  { name: 'license', icon: 'scales', label: 'License', value: 'MIT · Apache 2.0' },
+];
+const links: { name: string; icon: IconName; label: string }[] = [
+  { name: 'guide', icon: 'book', label: 'Guide' },
+  { name: 'changelog', icon: 'sparkle', label: 'What’s new' },
+];
+---
+<Base title="ReUI badges" description="The README's badges." bare>
+  <div class="sheet">
+    <span class="download" data-badge="download"><i class="ico" set:html={icons.downloadFilled}></i>Download for Windows</span>
+    {links.map((l) => <span class="pill link" data-badge={l.name}><i class="ico" set:html={icons[l.icon]}></i>{l.label}</span>)}
+    {facts.map((f) => (
+      <span class="pill" data-badge={f.name}>
+        <i class="ico" style={f.tint && `color:${f.tint}`} set:html={icons[f.icon]}></i>
+        <b>{f.label}</b>{f.value && <em>{f.value}</em>}
+      </span>
+    ))}
+  </div>
+</Base>
+
+<style>
+  :global(body) { background: transparent; }
+  .sheet { display: flex; flex-direction: column; align-items: flex-start; gap: 16px; padding: 16px; }
+  .pill {
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    height: 30px;
+    padding: 0 13px 0 10px;
+    border-radius: 15px;
+    background: #000;
+    box-shadow: inset 0 0 0 1px rgb(255 255 255 / 0.14);
+    color: #ebebf0;
+    font: 600 13px/1 var(--sans);
+    letter-spacing: -0.005em;
+    white-space: nowrap;
+  }
+  .pill .ico { width: 15px; height: 15px; color: #ebebf0; }
+  .pill b { font-weight: 600; }
+  .pill em { font-style: normal; font-weight: 500; color: #8e8d94; }
+  .link { padding-right: 15px; }
+  .download {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    height: 44px;
+    padding: 0 22px 0 18px;
+    border-radius: 22px;
+    background: #fff;
+    box-shadow: inset 0 0 0 1px rgb(0 0 0 / 0.1);
+    color: #0e0e10;
+    font: 600 15px/1 var(--sans);
+    white-space: nowrap;
+  }
+  .download .ico { width: 18px; height: 18px; }
+</style>
