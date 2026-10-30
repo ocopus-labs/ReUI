@@ -1,0 +1,259 @@
+---
+// Coding agents, the developer's reason to install: a Windows Terminal running Claude Code
+// pins to the top of the screen, the page's island over its title bar, and scrolling plays
+// one real session (agent/card.rs wording): it asks to run npm test (Allow), asks how a
+// retry should wait (pick, Send), proposes a plan (Approve), then fixes it and the island
+// shows the done check. A cursor answers unless the visitor does; answering yourself moves
+// the scroll on to the next beat.
+import { icons } from '../scripts/icons';
+const beats = [
+  { title: 'Answer your coding agents without switching windows', accent: '' },
+  { title: 'Claude wants to run npm test', accent: '' },
+  { title: 'A test fails, and it asks how to fix it', accent: '' },
+  { title: 'It writes a plan for you to approve', accent: '' },
+  { title: 'Fixed. All 42 tests pass', accent: '' },
+];
+---
+<section class="agents" data-agents aria-labelledby="agents-title">
+  <div class="stage">
+    <div class="terminal" role="img" aria-label="Claude Code running in Windows Terminal">
+      <div class="titlebar">
+        <span class="tab"><span class="icon">✻</span>Claude Code<i>×</i></span>
+        <span class="plus">+</span>
+        <span class="controls"><i>—</i><i>▢</i><i>✕</i></span>
+      </div>
+      <pre class="screen" data-screen><span class="banner"><b>✻</b> Welcome to Claude Code
+  <i>cwd: C:\code\reui</i></span>
+
+<span class="you">&gt; Run the tests and fix what fails</span>
+
+<span class="dot">●</span> I'll run the test suite first.
+
+<span class="dot">●</span> <b>Bash</b>(npm test)
+<span data-phase="1" data-only>  ⎿  <span class="wait">Waiting for permission…</span>
+</span><span data-phase="2">  ⎿  41 passed, <span class="bad">1 failed</span>
+     <span class="bad">✗</span> upload › retries a dropped chunk
+
+<span class="dot">●</span> The retry fires again straight away, so the
+  server turns it down. How should it wait?
+</span><span data-phase="2" data-only>  ⎿  <span class="wait">Waiting for your answer…</span>
+</span><span data-phase="3">  ⎿  Exponential backoff
+
+<span class="dot">●</span> Here's the plan.
+</span><span data-phase="3" data-only>  ⎿  <span class="wait">Waiting for approval…</span>
+</span><span data-phase="4">
+<span class="dot">●</span> <b>Update</b>(src/upload.ts)
+  ⎿  <span class="good">+12</span> <span class="bad">−3</span>
+
+<span class="dot">●</span> <b>Bash</b>(npm test)
+  ⎿  <span class="good">42 passed</span>
+
+<span class="dot">●</span> All 42 pass. The retry now backs off from
+  100 ms and gives up after five tries.
+</span></pre>
+    </div>
+
+    <div class="copy">
+      <ul class="agents-list" aria-label="Works with">
+        <li><i class="ico" set:html={icons.claude}></i>Claude Code</li>
+        <li><i class="ico" set:html={icons.openai}></i>Codex</li>
+        <li><i class="ico" set:html={icons.opencode}></i>OpenCode</li>
+      </ul>
+      <ol class="beats" data-beats>
+        {beats.map((b, i) => (
+          <li data-beat={i} class={i === 0 ? 'on' : ''}>
+            {i === 0 ? <h2 id="agents-title">{b.title} <em class="serif">{b.accent}</em></h2> : <p class="h2">{b.title} <em class="serif">{b.accent}</em></p>}
+          </li>
+        ))}
+      </ol>
+      <p class="text">Each card says which session is asking and shows the full command. Anything that looks like a secret shows as dots, and a card never takes your keyboard by itself, so a stray Enter can't allow anything.</p>
+    </div>
+  </div>
+  <!-- Outside the pinned stage (its own stacking context), so it paints over the island. -->
+  <svg class="cursor" data-cursor viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l14 8.2-6.2 1.3L10 19z" /></svg>
+  <span class="ripple" data-ripple aria-hidden="true"></span>
+</section>
+
+<script>
+  interface Island {
+    drive(name: string | null, owner: string): void;
+  }
+  const island = (window as unknown as { island: Island }).island;
+  const section = document.querySelector<HTMLElement>('[data-agents]')!;
+  const parts = [...section.querySelectorAll<HTMLElement>('[data-phase]')];
+  const beats = [...section.querySelectorAll<HTMLElement>('[data-beat]')];
+  const cursor = section.querySelector<SVGElement>('[data-cursor]')!;
+  const ripple = section.querySelector<HTMLElement>('[data-ripple]')!;
+  const OWNER = 'agents';
+
+  const clamp = (x: number) => Math.min(1, Math.max(0, x));
+  const ease = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2);
+  const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
+  // Where the island's buttons are, for the cursor (the island isn't scaled here).
+  const centre = (sel: string) => {
+    const el = document.querySelector<HTMLElement>(`[data-island] ${sel}`);
+    const r = el?.getBoundingClientRect();
+    return r && r.width ? { x: r.left + r.width / 2, y: r.top + r.height / 2 } : null;
+  };
+
+  function click(x: number, y: number) {
+    ripple.style.left = `${x}px`;
+    ripple.style.top = `${y}px`;
+    ripple.classList.remove('go');
+    void ripple.offsetWidth;
+    ripple.classList.add('go');
+  }
+
+  // Phases by the pin's progress t; each beat starts at its mark, and its answer lands
+  // at the next one (so scrolling back undoes it):
+  //   0 < 0.08  the title          1 0.08 permission (Allow at 0.24)
+  //   2 0.24    the question (pick at 0.34, Send at 0.44)
+  //   3 0.44    the plan (Approve at 0.64)    4 0.64 done     5 0.86 the title again
+  const marks = [0, 0.08, 0.24, 0.44, 0.64, 0.86];
+  const cards = ['agent', 'permission', 'question', 'plan', 'agent-done', 'agent-done'];
+  let inside = false;
+  let phase = -1;
+  let picked = false;
+
+  function setPick(on: boolean) {
+    picked = on;
+    document.querySelectorAll<HTMLElement>('[data-island] [data-choice]').forEach((c) => c.toggleAttribute('data-on', on && c.dataset.choice === '0'));
+    document.querySelector<HTMLElement>('[data-island] [data-send]')?.toggleAttribute('data-ready', on);
+  }
+
+  function update() {
+    const r = section.getBoundingClientRect();
+    const now = r.top <= 1 && r.bottom > innerHeight * 0.3;
+    if (now !== inside) {
+      inside = now;
+      section.classList.toggle('playing', now);
+      if (!now) island.drive(null, OWNER);
+      phase = -1;
+    }
+    if (!inside) return;
+    const t = clamp(-r.top / (r.height - innerHeight));
+    const next = marks.findLastIndex((m) => t >= m);
+
+    // The question's pick happens inside its beat.
+    if (next === 2) setPick(t >= 0.34);
+
+    // The cursor: rests aside, travels to each answer just before it lands.
+    const home = { x: innerWidth * 0.74, y: innerHeight * 0.5 };
+    const targets: Record<number, [string, number, number]> = {
+      1: ['[data-moment="permission"] [data-answer="allow"]', 0.16, 0.24],
+      2: [t < 0.34 ? '[data-moment="question"] [data-choice="0"]' : '[data-moment="question"] [data-send]', t < 0.34 ? 0.29 : 0.39, t < 0.34 ? 0.34 : 0.44],
+      3: ['[data-moment="plan"] [data-action="approve"]', 0.56, 0.64],
+    };
+    let p = home;
+    const aim = targets[next];
+    if (aim) {
+      const goal = centre(aim[0]);
+      if (goal) {
+        const k = ease(clamp((t - aim[1]) / (aim[2] - aim[1] - 0.02)));
+        p = { x: lerp(home.x, goal.x, k), y: lerp(home.y, goal.y, k) };
+      }
+    }
+    cursor.style.transform = `translate(${p.x}px, ${p.y}px)`;
+
+    if (next === phase) return;
+    const forward = next > phase;
+    const from = phase;
+    phase = next;
+    if (forward && from >= 1 && from <= 3) {
+      const done = { 1: '[data-moment="permission"] [data-answer="allow"]', 2: '[data-moment="question"] [data-send]', 3: '[data-moment="plan"] [data-action="approve"]' }[from];
+      const c = done ? centre(done) : null;
+      if (c) click(c.x, c.y);
+    }
+    const beat = next === 5 ? 0 : next;
+    beats.forEach((b, i) => b.classList.toggle('on', i === beat));
+    for (const part of parts) {
+      const n = Number(part.dataset.phase);
+      part.hidden = part.hasAttribute('data-only') ? n !== Math.min(next, 4) : n > Math.min(next, 4) || (next === 0 && n > 0);
+    }
+    if (next !== 2) setPick(next > 2);
+    // Like a terminal: the newest output stays in view.
+    const screen = section.querySelector<HTMLElement>('[data-screen]')!;
+    screen.scrollTo({ top: screen.scrollHeight, behavior: forward ? 'smooth' : 'auto' });
+    island.drive(next === 0 ? null : cards[next], OWNER);
+  }
+
+  // Answering yourself moves the session on: the scroll goes to the next beat.
+  function advance(to: number) {
+    const r = section.getBoundingClientRect();
+    const y = scrollY + r.top + marks[to] * (r.height - innerHeight) + 2;
+    const lenis = (window as unknown as { lenis?: { scrollTo(y: number, o?: { duration?: number }): void } }).lenis;
+    if (lenis) lenis.scrollTo(y, { duration: 1.2 });
+    else scrollTo({ top: y, behavior: 'smooth' });
+  }
+  addEventListener('island:action', (event) => {
+    if (!inside) return;
+    const { action } = (event as CustomEvent<{ action: string }>).detail;
+    if (phase === 1 && (action === 'allow' || action === 'always')) advance(2);
+    else if (phase === 2 && action.startsWith('pick:')) setPick(true);
+    else if (phase === 2 && action === 'send' && picked) advance(3);
+    else if (phase === 3 && action === 'approve') advance(4);
+  });
+
+  addEventListener('scroll', () => requestAnimationFrame(update), { passive: true });
+  addEventListener('resize', update);
+  update();
+</script>
+
+<style>
+  .agents { position: relative; height: 560svh; background: var(--page); }
+  /* A window on the left, the words on the right; the island comes down over the window's
+     upper right, as it would over a window on a screen. */
+  .stage { position: sticky; top: 0; height: 100svh; display: grid; grid-template-columns: minmax(0, 1.25fr) minmax(0, 0.75fr); align-items: center; gap: clamp(32px, 4vw, 72px); padding: 92px var(--gutter) 7svh; }
+
+  /* Windows Terminal, One Half Light, as a window. */
+  .terminal { align-self: stretch; display: flex; flex-direction: column; min-height: 0; background: #fafafa; border-radius: 12px; box-shadow: 0 30px 60px -30px rgb(0 0 0 / 0.35), 0 0 0 1px rgb(0 0 0 / 0.06); overflow: hidden; }
+  .titlebar { display: flex; align-items: flex-end; height: 42px; padding-left: 10px; background: #e8e8e8; font: 400 12.5px/1 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: #383a42; }
+  .tab { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 8px 8px 0 0; background: #fafafa; }
+  .tab .icon { color: #d97757; font-size: 14px; }
+  .tab i { margin-left: 18px; color: #8a8a8a; font-style: normal; }
+  .plus { align-self: center; padding: 0 12px; color: #6a6a6a; font-size: 16px; }
+  .controls { display: flex; align-self: stretch; margin-left: auto; }
+  .controls i { display: grid; place-items: center; width: 46px; font-style: normal; font-size: 12px; color: #383a42; }
+  .screen {
+    flex: 1;
+    margin: 0;
+    padding: 22px clamp(20px, 3vw, 36px);
+    overflow: hidden;
+    color: #383a42;
+    font: 400 clamp(12px, 1vw, 14.5px)/1.5 "Cascadia Mono", "Geist Mono Variable", Consolas, monospace;
+    white-space: pre;
+  }
+  .screen .banner { display: inline-block; padding: 8px 16px; border: 1px solid #d3d3d6; border-radius: 8px; color: #383a42; }
+  .screen .banner i { color: #a0a1a7; font-style: normal; }
+  .screen .banner b, .screen .dot { color: #d97757; }
+  .screen b { font-weight: 700; }
+  .screen .you { color: #0184bc; }
+  .screen .wait { color: #a0a1a7; }
+  .screen .bad { color: #e45649; }
+  .screen .good { color: #50a14f; }
+  .screen [hidden] { display: none; }
+
+  .copy { display: flex; flex-direction: column; align-items: flex-start; text-align: left; }
+  .agents-list { display: flex; flex-wrap: wrap; gap: 8px 18px; margin: 0; padding: 0; list-style: none; color: var(--ink-2); font-size: 14px; font-weight: 500; }
+  .agents-list li { display: flex; align-items: center; gap: 8px; }
+  .agents-list .ico { width: 18px; height: 18px; color: var(--ink); }
+  .beats { position: relative; width: 100%; height: 2.2em; margin: 14px 0 0; padding: 0; list-style: none; font-size: clamp(28px, 3.2vw, 52px); }
+  .beats li { position: absolute; inset: 0; opacity: 0; transform: translateY(16px); transition: opacity 0.35s ease, transform 0.55s cubic-bezier(0.16, 1, 0.3, 1); }
+  .beats li.on { opacity: 1; transform: none; transition-delay: 0.08s; }
+  h2, .h2 { margin: 0; font-size: 1em; font-weight: 600; line-height: 1.05; letter-spacing: -0.045em; text-wrap: balance; }
+  h2 em.serif, .h2 em.serif { letter-spacing: -0.02em; }
+  .text { max-width: 30em; margin-top: 20px; color: var(--ink-2); font-size: 15px; text-wrap: pretty; }
+
+  .cursor { position: fixed; left: 0; top: 0; z-index: 70; width: 22px; height: 22px; margin: -2px 0 0 -3px; fill: #fff; stroke: #0e0e10; stroke-width: 1.3; stroke-linejoin: round; pointer-events: none; opacity: 0; transition: opacity 0.3s ease; }
+  .playing .cursor { opacity: 1; }
+  .ripple { position: fixed; z-index: 69; width: 36px; height: 36px; margin: -18px 0 0 -18px; border-radius: 50%; border: 2px solid rgb(14 14 16 / 0.5); opacity: 0; pointer-events: none; }
+  .ripple.go { animation: ripple 0.5s ease-out; }
+  @keyframes ripple { from { opacity: 1; transform: scale(0.3); } to { opacity: 0; transform: scale(1.4); } }
+
+  @media (max-width: 860px) {
+    .stage { grid-template-columns: 1fr; grid-template-rows: 1fr auto; align-items: stretch; padding-top: 72px; }
+    .copy { align-items: center; text-align: center; }
+    .beats { height: 2.3em; }
+  }
+</style>

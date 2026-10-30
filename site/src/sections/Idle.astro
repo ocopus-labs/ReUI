@@ -1,0 +1,85 @@
+---
+// Idle costs nothing: the page's island goes back to its resting pill while the measured
+// numbers (README "Performance") are set large. The first counts down to nothing once,
+// when it comes into view; nothing on this screen moves after that.
+const numbers = [
+  { value: 0, decimals: 2, from: 9.99, unit: '%', label: 'CPU with nothing happening' },
+  { value: 2, decimals: 0, from: 0, unit: 'MB', label: 'for the hub at rest' },
+  { value: 0.05, decimals: 2, from: 0, unit: '%', label: 'CPU with music playing' },
+];
+---
+<section class="idle" data-idle aria-labelledby="idle-title">
+  <div class="inner">
+    <p class="eyebrow">Performance</p>
+    <h2 id="idle-title">It uses nothing while it waits</h2>
+    <p class="text">It follows Windows' own events and draws nothing while nothing moves. A native app, written in Rust.</p>
+    <div class="numbers">
+      {numbers.map((n) => (
+        <div class="number">
+          <span class="value" data-count data-to={n.value} data-from={n.from} data-decimals={n.decimals}>{n.value.toFixed(n.decimals)}</span><span class="unit">{n.unit}</span>
+          <span class="label">{n.label}</span>
+        </div>
+      ))}
+    </div>
+    <p class="note">Release build, three runs of 60 s per scene on a Ryzen 5 5600 with Windows 11. The island's own memory is about 57 MB at rest, most of it its graphics device and fonts.</p>
+  </div>
+</section>
+
+<script>
+  interface Island {
+    drive(name: string | null, owner: string): void;
+  }
+  const island = (window as unknown as { island: Island }).island;
+  const section = document.querySelector<HTMLElement>('[data-idle]')!;
+  const counters = [...section.querySelectorAll<HTMLElement>('[data-count]')];
+  const OWNER = 'idle';
+
+  // Counts once, the first time the numbers come into view.
+  let counted = false;
+  function count() {
+    counted = true;
+    const start = performance.now();
+    const step = (now: number) => {
+      const k = Math.min(1, (now - start) / 1400);
+      const e = 1 - (1 - k) ** 3;
+      for (const c of counters) {
+        const from = Number(c.dataset.from);
+        const to = Number(c.dataset.to);
+        c.textContent = (from + (to - from) * e).toFixed(Number(c.dataset.decimals));
+      }
+      if (k < 1) requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
+
+  let inside = false;
+  addEventListener('scroll', () => {
+    const r = section.getBoundingClientRect();
+    const now = r.top < innerHeight * 0.55 && r.bottom > innerHeight * 0.45;
+    if (now && !counted) count();
+    if (now === inside) return;
+    inside = now;
+    island.drive(now ? 'idle' : null, OWNER);
+  }, { passive: true });
+</script>
+
+<style>
+  .idle { position: relative; padding: clamp(140px, 18vh, 220px) var(--gutter); background: var(--page); }
+  .inner { max-width: 1240px; margin: 0 auto; }
+  .eyebrow { color: var(--ink-3); font: 500 13px/1 var(--mono); letter-spacing: 0.04em; }
+  h2 { margin-top: 14px; font-size: clamp(48px, 8vw, 128px); font-weight: 600; line-height: 0.92; letter-spacing: -0.055em; }
+  h2 em.serif { letter-spacing: -0.02em; }
+  .text { max-width: 30em; margin-top: 22px; color: var(--ink-2); font-size: clamp(16px, 1.3vw, 19px); }
+  .numbers { display: grid; grid-template-columns: repeat(3, 1fr); margin-top: clamp(56px, 8vh, 96px); border-top: 1px solid var(--line); }
+  .number { display: flex; flex-wrap: wrap; align-items: baseline; padding: 28px 24px 0 0; }
+  .number + .number { padding-left: 24px; border-left: 1px solid var(--line); }
+  .value { font-size: clamp(56px, 8vw, 132px); font-weight: 600; line-height: 1; letter-spacing: -0.06em; font-variant-numeric: tabular-nums; }
+  .unit { margin-left: 8px; color: var(--ink-3); font-size: clamp(20px, 2vw, 32px); font-weight: 500; letter-spacing: -0.02em; }
+  .label { flex-basis: 100%; margin-top: 12px; color: var(--ink-2); font: 500 13px/1.4 var(--mono); }
+  .note { max-width: 46em; margin-top: 40px; color: var(--ink-3); font-size: 13px; }
+  @media (max-width: 760px) {
+    .numbers { grid-template-columns: 1fr; }
+    .number + .number { padding-left: 0; border-left: 0; border-top: 1px solid var(--line); }
+    .number { padding-bottom: 24px; }
+  }
+</style>

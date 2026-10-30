@@ -1,0 +1,282 @@
+---
+// Out of your way, magnified: the camera zooms into the top centre of a browser (its tab
+// strip at ~2.4×), and the page's real island travels down and scales to sit on that
+// strip exactly as it sits on a screen. Scrolling plays what keeps it off the tabs, one
+// line per beat: hidden until something needs you; a decision brings it down; pushing the
+// edge above the pill brings it back; the rest of the edge stays the browser's
+// (docs/PRD-behaviour.md: visibility modes and reveal_zone "pill"). A click on the pill is
+// always the island's, so the scene never claims a click goes through it.
+const tabs = [
+  { title: 'Clair de Lune · Claude Debussy', host: 'music.example.com', tile: '#ff375f', letter: '♪' },
+  { title: 'Q3 planning', host: 'docs.example.com', tile: '#16a34a', letter: 'D' },
+  { title: 'Flights to Lisbon', host: 'travel.example.com', tile: '#f59e0b', letter: 'T' },
+];
+const beats = [
+  { title: 'It keeps out of your tabs', accent: '' },
+  { title: 'Hidden until something needs you', accent: '' },
+  { title: 'A permission request brings it down', accent: '' },
+  { title: 'Push the pointer against the edge above it to bring it back', accent: '' },
+  { title: 'The rest of the top edge stays the browser’s', accent: '' },
+];
+---
+<section class="tabs-scene" data-tabs aria-labelledby="tabs-title">
+  <div class="stage">
+    <div class="frame" data-frame>
+      <div class="zoom" data-zoom>
+        <div class="strip">
+          <div class="tablist" role="tablist" aria-label="A browser's tabs">
+            {tabs.map((t, i) => (
+              <button type="button" role="tab" class="tab" aria-selected={i === 0 ? 'true' : 'false'} data-index={i} data-host={t.host} data-title={t.title}>
+                <span class="tile" style={`background:${t.tile}`}>{t.letter}</span>
+                <span class="name">{t.title}</span>
+                <svg class="x" viewBox="0 0 12 12" aria-hidden="true"><path d="M3 3l6 6M9 3 3 9" /></svg>
+              </button>
+            ))}
+          </div>
+        </div>
+        <div class="toolbar" aria-hidden="true">
+          <span class="nav">‹ › ↻</span>
+          <span class="address" data-address>{tabs[0].host}</span>
+        </div>
+        <div class="page"><p class="title" data-title-out>{tabs[0].title}</p></div>
+      </div>
+    </div>
+
+    <div class="copy">
+      <p class="eyebrow">Out of your way</p>
+      <ol class="beats" data-beats>
+        {beats.map((b, i) => (
+          <li data-beat={i} class={i === 0 ? 'on' : ''}>
+            {i === 0 ? <h2 id="tabs-title">{b.title} <em class="serif">{b.accent}</em></h2> : <p class="h2">{b.title} <em class="serif">{b.accent}</em></p>}
+          </li>
+        ))}
+      </ol>
+      <div class="ticks" aria-hidden="true"><i></i><i></i><i></i><i></i></div>
+    </div>
+  </div>
+  <!-- Outside the pinned stage (a stacking context of its own), so the cursor paints over
+       the island; placed in screen coordinates from the strip's own. -->
+  <svg class="cursor" data-cursor viewBox="0 0 24 24" aria-hidden="true"><path d="M5 3l14 8.2-6.2 1.3L10 19z" /></svg>
+  <span class="ripple" data-ripple aria-hidden="true"></span>
+</section>
+
+<script>
+  interface Island {
+    drive(name: string | null, owner: string): void;
+    stage(drop: number, scale: number): void;
+    show(name: string, options?: { bubble?: boolean }): void;
+    peek(on: boolean): void;
+    visible(on: boolean): void;
+    ghost(): void;
+  }
+  const island = (window as unknown as { island: Island }).island;
+  const section = document.querySelector<HTMLElement>('[data-tabs]')!;
+  const frame = section.querySelector<HTMLElement>('[data-frame]')!;
+  const zoom = section.querySelector<HTMLElement>('[data-zoom]')!;
+  const buttons = [...section.querySelectorAll<HTMLButtonElement>('.tab')];
+  const address = section.querySelector<HTMLElement>('[data-address]')!;
+  const titleOut = section.querySelector<HTMLElement>('[data-title-out]')!;
+  const cursor = section.querySelector<SVGElement>('[data-cursor]')!;
+  const ripple = section.querySelector<HTMLElement>('[data-ripple]')!;
+  const beats = [...section.querySelectorAll<HTMLElement>('[data-beat]')];
+  const ticks = [...section.querySelectorAll<HTMLElement>('.ticks i')];
+
+  function select(button: HTMLButtonElement | undefined) {
+    if (!button) return;
+    buttons.forEach((b) => b.setAttribute('aria-selected', String(b === button)));
+    address.textContent = button.dataset.host!;
+    titleOut.textContent = button.dataset.title!;
+  }
+  for (const b of buttons) b.addEventListener('click', () => select(b));
+
+  const clamp = (x: number) => Math.min(1, Math.max(0, x));
+  const ease = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2);
+  const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
+
+  // The magnification, and the zoomed strip's natural width (a crop of a screen's top
+  // centre, as wide as the frame shows).
+  let S = 2.4;
+  function layout() {
+    S = innerWidth < 700 ? 1.5 : Math.min(2.4, (0.9 * innerWidth) / 600);
+    const natural = frame.clientWidth / S;
+    zoom.style.width = `${natural}px`;
+    zoom.style.transform = `translateX(-50%) scale(${S})`;
+    frame.style.height = `${190 * S}px`;
+  }
+
+  /** A point in the strip's natural coordinates, on the screen. */
+  function onScreen(x: number, y: number) {
+    const f = frame.getBoundingClientRect();
+    const natural = frame.clientWidth / S;
+    return { x: f.left + (f.width - natural * S) / 2 + x * S, y: f.top + y * S };
+  }
+
+  function click(x: number, y: number) {
+    const p = onScreen(x, y);
+    ripple.style.left = `${p.x}px`;
+    ripple.style.top = `${p.y}px`;
+    ripple.style.scale = String(S);
+    ripple.classList.remove('go');
+    void ripple.offsetWidth;
+    ripple.classList.add('go');
+  }
+
+  // The scene as a function of how far the pin has been scrolled, so scrolling back plays
+  // it backwards. Phases (t is the pin's progress):
+  //   0  < 0.21  zoom in; no island; the cursor heads for the middle tab
+  //   1  0.21    it clicks that tab (nothing in the way: the island is hidden)
+  //   2  0.32    a decision: Claude's "Allow?" comes down; the cursor moves off
+  //   3  0.5     it's gone again; the cursor pushes against the edge above the pill
+  //   4  0.58    and it's back
+  //   5  0.66    hidden again; the cursor pushes the edge over another tab: nothing
+  //   6  0.82    so it clicks that tab
+  //   7  0.9     the title again; 0.94–1 zoom out
+  let inside = false;
+  let phase = -1;
+  type Point = { x: number; y: number };
+  function along(t: number, keys: [number, Point][]): Point {
+    if (t <= keys[0][0]) return keys[0][1];
+    for (let i = 1; i < keys.length; i++) {
+      const [t1, p1] = keys[i];
+      const [t0, p0] = keys[i - 1];
+      if (t <= t1) {
+        const k = ease((t - t0) / (t1 - t0));
+        return { x: lerp(p0.x, p1.x, k), y: lerp(p0.y, p1.y, k) };
+      }
+    }
+    return keys[keys.length - 1][1];
+  }
+  function update() {
+    const r = section.getBoundingClientRect();
+    const now = r.top <= 1 && r.bottom > innerHeight * 0.3;
+    if (now !== inside) {
+      inside = now;
+      section.classList.toggle('playing', now);
+      island.drive(now ? 'music' : null, 'tabs');
+      if (!now) {
+        island.visible(true);
+        island.stage(0, 1);
+      }
+      phase = -1;
+    }
+    if (!inside) return;
+    const t = clamp(-r.top / (r.height - innerHeight));
+    const z = ease(Math.min(clamp(t / 0.08), clamp((1 - t) / 0.06)));
+
+    // The island onto the strip: its top 11 natural px below the frame's top edge.
+    const f = frame.getBoundingClientRect();
+    island.stage((f.top + 11 * S - 11) * z, 1 + (S - 1) * z);
+
+    // The cursor, in the strip's own (natural) coordinates.
+    const natural = frame.clientWidth / S;
+    const home = { x: natural * 0.78, y: 150 };
+    const middle = { x: natural / 2 + 30, y: 24 };
+    const above = { x: natural / 2 + 4, y: 1 };
+    const left = buttons[0].offsetLeft + buttons[0].parentElement!.offsetLeft + 60;
+    const leftEdge = { x: left, y: 1 };
+    const leftTab = { x: left, y: 24 };
+    const p = along(t, [
+      [0.08, home], [0.18, middle], [0.25, middle], [0.33, home], [0.5, home], [0.56, above], [0.64, above],
+      [0.72, leftEdge], [0.78, leftEdge], [0.81, leftTab], [0.86, leftTab], [0.93, home],
+    ]);
+    const c = onScreen(p.x, p.y);
+    cursor.style.transform = `translate(${c.x}px, ${c.y}px) scale(${S})`;
+
+    const next = t < 0.21 ? 0 : t < 0.32 ? 1 : t < 0.5 ? 2 : t < 0.58 ? 3 : t < 0.66 ? 4 : t < 0.82 ? 5 : t < 0.9 ? 6 : 7;
+    if (next === phase) return;
+    const forward = next > phase;
+    phase = next;
+    const beat = [0, 1, 2, 3, 3, 4, 4, 0][next];
+    beats.forEach((b, i) => b.classList.toggle('on', i === beat));
+    ticks.forEach((tick, i) => tick.classList.toggle('on', i + 1 === beat));
+    island.visible(next === 2 || next === 4 || next === 7);
+    select(buttons[next === 0 || next >= 6 ? 0 : 1]);
+    if (forward && next === 1) click(middle.x, middle.y);
+    if (forward && next === 6) click(leftTab.x, leftTab.y);
+    if (next === 2) island.show('agent');
+    else island.show('music');
+  }
+  layout();
+  addEventListener('resize', () => {
+    layout();
+    update();
+  });
+  addEventListener('scroll', () => requestAnimationFrame(update), { passive: true });
+  update();
+</script>
+
+<style>
+  .tabs-scene { position: relative; height: 560svh; background: var(--page); }
+  .stage { position: sticky; top: 0; height: 100svh; display: flex; flex-direction: column; align-items: center; padding-top: 12svh; }
+
+  /* A crop of the top centre of a screen, magnified; its sides fade out. */
+  .frame {
+    position: relative;
+    width: min(94vw, 1400px);
+    overflow: hidden;
+    border-radius: 28px 28px 0 0;
+    -webkit-mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+    mask-image: linear-gradient(90deg, transparent, #000 12%, #000 88%, transparent);
+  }
+  .zoom {
+    position: absolute;
+    top: 0;
+    left: 50%;
+    height: 190px;
+    transform-origin: top center;
+    background: #fff;
+    font-family: "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif;
+  }
+  .strip { display: flex; justify-content: center; align-items: flex-end; height: 44px; background: #dfe1e5; }
+  .tablist { display: flex; align-items: flex-end; height: 100%; }
+  .tab {
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    width: 176px;
+    height: 36px;
+    padding: 0 9px 0 11px;
+    border: 0;
+    border-radius: 9px 9px 0 0;
+    background: transparent;
+    color: #3c4043;
+    font: 400 12px/1 inherit;
+    font-family: inherit;
+    text-align: left;
+    cursor: pointer;
+    transition: background-color 0.2s ease;
+  }
+  .tab[aria-selected="true"] { background: #fff; color: #202124; }
+  .tab + .tab:not([aria-selected="true"])::before { content: ""; position: absolute; left: 0; top: 10px; bottom: 10px; width: 1px; background: rgb(0 0 0 / 0.15); }
+  .tab[aria-selected="true"] + .tab::before { display: none; }
+  .tile { display: grid; place-items: center; width: 15px; height: 15px; border-radius: 4px; color: #fff; font-size: 9px; font-weight: 700; flex: none; }
+  .name { flex: 1; min-width: 0; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; }
+  .x { width: 11px; height: 11px; flex: none; fill: none; stroke: #5f6368; stroke-width: 1.4; stroke-linecap: round; }
+  .toolbar { display: flex; align-items: center; gap: 12px; height: 40px; padding: 0 12px; border-bottom: 1px solid #e8eaed; color: #5f6368; font-size: 13px; }
+  .nav { letter-spacing: 0.5em; }
+  .address { flex: 1; height: 28px; padding: 0 14px; border-radius: 999px; background: #f1f3f4; color: #202124; font-size: 12.5px; line-height: 28px; }
+  .page { padding: 26px 30px; }
+  .page .title { color: #202124; font-family: var(--sans); font-size: 26px; font-weight: 600; letter-spacing: -0.03em; }
+
+  .cursor { position: fixed; left: 0; top: 0; z-index: 70; width: 18px; height: 18px; transform-origin: 3px 2px; margin: -2px 0 0 -3px; fill: #fff; stroke: #0e0e10; stroke-width: 1.3; stroke-linejoin: round; pointer-events: none; opacity: 0; transition: opacity 0.3s ease; }
+  .playing .cursor { opacity: 1; }
+  .ripple { position: fixed; z-index: 69; width: 26px; height: 26px; margin: -13px 0 0 -13px; border-radius: 50%; border: 1.5px solid rgb(14 14 16 / 0.55); opacity: 0; pointer-events: none; }
+  .ripple.go { animation: ripple 0.5s ease-out; }
+  @keyframes ripple { from { opacity: 1; transform: scale(0.3); } to { opacity: 0; transform: scale(1.5); } }
+
+  .copy { position: relative; z-index: 1; flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; width: 100%; padding: 0 var(--gutter) 6svh; text-align: center; }
+  .eyebrow { color: var(--ink-3); font: 500 13px/1 var(--mono); letter-spacing: 0.04em; }
+  .beats { position: relative; width: 100%; height: 2.3em; margin: 16px 0 0; padding: 0; list-style: none; font-size: clamp(30px, 4.2vw, 64px); }
+  .beats li { position: absolute; inset: 0; opacity: 0; transform: translateY(18px); transition: opacity 0.35s ease, transform 0.55s cubic-bezier(0.16, 1, 0.3, 1); }
+  .beats li.on { opacity: 1; transform: none; transition-delay: 0.08s; }
+  h2, .h2 { margin: 0; font-size: 1em; font-weight: 600; line-height: 1.05; letter-spacing: -0.045em; text-wrap: balance; }
+  h2 em.serif, .h2 em.serif { letter-spacing: -0.02em; }
+  .ticks { display: flex; gap: 6px; margin-top: 18px; }
+  .ticks i { width: 18px; height: 3px; border-radius: 2px; background: var(--line); transition: background-color 0.3s, width 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+  .ticks i.on { width: 36px; background: var(--ink); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .beats li, .beats li.on { transition: opacity 0.01s; transform: none; }
+  }
+</style>

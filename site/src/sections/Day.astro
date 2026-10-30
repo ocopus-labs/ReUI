@@ -1,0 +1,408 @@
+---
+// The rest of the day: a bento of tiles, one per moment, each with a specimen of what it
+// shows in its own colour. Clicking a tile plays it on the page's island and keeps it there
+// (no hover: the pointer has to travel to the island freely, a file in hand). Until the
+// visitor picks, the tiles take turns. Only the chosen tile's specimen moves, with the
+// island. The Shelf tile holds a file to drag to the top of the window.
+import { icons, brand } from '../scripts/icons';
+const callApps = ['zoom', 'discord', 'webex', 'whatsapp', 'telegram', 'signal'] as const;
+const browsers = ['chrome', 'firefox', 'brave', 'opera'] as const;
+---
+<section class="day" data-day aria-labelledby="day-title">
+  <div class="head">
+    <p class="eyebrow">Everything else</p>
+    <h2 id="day-title">Everything else it shows</h2>
+  </div>
+
+  <div class="bento" data-bento>
+    <button type="button" class="tile wide" data-moment="call" style="--tone: #30d158">
+      <span class="name"><i></i>A call starts</span>
+      <span class="specimen call">
+        <span class="digits" data-call-clock>0:42</span>
+        <span class="meta">Zoom · Microphone on</span>
+        <span class="logos">{callApps.map((a) => <i class="ico" style={`color:${brand[a]}`} set:html={icons[a]}></i>)}</span>
+      </span>
+      <span class="line">Teams, Zoom, Discord, Slack, Webex, WhatsApp, Telegram or Signal, with its running time. Mute in one click, no plug-in.</span>
+    </button>
+
+    <button type="button" class="tile" data-moment="earbuds" style="--tone: #0a84ff">
+      <span class="name"><i></i>Earbuds connect</span>
+      <span class="specimen earbuds">
+        <svg viewBox="0 0 120 120" aria-hidden="true"><circle cx="60" cy="60" r="50" class="track" /><circle cx="60" cy="60" r="50" class="arc" /></svg>
+        <span class="pct">82<small>%</small></span>
+      </span>
+      <span class="line">Their battery the moment they do. Warnings at 20 % and 10 %.</span>
+    </button>
+
+    <button type="button" class="tile" data-moment="mic" style="--tone: #ff9f0a">
+      <span class="name"><i></i>Your mic goes live</span>
+      <span class="specimen dots">
+        <span><i style="background:#ff9f0a"></i>Microphone<em>Discord</em></span>
+        <span><i style="background:#30d158"></i>Camera<em>—</em></span>
+        <span><i style="background:#bf5af2"></i>Screen<em>—</em></span>
+      </span>
+      <span class="line">The app that's listening, and a coloured dot. Mute the mic in one click.</span>
+    </button>
+
+    <button type="button" class="tile wide" data-moment="download" style="--tone: #30d158">
+      <span class="name"><i></i>A download arrives</span>
+      <span class="specimen download">
+        <span class="file-name">setup.exe</span>
+        <span class="bar"><span data-dl-bar></span></span>
+        <span class="meta" data-dl-meta>42 MB of 120 MB · 3.1 MB/s</span>
+        <span class="logos">{browsers.map((a) => <i class="ico" style={`color:${brand[a]}`} set:html={icons[a]}></i>)}</span>
+      </span>
+      <span class="line">Chrome, Edge, Firefox, Opera and Brave. Its size and speed while it arrives, then Open and Show in folder.</span>
+    </button>
+
+    <button type="button" class="tile wide" data-moment="activity" style="--tone: #0a84ff">
+      <span class="name"><i></i>A build finishes</span>
+      <span class="specimen build">
+        <code><span class="prompt">&gt;</span> reui-bridge activity build --title Build --progress <b data-build-arg>0.42</b></code>
+        <span class="pct" data-build-pct>42<small>%</small></span>
+      </span>
+      <span class="line">Any script can show its progress in the island with one line, then say when it's done.</span>
+    </button>
+
+    <button type="button" class="tile" data-moment="meeting" style="--tone: #ff453a">
+      <span class="name"><i></i>Your next meeting <span class="badge">Beta</span></span>
+      <span class="specimen meeting">
+        <span class="when">in 9 min</span>
+        <span class="what">Design review</span>
+        <span class="meta">10:00 – 10:30 · Teams</span>
+        <span class="chips"><b class="join">Join</b></span>
+      </span>
+      <span class="line">Ten minutes before, with a countdown. Then Join opens the Teams, Zoom, Meet or Webex link.</span>
+    </button>
+
+    <button type="button" class="tile" data-moment="stats" style="--tone: #40c8e0">
+      <span class="name"><i></i>How busy your PC is</span>
+      <span class="specimen stats">
+        <span class="pct" data-cpu>23<small>%</small></span>
+        <svg viewBox="0 0 200 60" preserveAspectRatio="none" aria-hidden="true"><path data-spark d="M0 40 L200 40" /></svg>
+        <span class="meta">CPU · Win+Alt+S</span>
+      </span>
+      <span class="line">CPU and memory with their last minute, then GPU, disk and network.</span>
+    </button>
+
+    <div class="tile wide shelf" data-moment="shelf" role="button" tabindex="0" style="--tone: #30b0c7">
+      <span class="name"><i></i>The shelf</span>
+      <span class="specimen drop">
+        <span class="file" data-file aria-label="Q3-report.pdf, drag it to the island">
+          <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M4 1.8h5.2L12.5 5v9.2H4zM9 1.8V5h3.5" /></svg>
+          Q3-report.pdf
+        </span>
+        <span class="arrow" aria-hidden="true">
+          <svg viewBox="0 0 24 24"><path d="M12 19V5m0 0-5 5m5-5 5 5" /></svg>
+        </span>
+      </span>
+      <span class="line">Drag files, an image, a link or text to the top of the screen and the island holds them. The files stay where they are; the shelf only remembers them.</span>
+    </div>
+  </div>
+</section>
+
+<script>
+  import { clock } from '../scripts/timefield';
+
+  interface Island {
+    drive(name: string | null, owner: string): void;
+    fill(name: string, fields: Record<string, string | number>): void;
+  }
+  const island = (window as unknown as { island: Island }).island;
+  const section = document.querySelector<HTMLElement>('[data-day]')!;
+  const bento = section.querySelector<HTMLElement>('[data-bento]')!;
+  const tiles = [...bento.querySelectorAll<HTMLElement>('[data-moment]')];
+  const $ = <T extends Element>(sel: string) => section.querySelector<T>(sel)!;
+  const OWNER = 'day';
+
+  // Each tile's moving part, run only while it's the chosen one: the island and the
+  // tile's specimen move together.
+  let ticking = 0;
+  const scenes: Record<string, () => void> = {
+    call() {
+      const start = performance.now() - 42_000;
+      const step = () => {
+        const t = clock(performance.now() - start);
+        island.fill('call', { clock: t });
+        $('[data-call-clock]').textContent = t;
+      };
+      step();
+      ticking = window.setInterval(step, 1000);
+    },
+    download() {
+      const start = performance.now();
+      const step = () => {
+        const done = Math.min(1, 0.35 + (performance.now() - start) / 6000);
+        const mb = Math.round(done * 120);
+        island.fill('download', { arc: done, label: done < 1 ? `${mb} MB · setup.exe` : 'setup.exe' });
+        $<HTMLElement>('[data-dl-bar]').style.width = `${done * 100}%`;
+        $('[data-dl-meta]').textContent = done < 1 ? `${mb} MB of 120 MB · 3.1 MB/s` : '120 MB · Downloads';
+        if (done === 1) clearInterval(ticking);
+      };
+      step();
+      ticking = window.setInterval(step, 100);
+    },
+    activity() {
+      const start = performance.now();
+      const step = () => {
+        const done = Math.min(1, 0.42 + (performance.now() - start) / 7000);
+        const pct = Math.floor(done * 100);
+        island.fill('activity', { arc: done, label: `${pct}%` });
+        $('[data-build-pct]').innerHTML = done < 1 ? `${pct}<small>%</small>` : 'Done';
+        $('[data-build-arg]').textContent = done < 1 ? done.toFixed(2) : '1.00';
+        if (done === 1) {
+          clearInterval(ticking);
+          island.drive('activity-done', OWNER);
+        }
+      };
+      step();
+      ticking = window.setInterval(step, 120);
+    },
+    stats() {
+      const points: number[] = Array.from({ length: 30 }, (_, i) => 22 + Math.sin(i / 3) * 6);
+      const step = () => {
+        const cpu = Math.max(4, Math.min(60, points[points.length - 1] + (Math.random() - 0.5) * 10));
+        points.push(cpu);
+        points.shift();
+        island.fill('stats', { arc: cpu / 100, label: `${Math.round(cpu)}%` });
+        $('[data-cpu]').innerHTML = `${Math.round(cpu)}<small>%</small>`;
+        $('[data-spark]').setAttribute('d', points.map((p, i) => `${i ? 'L' : 'M'}${(i / (points.length - 1)) * 200} ${60 - p}`).join(' '));
+      };
+      step();
+      ticking = window.setInterval(step, 1000);
+    },
+  };
+
+  let chosen = '';
+  function choose(moment: string) {
+    clearInterval(ticking);
+    chosen = moment;
+    tiles.forEach((t) => t.toggleAttribute('data-on', t.dataset.moment === moment));
+    island.drive(moment, OWNER);
+    scenes[moment]?.();
+  }
+
+  // Until the visitor picks one, the tiles take turns.
+  const TURN = 4200;
+  let turns = 0;
+  let picked = false;
+  function turn() {
+    const i = (tiles.findIndex((t) => t.dataset.moment === chosen) + 1) % tiles.length;
+    choose(tiles[i].dataset.moment!);
+    turns = window.setTimeout(turn, TURN);
+  }
+  function pick(moment: string) {
+    picked = true;
+    clearTimeout(turns);
+    choose(moment);
+  }
+  for (const t of tiles) {
+    t.addEventListener('click', () => pick(t.dataset.moment!));
+    t.addEventListener('keydown', (e) => {
+      if ((e.key === 'Enter' || e.key === ' ') && t.tagName !== 'BUTTON') {
+        e.preventDefault();
+        pick(t.dataset.moment!);
+      }
+    });
+  }
+
+  // On screen: take the island; off screen: let it go and stop everything.
+  let inside = false;
+  function update() {
+    const r = section.getBoundingClientRect();
+    const now = r.top < innerHeight * 0.5 && r.bottom > innerHeight * 0.5;
+    if (now === inside) return;
+    inside = now;
+    if (now) {
+      if (picked) choose(chosen);
+      else turn();
+    } else {
+      clearInterval(ticking);
+      clearTimeout(turns);
+      island.drive(null, OWNER);
+    }
+  }
+  addEventListener('scroll', () => requestAnimationFrame(update), { passive: true });
+  update();
+
+  // The shelf: drag the file up to the island. Nothing else on the page reacts on the way.
+  const file = $<HTMLElement>('[data-file]');
+  const REACH = 24; // island.shelf.reach
+  let count = 0;
+  let ghost: HTMLElement | null = null;
+  let near = false;
+  const pill = () => document.querySelector<HTMLElement>('[data-pill]')!.getBoundingClientRect();
+  const isNear = (x: number, y: number) => {
+    const r = pill();
+    return x > r.left - REACH && x < r.right + REACH && y < r.bottom + REACH;
+  };
+
+  file.addEventListener('pointerdown', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    file.setPointerCapture(event.pointerId);
+    pick('shelf');
+    const r = file.getBoundingClientRect();
+    ghost = file.cloneNode(true) as HTMLElement;
+    ghost.classList.add('ghost');
+    ghost.style.left = `${r.left}px`;
+    ghost.style.top = `${r.top}px`;
+    ghost.dataset.dx = String(event.clientX - r.left);
+    ghost.dataset.dy = String(event.clientY - r.top);
+    document.body.append(ghost);
+    file.classList.add('lifted');
+    section.classList.add('dragging');
+  });
+  file.addEventListener('pointermove', (event) => {
+    if (!ghost) return;
+    ghost.style.left = `${event.clientX - Number(ghost.dataset.dx)}px`;
+    ghost.style.top = `${event.clientY - Number(ghost.dataset.dy)}px`;
+    const now = isNear(event.clientX, event.clientY);
+    if (now !== near) {
+      near = now;
+      island.drive(near ? 'shelf-drop' : 'shelf', OWNER);
+    }
+  });
+  file.addEventListener('pointerup', (event) => {
+    if (!ghost) return;
+    const g = ghost;
+    ghost = null;
+    section.classList.remove('dragging');
+    if (isNear(event.clientX, event.clientY)) {
+      const r = pill();
+      const gr = g.getBoundingClientRect();
+      g.style.transition = 'transform 0.35s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.35s ease';
+      g.style.transform = `translate(${r.left + r.width / 2 - gr.left - gr.width / 2}px, ${r.top + r.height / 2 - gr.top - gr.height / 2}px) scale(0.2)`;
+      g.style.opacity = '0';
+      count++;
+      island.fill('shelf', { count: String(count) });
+    } else {
+      const r = file.getBoundingClientRect();
+      g.style.transition = 'left 0.3s cubic-bezier(0.16, 1, 0.3, 1), top 0.3s cubic-bezier(0.16, 1, 0.3, 1)';
+      g.style.left = `${r.left}px`;
+      g.style.top = `${r.top}px`;
+    }
+    island.drive('shelf', OWNER);
+    near = false;
+    setTimeout(() => {
+      g.remove();
+      file.classList.remove('lifted');
+    }, 380);
+  });
+  file.addEventListener('click', (e) => e.stopPropagation());
+</script>
+
+<style>
+  /* Positioned, so it paints over the pinned hero behind the page. */
+  .day { position: relative; padding: clamp(120px, 14vh, 180px) var(--gutter) clamp(100px, 12vh, 160px); background: var(--page); }
+  .head { max-width: 1240px; margin: 0 auto clamp(36px, 5vh, 64px); }
+  .eyebrow { color: var(--ink-3); font: 500 13px/1 var(--mono); letter-spacing: 0.04em; }
+  h2 { margin-top: 14px; font-size: clamp(44px, 7vw, 112px); font-weight: 600; line-height: 0.95; letter-spacing: -0.055em; }
+  h2 em.serif { letter-spacing: -0.02em; }
+
+  .bento { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; max-width: 1240px; margin: 0 auto; }
+  .tile {
+    position: relative;
+    display: flex;
+    flex-direction: column;
+    gap: 18px;
+    min-height: 300px;
+    padding: 24px 26px 26px;
+    border: 0;
+    border-radius: 26px;
+    background: #fff;
+    color: var(--ink);
+    font: inherit;
+    text-align: left;
+    cursor: pointer;
+    box-shadow: 0 0 0 1px var(--line);
+    transition: box-shadow 0.35s ease, transform 0.5s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .tile.wide { grid-column: span 2; }
+  .tile:hover { box-shadow: 0 0 0 1px rgb(14 14 16 / 0.22); }
+  .tile[data-on] { box-shadow: 0 0 0 2px var(--ink), 0 24px 48px -28px rgb(0 0 0 / 0.35); transform: translateY(-2px); }
+  .tile:focus-visible { outline: 2px solid var(--blue); outline-offset: 3px; }
+
+  .name { display: flex; align-items: center; gap: 10px; font-size: 15px; font-weight: 600; letter-spacing: -0.01em; }
+  /* The live dot: in the moment's colour while it's on the island. */
+  .name > i { width: 8px; height: 8px; border-radius: 50%; background: rgb(14 14 16 / 0.15); transition: background-color 0.3s ease, box-shadow 0.3s ease; }
+  .tile[data-on] .name > i { background: var(--tone); box-shadow: 0 0 0 4px color-mix(in srgb, var(--tone) 20%, transparent); }
+  .badge { padding: 2px 7px; border-radius: 999px; background: rgb(255 69 58 / 0.1); color: #c4291f; font: 600 11px/1.3 var(--mono); }
+  .line { margin-top: auto; max-width: 36em; color: var(--ink-2); font-size: 14.5px; line-height: 1.5; text-wrap: pretty; }
+
+  .specimen { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 10px; min-height: 120px; }
+  .meta { color: var(--ink-3); font: 500 13px/1.4 var(--mono); }
+  .logos { display: flex; gap: 14px; margin-top: 6px; }
+  .logos .ico { width: 22px; height: 22px; }
+  .chips { display: flex; gap: 8px; }
+  .chips b { padding: 7px 14px; border-radius: 999px; background: rgb(14 14 16 / 0.06); font: 600 13px/1 var(--sans); }
+  .chips b.join { background: var(--tone); color: #fff; }
+  .pct { font-size: clamp(56px, 6vw, 88px); font-weight: 600; line-height: 0.9; letter-spacing: -0.05em; font-variant-numeric: tabular-nums; }
+  .pct small { font-size: 0.45em; letter-spacing: 0; color: var(--ink-3); margin-left: 4px; }
+
+  .call .digits { color: var(--tone); font: 500 clamp(64px, 8vw, 120px)/0.9 var(--mono); letter-spacing: -0.06em; font-variant-numeric: tabular-nums; }
+
+  .earbuds { position: relative; align-items: center; }
+  .earbuds svg { width: 150px; height: 150px; transform: rotate(-90deg); }
+  .earbuds circle { fill: none; stroke-width: 10; }
+  .earbuds .track { stroke: color-mix(in srgb, var(--tone) 14%, transparent); }
+  .earbuds .arc { stroke: var(--tone); stroke-linecap: round; stroke-dasharray: 314.16; stroke-dashoffset: 56.5; }
+  .earbuds .pct { position: absolute; font-size: 44px; }
+  .earbuds .pct small { font-size: 0.5em; }
+
+  .dots { gap: 14px; }
+  .dots > span { display: flex; align-items: center; gap: 12px; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+  .dots i { width: 12px; height: 12px; border-radius: 50%; }
+  .dots em { margin-left: auto; color: var(--ink-3); font: 500 13px/1 var(--mono); font-style: normal; }
+
+  .download .file-name { font-size: clamp(32px, 3.4vw, 48px); font-weight: 600; letter-spacing: -0.04em; }
+  .bar { height: 8px; border-radius: 4px; background: color-mix(in srgb, var(--tone) 14%, transparent); overflow: hidden; }
+  .bar span { display: block; width: 35%; height: 100%; border-radius: 4px; background: var(--tone); transition: width 0.1s linear; }
+
+  .build { gap: 18px; }
+  .build code { padding: 14px 16px; border-radius: 14px; background: #111113; color: #e8e8e3; font: 500 13.5px/1.5 var(--mono); overflow-wrap: anywhere; }
+  .build code .prompt { color: #6f6f6a; margin-right: 6px; }
+  .build code b { color: var(--tone); font-weight: 500; }
+
+  .meeting .when { color: var(--tone); font: 600 13px/1 var(--mono); text-transform: uppercase; letter-spacing: 0.06em; }
+  .meeting .what { font-size: clamp(28px, 2.6vw, 38px); font-weight: 600; line-height: 1.05; letter-spacing: -0.035em; }
+
+  .stats svg { width: 100%; height: 60px; }
+  .stats path { fill: none; stroke: var(--tone); stroke-width: 2; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+
+  .drop { flex-direction: row; align-items: center; justify-content: center; gap: 22px; margin: 0 -4px; border-radius: 18px; background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Crect width='100%25' height='100%25' fill='none' rx='18' ry='18' stroke='%2330b0c7' stroke-opacity='.5' stroke-width='2' stroke-dasharray='6 8'/%3E%3C/svg%3E"); }
+  .file {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 16px 12px 12px;
+    border-radius: 14px;
+    background: #fff;
+    box-shadow: 0 0 0 1px var(--line), 0 10px 24px -14px rgb(0 0 0 / 0.35);
+    color: var(--ink);
+    font: 500 14px/1 var(--mono);
+    cursor: grab;
+    touch-action: none;
+    user-select: none;
+  }
+  .file svg { width: 18px; height: 18px; fill: none; stroke: currentColor; stroke-width: 1.3; stroke-linejoin: round; }
+  .file.lifted { opacity: 0.25; }
+  :global(.file.ghost) { position: fixed; z-index: 60; margin: 0; pointer-events: none; cursor: grabbing; box-shadow: 0 0 0 1px var(--line), 0 24px 44px -16px rgb(0 0 0 / 0.45); }
+  .arrow { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; background: color-mix(in srgb, var(--tone) 14%, transparent); color: var(--tone); }
+  .arrow svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.8; stroke-linecap: round; stroke-linejoin: round; }
+  .tile[data-on] .arrow { animation: nudge 1.6s ease-in-out infinite; }
+  @keyframes nudge { 50% { transform: translateY(-5px); } }
+  /* While a file is in hand, nothing else reacts. */
+  .dragging .tile { pointer-events: none; }
+
+  @media (max-width: 900px) {
+    .bento { grid-template-columns: 1fr 1fr; }
+  }
+  @media (max-width: 600px) {
+    .bento { grid-template-columns: 1fr; }
+    .tile.wide { grid-column: auto; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .tile[data-on] .arrow { animation: none; }
+  }
+</style>

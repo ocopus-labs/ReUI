@@ -1,0 +1,48 @@
+---
+// Questions: the answers people look for before installing, from the README and the
+// guide. No claim here that the app doesn't keep (the tabs answer is about hiding and
+// the reveal zone, not clicks going through the pill).
+const faq = [
+  { q: 'Is ReUI really free?', a: 'Yes. It’s free and open source, under either the MIT License or the Apache License 2.0. There’s no account and no telemetry.' },
+  { q: 'Why does Windows say “Windows protected your PC”?', a: 'Releases aren’t code-signed yet, so SmartScreen doesn’t know them. Choose More info, then Run anyway.' },
+  { q: 'Does it need admin rights?', a: 'No. Setup installs ReUI for your user only, adds it to the Start menu and starts it with Windows.' },
+  { q: 'Which versions of Windows does it run on?', a: 'Windows 11, or Windows 10 version 2004 or later, 64-bit.' },
+  { q: 'Will it get in the way of my browser tabs?', a: 'Keep it hidden until something needs you: pushing the pointer against the top edge above it brings it back, and the rest of the edge stays the browser’s. It also hides while a game, video or presentation fills the screen, and you can give any app its own rule.' },
+  { q: 'Which coding agents does it work with?', a: 'Claude Code, Codex and OpenCode. Connect them in Settings → Coding agents.' },
+  { q: 'How does it update?', a: 'ReUI checks GitHub once a day. When a new version is out, Install downloads it, checks it against the release’s checksums and restarts ReUI. You can turn the check off.' },
+  { q: 'How do I uninstall it?', a: 'Settings → Apps → Installed apps → ReUI → Uninstall. It puts back Windows’ volume pop-up, removes the hooks it installed, and asks whether to delete your data too.' },
+];
+---
+<section class="faq" aria-labelledby="faq-title">
+  <div class="inner">
+    <div class="lead">
+      <h2 id="faq-title">Questions</h2>
+    </div>
+    <div class="list">
+      {faq.map((item) => (
+        <details>
+          <summary>{item.q}</summary>
+          <p>{item.a}</p>
+        </details>
+      ))}
+    </div>
+  </div>
+</section>
+
+<style>
+  .faq { position: relative; padding: clamp(120px, 14vh, 180px) var(--gutter); background: var(--page); }
+  .inner { display: grid; grid-template-columns: minmax(0, 0.8fr) minmax(0, 1.2fr); gap: clamp(40px, 6vw, 96px); max-width: 1240px; margin: 0 auto; }
+  .eyebrow { color: var(--ink-3); font: 500 13px/1 var(--mono); letter-spacing: 0.04em; }
+  h2 { margin-top: 14px; font-size: clamp(44px, 6vw, 96px); font-weight: 600; line-height: 0.95; letter-spacing: -0.055em; }
+  h2 em.serif { letter-spacing: -0.02em; }
+  .list { border-top: 1px solid var(--line); }
+  details { border-bottom: 1px solid var(--line); }
+  summary { display: flex; justify-content: space-between; gap: 24px; padding: 22px 0; font-size: 17px; font-weight: 600; letter-spacing: -0.01em; cursor: pointer; list-style: none; }
+  summary::-webkit-details-marker { display: none; }
+  summary::after { content: "+"; color: var(--ink-3); font-weight: 400; font-size: 24px; line-height: 0.8; transition: transform 0.25s ease; }
+  details[open] summary::after { transform: rotate(45deg); }
+  details p { max-width: 40em; padding-bottom: 22px; color: var(--ink-2); font-size: 15.5px; }
+  @media (max-width: 900px) {
+    .inner { grid-template-columns: 1fr; }
+  }
+</style>

@@ -1,0 +1,46 @@
+---
+// Private by default: the four times ReUI goes online (README "Privacy"), set as a quiet
+// settings list, each with what it sends and whether it can be turned off.
+const rows = [
+  { what: 'Link previews', sends: 'The title and image of links you copy, from public sites only.', state: 'On · can turn off' },
+  { what: 'Update check', sends: 'Once a day, to GitHub. Nothing about you is sent.', state: 'On · can turn off' },
+  { what: 'Synced lyrics', sends: 'The song’s title, artist and album, to lrclib.net.', state: 'Off until you turn it on' },
+  { what: 'Calendar', sends: 'Only to your calendar’s own server, only once you add one. Encrypted on your PC.', state: 'Off until you add one' },
+];
+---
+<section class="privacy" aria-labelledby="privacy-title">
+  <div class="inner">
+    <div class="lead">
+      <p class="eyebrow">Privacy</p>
+      <h2 id="privacy-title">No account, no telemetry</h2>
+      <p class="text">Your clipboard history, settings and logs stay on your PC. ReUI goes online for four things, and only these:</p>
+    </div>
+    <ul class="rows">
+      {rows.map((r) => (
+        <li>
+          <span class="what">{r.what}</span>
+          <span class="sends">{r.sends}</span>
+          <span class="state">{r.state}</span>
+        </li>
+      ))}
+    </ul>
+  </div>
+</section>
+
+<style>
+  .privacy { position: relative; padding: clamp(120px, 14vh, 180px) var(--gutter); background: var(--page); border-top: 1px solid var(--line); }
+  .inner { display: grid; grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr); gap: clamp(40px, 6vw, 96px); max-width: 1240px; margin: 0 auto; }
+  .eyebrow { color: var(--ink-3); font: 500 13px/1 var(--mono); letter-spacing: 0.04em; }
+  h2 { margin-top: 14px; font-size: clamp(44px, 6vw, 96px); font-weight: 600; line-height: 0.95; letter-spacing: -0.055em; }
+  h2 em.serif { letter-spacing: -0.02em; }
+  .text { max-width: 28em; margin-top: 22px; color: var(--ink-2); font-size: clamp(16px, 1.2vw, 18px); }
+  .rows { align-self: end; margin: 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+  .rows li { display: grid; grid-template-columns: 9.5em 1fr auto; gap: 8px 24px; align-items: baseline; padding: 22px 0; border-bottom: 1px solid var(--line); }
+  .what { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; }
+  .sends { color: var(--ink-2); font-size: 15px; }
+  .state { color: var(--ink-3); font: 500 12px/1.3 var(--mono); white-space: nowrap; }
+  @media (max-width: 900px) {
+    .inner { grid-template-columns: 1fr; }
+    .rows li { grid-template-columns: 1fr; }
+  }
+</style>

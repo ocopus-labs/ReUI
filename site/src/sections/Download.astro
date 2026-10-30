@@ -1,0 +1,89 @@
+---
+// The close: the hero's photograph again, as a bookend, with the one action. Resting on
+// the button plays a download on the page's island (the downloads module's moment), as
+// the real one would look arriving.
+import { Image } from 'astro:assets';
+import wallpaper from '../assets/hero.jpg';
+
+const repo = 'https://github.com/ocopus-labs/ReUI';
+const download = `${repo}/releases/latest`;
+---
+<section class="download" data-download aria-labelledby="download-title">
+  <Image class="wallpaper" src={wallpaper} alt="" widths={[1280, 1920, 2560]} sizes="100vw" />
+  <span class="scrim" aria-hidden="true"></span>
+  <div class="inner">
+    <h2 id="download-title">Download ReUI</h2>
+    <p class="text">Free and open source, under MIT or Apache 2.0. No account, no trial, no ads.</p>
+    <a class="button" href={download} data-button>
+      Download for Windows
+      <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v9m0 0-3.5-3.5M10 13l3.5-3.5M5 16h10" /></svg>
+    </a>
+    <ul class="facts">
+      <li>Windows 11, or Windows 10 version 2004 or later, 64-bit</li>
+      <li>Installs for your user only, no admin needed</li>
+      <li>Updates itself, or not: your choice</li>
+    </ul>
+    <p class="small">Releases aren't code-signed yet, so Windows may say "Windows protected your PC". Choose More info, then Run anyway.</p>
+  </div>
+</section>
+
+<script>
+  interface Island {
+    drive(name: string | null, owner: string): void;
+    fill(name: string, fields: Record<string, string | number>): void;
+  }
+  const island = (window as unknown as { island: Island }).island;
+  const button = document.querySelector<HTMLElement>('[data-download] [data-button]')!;
+  const OWNER = 'download';
+  let ticking = 0;
+
+  function arrive() {
+    clearInterval(ticking);
+    const start = performance.now();
+    const step = () => {
+      const k = Math.min(1, (performance.now() - start) / 3000);
+      const mb = (k * 9.8).toFixed(1);
+      island.fill('download', { arc: k, label: k < 1 ? `${mb} MB · ReUI-Setup.exe` : 'ReUI-Setup.exe' });
+      if (k === 1) clearInterval(ticking);
+    };
+    step();
+    island.drive('download', OWNER);
+    ticking = window.setInterval(step, 80);
+  }
+  function leave() {
+    clearInterval(ticking);
+    island.drive(null, OWNER);
+  }
+  button.addEventListener('pointerenter', arrive);
+  button.addEventListener('focus', arrive);
+  button.addEventListener('pointerleave', leave);
+  button.addEventListener('blur', leave);
+</script>
+
+<style>
+  .download { position: relative; display: grid; place-items: center; min-height: 100svh; padding: 120px var(--gutter); overflow: hidden; color: #fff; isolation: isolate; text-align: center; }
+  .wallpaper { position: absolute; inset: 0; z-index: -2; width: 100%; height: 100%; object-fit: cover; object-position: 50% 85%; }
+  .scrim { position: absolute; inset: 0; z-index: -1; background: linear-gradient(rgb(20 18 10 / 0.05), rgb(20 18 10 / 0.55) 55%, rgb(20 18 10 / 0.7)); }
+  .inner { display: flex; flex-direction: column; align-items: center; max-width: 720px; padding-top: 22vh; }
+  h2 { font-size: clamp(56px, 9vw, 150px); font-weight: 600; line-height: 0.9; letter-spacing: -0.06em; text-shadow: 0 2px 30px rgb(0 0 0 / 0.15); }
+  h2 em.serif { letter-spacing: -0.02em; }
+  .text { margin-top: 22px; color: rgb(255 255 255 / 0.85); font-size: clamp(16px, 1.3vw, 19px); }
+  .button {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    height: 58px;
+    margin-top: 36px;
+    padding: 0 24px 0 30px;
+    border-radius: 999px;
+    background: #fff;
+    color: var(--ink);
+    font-size: 17px;
+    font-weight: 500;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .button:hover { transform: translateY(-2px); }
+  .button svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .facts { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px 22px; margin: 32px 0 0; padding: 0; list-style: none; color: rgb(255 255 255 / 0.8); font: 500 13px/1.4 var(--mono); }
+  .small { max-width: 34em; margin-top: 18px; color: rgb(255 255 255 / 0.6); font-size: 13px; }
+</style>

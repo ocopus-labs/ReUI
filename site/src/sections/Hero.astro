@@ -1,0 +1,142 @@
+---
+// The first screen is a desktop: a wallpaper, and the page's own island at the top of it
+// as it sits on a PC, already busy. The headline says plainly what ReUI is.
+import { Image } from 'astro:assets';
+import wallpaper from '../assets/hero.jpg';
+import { icons } from '../scripts/icons';
+
+const repo = 'https://github.com/ocopus-labs/ReUI';
+const download = `${repo}/releases/latest`;
+---
+<header class="bar">
+  <a class="brand" href="/" aria-label="ReUI home">
+    <img src="/favicon.png" width="22" height="22" alt="" />
+    <span>ReUI</span>
+  </a>
+  <nav aria-label="Main">
+    <a class="github" href={repo} aria-label="ReUI on GitHub"><i class="ico" set:html={icons.github}></i></a>
+    <a class="pill-link" href={download}>Download</a>
+  </nav>
+</header>
+
+<section class="hero" aria-labelledby="hero-title">
+  <Image class="wallpaper" src={wallpaper} alt="" widths={[1280, 1920, 2560, 3840]} sizes="100vw" loading="eager" fetchpriority="high" />
+  <span class="scrim" aria-hidden="true"></span>
+  <h1 id="hero-title">
+    <span class="line"><span>The Dynamic Island</span></span>
+    <span class="line"><span>for <em class="serif">Windows</em></span></span>
+  </h1>
+  <div class="foot">
+    <p class="lede">A small island at the top of your screen for the music that's playing, what you copied, your timers and devices, and the coding agents waiting on you. Deal with them there, without switching windows.</p>
+    <div class="cta">
+      <a class="download" href={download}>
+        Download for Windows
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M10 4v9m0 0-3.5-3.5M10 13l3.5-3.5M5 16h10" /></svg>
+      </a>
+      <p class="meta">Free and open source · Windows 10 and 11</p>
+    </div>
+  </div>
+</section>
+
+<style>
+  .bar {
+    position: absolute;
+    inset: 0 0 auto;
+    z-index: 10;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    height: 58px;
+    padding: 0 var(--gutter);
+  }
+  .brand { display: inline-flex; align-items: center; gap: 9px; font-weight: 600; font-size: 15px; letter-spacing: -0.01em; }
+  .brand img { border-radius: 5px; }
+  nav { display: flex; align-items: center; gap: 22px; font-size: 14px; }
+  nav a { color: rgb(14 14 16 / 0.7); transition: color 0.2s; }
+  nav a:hover { color: var(--ink); }
+  .github { display: grid; place-items: center; width: 36px; height: 36px; border-radius: 50%; }
+  .github .ico { width: 20px; height: 20px; }
+  .pill-link { padding: 7px 14px; border-radius: 999px; background: var(--ink); color: #fff !important; font-weight: 500; }
+
+  /* Stays put while the next section slides up over it like a sheet. */
+  .hero {
+    position: sticky;
+    top: 0;
+    display: flex;
+    flex-direction: column;
+    justify-content: space-between;
+    min-height: 100svh;
+    padding: 0 var(--gutter) clamp(28px, 4vw, 48px);
+    overflow: hidden;
+    color: var(--ink);
+    isolation: isolate;
+  }
+  .wallpaper {
+    position: absolute;
+    inset: 0;
+    z-index: -2;
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    object-position: 50% 70%;
+    animation: settle 2.4s cubic-bezier(0.16, 1, 0.3, 1) both;
+  }
+  @keyframes settle { from { transform: scale(1.06); } }
+  /* Only so the white text holds on the stones. */
+  .scrim { position: absolute; inset: 62% 0 0; z-index: -1; background: linear-gradient(transparent, rgb(20 18 10 / 0.5)); }
+
+  h1 {
+    margin-top: clamp(140px, 22vh, 240px);
+    text-align: center;
+    font-size: clamp(52px, 8.2vw, 144px);
+    font-weight: 600;
+    line-height: 0.95;
+    letter-spacing: -0.055em;
+  }
+  .line { display: block; overflow: hidden; padding-bottom: 0.08em; }
+  .line > span { display: block; animation: rise 1.2s cubic-bezier(0.16, 1, 0.3, 1) both; }
+  .line:nth-child(1) > span { animation-delay: 0.35s; }
+  .line:nth-child(2) > span { animation-delay: 0.48s; }
+  @keyframes rise { from { transform: translateY(105%); } }
+  h1 em.serif { letter-spacing: -0.025em; }
+
+  .foot {
+    display: flex;
+    align-items: flex-end;
+    justify-content: space-between;
+    gap: 40px;
+    color: #fff;
+    animation: fade 1s ease 0.9s both;
+  }
+  @keyframes fade { from { opacity: 0; transform: translateY(8px); } }
+  .lede { max-width: 32em; color: rgb(255 255 255 / 0.88); font-size: clamp(15px, 1.25vw, 18px); line-height: 1.5; }
+  .cta { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+  .download {
+    display: inline-flex;
+    align-items: center;
+    gap: 14px;
+    height: 54px;
+    padding: 0 22px 0 26px;
+    border-radius: 999px;
+    background: #fff;
+    color: var(--ink);
+    font-size: 16px;
+    font-weight: 500;
+    transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .download:hover { transform: translateY(-2px); }
+  .download svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  .meta { color: rgb(255 255 255 / 0.7); font-size: 13px; }
+
+  @media (max-width: 720px) {
+    nav { display: none; }
+    .wallpaper { object-position: 50% 100%; }
+    .scrim { inset: 50% 0 0; background: linear-gradient(transparent, rgb(20 18 10 / 0.55) 35%, rgb(20 18 10 / 0.7)); }
+    .foot { flex-direction: column; align-items: stretch; }
+    .cta { align-items: stretch; }
+    .download { justify-content: space-between; }
+  }
+  @media (prefers-reduced-motion: reduce) {
+    .wallpaper, .line > span, .foot { animation: none; }
+  }
+</style>

@@ -1,0 +1,113 @@
+---
+// Island or notch: the page's island takes ReUI's two styles and two themes. Scrolling
+// shows them in turn (floating, then joined to the edge, then light); the switches let a
+// visitor choose, and once they do, the scroll stops choosing for them.
+---
+<section class="notch-scene" data-notch aria-labelledby="notch-title">
+  <div class="stage">
+    <div class="copy">
+      <p class="eyebrow">Appearance</p>
+      <h2 id="notch-title">Island or notch</h2>
+      <p class="text">Island floats just under the top of your screen; Notch joins it to the edge like a laptop's notch. Dark, light or following Windows, and the roundness, size and accent are yours.</p>
+      <div class="switches">
+        <div class="switch" role="radiogroup" aria-label="Style">
+          <button type="button" role="radio" aria-checked="true" data-style="island">Island</button>
+          <button type="button" role="radio" aria-checked="false" data-style="notch">Notch</button>
+        </div>
+        <div class="switch" role="radiogroup" aria-label="Theme">
+          <button type="button" role="radio" aria-checked="true" data-theme="dark">Dark</button>
+          <button type="button" role="radio" aria-checked="false" data-theme="light">Light</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<script>
+  type Style = 'island' | 'notch';
+  type Theme = 'dark' | 'light';
+  interface Island {
+    drive(name: string | null, owner: string): void;
+    style(name: Style): void;
+    theme(name: Theme): void;
+  }
+  const island = (window as unknown as { island: Island }).island;
+  const section = document.querySelector<HTMLElement>('[data-notch]')!;
+  const styles = [...section.querySelectorAll<HTMLButtonElement>('[data-style]')];
+  const themes = [...section.querySelectorAll<HTMLButtonElement>('[data-theme]')];
+
+  let inside = false;
+  let chosen = false;
+  let look: { style: Style; theme: Theme } = { style: 'island', theme: 'dark' };
+
+  function apply(next: { style: Style; theme: Theme }) {
+    look = next;
+    styles.forEach((b) => b.setAttribute('aria-checked', String(b.dataset.style === next.style)));
+    themes.forEach((b) => b.setAttribute('aria-checked', String(b.dataset.theme === next.theme)));
+    section.classList.toggle('dim', next.theme === 'light');
+    if (inside) {
+      island.style(next.style);
+      island.theme(next.theme);
+    }
+  }
+
+  for (const b of styles) b.addEventListener('click', () => { chosen = true; apply({ ...look, style: b.dataset.style as Style }); });
+  for (const b of themes) b.addEventListener('click', () => { chosen = true; apply({ ...look, theme: b.dataset.theme as Theme }); });
+
+  function update() {
+    const r = section.getBoundingClientRect();
+    const now = r.top <= 1 && r.bottom > innerHeight * 0.5;
+    if (now !== inside) {
+      inside = now;
+      if (now) {
+        island.drive('music', 'notch');
+        apply(look);
+      } else {
+        island.style('island');
+        island.theme('dark');
+        island.drive(null, 'notch');
+      }
+    }
+    // Until the visitor picks, the scroll walks through the looks.
+    if (inside && !chosen) {
+      const t = -r.top / innerHeight;
+      const next: { style: Style; theme: Theme } = t < 0.55 ? { style: 'island', theme: 'dark' } : t < 1.15 ? { style: 'notch', theme: 'dark' } : { style: 'notch', theme: 'light' };
+      if (next.style !== look.style || next.theme !== look.theme) apply(next);
+    }
+  }
+  addEventListener('scroll', () => requestAnimationFrame(update), { passive: true });
+  update();
+</script>
+
+<style>
+  .notch-scene { position: relative; height: 280svh; background: var(--page); transition: background-color 0.5s ease; }
+  .notch-scene.dim { background: #141416; }
+  .stage { position: sticky; top: 0; height: 100svh; display: grid; place-items: center; padding: 120px var(--gutter) 60px; }
+  .copy { display: flex; flex-direction: column; align-items: center; text-align: center; transition: color 0.5s ease; }
+  .dim .copy { color: #f2f2ee; }
+  .eyebrow { color: var(--ink-3); font: 500 13px/1 var(--mono); letter-spacing: 0.04em; }
+  h2 { margin-top: 14px; font-size: clamp(36px, 5.4vw, 84px); font-weight: 600; line-height: 1; letter-spacing: -0.05em; text-wrap: balance; }
+  h2 em.serif { letter-spacing: -0.02em; }
+  .text { max-width: 34em; margin-top: 18px; color: var(--ink-2); font-size: clamp(15px, 1.2vw, 17px); text-wrap: pretty; transition: color 0.5s ease; }
+  .dim .text { color: rgb(242 242 238 / 0.65); }
+
+  .switches { display: flex; flex-wrap: wrap; justify-content: center; gap: 12px; margin-top: 36px; }
+  .switch { display: flex; padding: 4px; border-radius: 999px; background: rgb(14 14 16 / 0.06); transition: background-color 0.5s ease; }
+  .dim .switch { background: rgb(255 255 255 / 0.1); }
+  .switch button {
+    min-width: 92px;
+    height: 38px;
+    padding: 0 18px;
+    border: 0;
+    border-radius: 999px;
+    background: transparent;
+    color: var(--ink-2);
+    font: 500 14px/1 var(--sans);
+    cursor: pointer;
+    transition: background-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+  }
+  .switch button:hover { color: var(--ink); }
+  .switch button[aria-checked="true"] { background: #fff; color: var(--ink); box-shadow: 0 1px 2px rgb(0 0 0 / 0.08), 0 2px 8px -2px rgb(0 0 0 / 0.12); }
+  .dim .switch button { color: rgb(242 242 238 / 0.6); }
+  .dim .switch button[aria-checked="true"] { background: #f2f2ee; color: var(--ink); }
+</style>

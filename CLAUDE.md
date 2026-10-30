@@ -21,6 +21,7 @@ pwsh scripts/package.ps1 -OutDir dist       # setup exe + zip, as .github/workfl
 - Settings window: `reui-settings.exe --page <name>`, `--shots <dir>` (every page as PNG, no window; `--backdrop-color #RRGGBB` instead of the wallpaper, `--stages` only the island stages), `--perf`. `tools/readme-images.ps1` renders the README's pictures with them into `docs/images`. Perf harnesses: `crates/reui-settings/perf/harness.ps1`, `live.ps1`.
 - `node tools/opencode-plugin-test.mjs` runs the OpenCode plugin against a fake OpenCode and bridge (no OpenCode needed).
 - `tools/claude-states.ps1` drives a fake Claude Code session through every state via `reui-bridge` and captures the island into one review sheet (needs the hub running).
+- The website is `site/` (Astro; `npm run dev` there, PRD in `docs/PRD-site.md`); `node scripts/shoot.mjs` screenshots it for review.
 - A tagged release needs a `## <version>` entry in `CHANGELOG.md` and the tag must match the `reui-hub` crate version.
 
 ## Architecture

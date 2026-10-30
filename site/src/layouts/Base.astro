@@ -1,0 +1,41 @@
+---
+import '@fontsource-variable/geist';
+import '@fontsource-variable/geist-mono';
+import '@fontsource/instrument-serif/400-italic.css';
+import 'lenis/dist/lenis.css';
+import '../styles/global.css';
+
+interface Props {
+  title: string;
+  description: string;
+}
+const { title, description } = Astro.props;
+---
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>{title}</title>
+    <meta name="description" content={description} />
+    <meta property="og:title" content={title} />
+    <meta property="og:description" content={description} />
+    <meta name="theme-color" content="#efeee9" />
+    <link rel="icon" href="/favicon.ico" sizes="any" />
+    <link rel="icon" type="image/png" href="/favicon.png" />
+    <link rel="apple-touch-icon" href="/apple-touch-icon.png" />
+  </head>
+  <body>
+    <slot />
+    <div class="grain" aria-hidden="true"></div>
+    <script>
+      import Lenis from 'lenis';
+
+      // Smooth scrolling for the whole page. The scroll-driven scenes read the real scroll
+      // position, which Lenis moves, so they follow it. Off with reduced motion.
+      if (!matchMedia('(prefers-reduced-motion: reduce)').matches) {
+        (window as unknown as { lenis: Lenis }).lenis = new Lenis({ autoRaf: true, lerp: 0.1 });
+      }
+    </script>
+  </body>
+</html>

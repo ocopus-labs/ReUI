@@ -1,0 +1,33 @@
+---
+import Base from '../layouts/Base.astro';
+import Island from '../components/Island.astro';
+import Hero from '../sections/Hero.astro';
+import Closeup from '../sections/Closeup.astro';
+import Agents from '../sections/Agents.astro';
+import Tabs from '../sections/Tabs.astro';
+import Notch from '../sections/Notch.astro';
+import Timers from '../sections/Timers.astro';
+import Day from '../sections/Day.astro';
+import Idle from '../sections/Idle.astro';
+import Privacy from '../sections/Privacy.astro';
+import Download from '../sections/Download.astro';
+import Faq from '../sections/Faq.astro';
+import Footer from '../sections/Footer.astro';
+---
+<Base title="ReUI: the Dynamic Island for Windows" description="A small island at the top of your screen for what's playing, what you copied, your timers, your devices and the coding agents waiting on you. Free and open source.">
+  <Island />
+  <main>
+    <Hero />
+    <Closeup />
+    <Agents />
+    <Tabs />
+    <Notch />
+    <Timers />
+    <Day />
+    <Idle />
+    <Privacy />
+    <Download />
+    <Faq />
+  </main>
+  <Footer />
+</Base>

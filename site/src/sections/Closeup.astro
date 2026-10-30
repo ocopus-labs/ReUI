@@ -1,0 +1,151 @@
+---
+// The close-up: scrolling past the hero, the page's island leaves the top edge, grows to
+// up to twice its size in the middle of the screen and plays three moments, one per screen
+// of scrolling, each with its line underneath. At the end it goes back up to the edge.
+const moments = [
+  {
+    moment: 'now-playing',
+    title: 'Now Playing',
+    accent: '',
+    text: 'Spotify, a browser, VLC, anything in Windows’ media controls. The artwork, a timeline you can scrub, the player’s own controls and the volume.',
+  },
+  {
+    moment: 'clipboard',
+    title: 'Clipboard history',
+    accent: '',
+    text: 'Win+Alt+V brings back text with its formatting, images, files, links and colours. Type to search, Enter to paste. Anything that looks like a password or a key is never saved.',
+  },
+  {
+    moment: 'timer-card',
+    title: 'Timers',
+    accent: '',
+    text: 'Win+Ctrl+T, then type how long: 10m tea, 90s, 1h30. They keep going through sleep and restarts, and the island opens with a sound when one ends.',
+  },
+];
+---
+<section class="closeup" data-closeup aria-label="What the island shows" style={`--count: ${moments.length}`}>
+  <div class="stage">
+    <ol class="captions">
+      {moments.map((m, i) => (
+        <li data-moment={m.moment}>
+          <span class="index">{String(i + 1).padStart(2, '0')}</span>
+          <h2>{m.title} <em class="serif">{m.accent}</em></h2>
+          <p>{m.text}</p>
+        </li>
+      ))}
+    </ol>
+    <div class="ticks" aria-hidden="true">
+      {moments.map(() => <i></i>)}
+    </div>
+  </div>
+</section>
+
+<style>
+  /* A sheet over the hero: the page's colour, its top corners rounded. */
+  .closeup {
+    position: relative;
+    z-index: 1;
+    margin-top: -28px;
+    border-radius: 28px 28px 0 0;
+    background: var(--page);
+    box-shadow: 0 -24px 48px -24px rgb(0 0 0 / 0.25);
+    /* One screen per moment, plus the way in and the way out. */
+    height: calc((var(--count) + 1.2) * 100svh);
+  }
+  .stage {
+    position: sticky;
+    top: 0;
+    height: 100svh;
+    overflow: hidden;
+  }
+  .captions {
+    position: absolute;
+    inset: auto 0 clamp(64px, 11vh, 120px);
+    margin: 0;
+    padding: 0 var(--gutter);
+    list-style: none;
+    text-align: center;
+  }
+  .captions li {
+    position: absolute;
+    inset: auto 0 0;
+    padding: 0 var(--gutter);
+    opacity: 0;
+    transform: translateY(24px);
+    transition: opacity 0.4s ease, transform 0.6s cubic-bezier(0.16, 1, 0.3, 1);
+  }
+  .captions li.on { opacity: 1; transform: none; transition-delay: 0.12s; }
+  .index { display: block; margin-bottom: 14px; color: var(--ink-3); font: 500 13px/1 var(--mono); letter-spacing: 0.04em; }
+  h2 {
+    font-size: clamp(34px, 4.6vw, 72px);
+    font-weight: 600;
+    line-height: 1;
+    letter-spacing: -0.045em;
+    text-wrap: balance;
+  }
+  h2 em.serif { letter-spacing: -0.02em; }
+  p { max-width: 34em; margin: 18px auto 0; color: var(--ink-2); font-size: clamp(15px, 1.2vw, 17px); text-wrap: pretty; }
+
+  .ticks { position: absolute; left: 50%; bottom: clamp(28px, 4vh, 44px); display: flex; gap: 6px; transform: translateX(-50%); }
+  .ticks i { width: 18px; height: 3px; border-radius: 2px; background: var(--line); transition: background-color 0.3s, width 0.4s cubic-bezier(0.16, 1, 0.3, 1); }
+  .ticks i.on { width: 36px; background: var(--ink); }
+
+  @media (prefers-reduced-motion: reduce) {
+    .captions li, .captions li.on { transition: opacity 0.01s; transform: none; }
+  }
+</style>
+
+<script>
+  interface Island {
+    drive(name: string | null, owner: string): void;
+    stage(drop: number, scale: number): void;
+  }
+  const island = (window as unknown as { island: Island }).island;
+  const section = document.querySelector<HTMLElement>('[data-closeup]')!;
+  const captions = [...section.querySelectorAll<HTMLElement>('.captions li')];
+  const ticks = [...section.querySelectorAll<HTMLElement>('.ticks i')];
+
+  const clamp = (x: number, lo = 0, hi = 1) => Math.min(hi, Math.max(lo, x));
+  const ease = (x: number) => (x < 0.5 ? 4 * x * x * x : 1 - (-2 * x + 2) ** 3 / 2);
+  // The widest card (the clipboard's) and the tallest close-up that leaves room for a line.
+  const WIDEST = 560;
+  const TALLEST = 240;
+
+  let shown = -1;
+  let zoomed = false;
+  let queued = false;
+
+  function update() {
+    queued = false;
+    const vh = innerHeight;
+    const vw = innerWidth;
+    const t = -section.getBoundingClientRect().top / vh;
+    const end = section.offsetHeight / vh - 1;
+    // In while the hero leaves (its last half), out over the last screen.
+    const zoom = ease(Math.min(clamp((t + 0.5) / 0.5), clamp((end - t) / 0.6)));
+    const scale = Math.min(2, (0.86 * vw) / WIDEST, (0.42 * vh) / TALLEST);
+    // Only while this zoom is in play (and once more as it ends), so another section can
+    // stage the island too.
+    if (zoom > 0 || zoomed) island.stage((0.11 * vh - 11) * zoom, 1 + (scale - 1) * zoom);
+    zoomed = zoom > 0;
+
+    const i = Math.min(captions.length - 1, Math.floor((clamp(t, 0, end - 0.6) / (end - 0.6)) * captions.length));
+    island.drive(zoom > 0.15 ? captions[i].dataset.moment! : null, 'closeup');
+    const on = zoom > 0.6 ? i : -1;
+    if (on !== shown) {
+      shown = on;
+      captions.forEach((c, k) => c.classList.toggle('on', k === on));
+      ticks.forEach((tick, k) => tick.classList.toggle('on', k === on));
+    }
+  }
+
+  const queue = () => {
+    if (!queued) {
+      queued = true;
+      requestAnimationFrame(update);
+    }
+  };
+  addEventListener('scroll', queue, { passive: true });
+  addEventListener('resize', queue);
+  update();
+</script>

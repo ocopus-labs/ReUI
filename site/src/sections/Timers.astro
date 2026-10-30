@@ -1,0 +1,225 @@
+---
+// Timers and reminders: a real field on the page that reads a line the way ReUI's timer
+// field does (src/scripts/timefield.ts). While the section is on screen the island is that
+// field's card and previews what Enter will do; Enter runs it on the island: a timer counts
+// down (60× fast here) and ends with +1 min and Stop; a reminder shows the card it will
+// open when it's due, with Snooze and Done.
+const examples = ['10m tea', 'call mom at 6', 'in 2h check build', 'every day 21:00 meds', 'standup 9:30'];
+---
+<section class="timers-scene" data-timers aria-labelledby="timers-title">
+  <div class="inner">
+    <p class="eyebrow">Timers and reminders</p>
+    <h2 id="timers-title">Type “call mom at 6”</h2>
+    <p class="text">Win+Ctrl+T opens one field for timers, focus sessions, a stopwatch and reminders. It reads what you type and shows what Enter will do before you press it.</p>
+
+    <form class="field" data-form autocomplete="off">
+      <span class="keys" aria-hidden="true"><kbd>Win</kbd><kbd>Ctrl</kbd><kbd>T</kbd></span>
+      <input data-input type="text" aria-label="Timer or reminder" placeholder="10m tea" spellcheck="false" />
+      <button type="submit" class="enter" aria-label="Start">
+        <svg viewBox="0 0 20 20" aria-hidden="true"><path d="M15 5v5a2 2 0 0 1-2 2H5m0 0 3-3m-3 3 3 3" /></svg>
+      </button>
+    </form>
+
+    <ul class="examples" aria-label="Examples">
+      {examples.map((e) => <li><button type="button" data-example={e}>{e}</button></li>)}
+    </ul>
+    <p class="status" data-status aria-live="polite"></p>
+  </div>
+</section>
+
+<script>
+  import { parse, preview, clock, timeOfDay, type Parsed } from '../scripts/timefield';
+
+  interface Island {
+    drive(name: string | null, owner: string): void;
+    fill(name: string, fields: Record<string, string | number>): void;
+  }
+  const island = (window as unknown as { island: Island }).island;
+  const section = document.querySelector<HTMLElement>('[data-timers]')!;
+  const form = section.querySelector<HTMLFormElement>('[data-form]')!;
+  const input = section.querySelector<HTMLInputElement>('[data-input]')!;
+  const status = section.querySelector<HTMLElement>('[data-status]')!;
+
+  // The demo runs timers this much faster than the clock, so ten minutes end in ten seconds.
+  const FAST = 60;
+  const OWNER = 'timers';
+
+  let inside = false;
+  let ticking = 0;
+  let mode: 'field' | 'countdown' | 'alert' = 'field';
+  let ended: { kind: 'timer'; label: string | null; ms: number } | { kind: 'reminder' } | null = null;
+
+  function field() {
+    mode = 'field';
+    clearInterval(ticking);
+    const p = parse(input.value);
+    island.fill('launcher', { ...preview(p), query: input.value });
+    if (inside) island.drive('launcher', OWNER);
+  }
+
+  function countdown(ms: number, label: string | null) {
+    mode = 'countdown';
+    clearInterval(ticking);
+    const start = performance.now();
+    const step = () => {
+      const left = Math.max(0, ms - (performance.now() - start) * FAST);
+      island.fill('countdown', { time: clock(left), arc: left / ms });
+      if (left === 0) {
+        clearInterval(ticking);
+        ended = { kind: 'timer', label, ms };
+        const minutes = Math.round(ms / 60_000);
+        island.fill('alert', { eyebrow: label ?? 'Timer', hero: 'Done', detail: minutes >= 1 ? `${minutes} min timer` : `${Math.round(ms / 1000)} s timer`, secondary: '+1 min', primary: 'Stop' });
+        mode = 'alert';
+        island.drive('alert', OWNER);
+      }
+    };
+    step();
+    island.drive('countdown', OWNER);
+    ticking = window.setInterval(step, 250);
+    status.textContent = `Running ${FAST}× faster than real time here.`;
+  }
+
+  function run(p: Parsed) {
+    switch (p.kind) {
+      case 'timer':
+        input.value = '';
+        countdown(p.ms, p.label);
+        break;
+      case 'reminder': {
+        input.value = '';
+        const when = timeOfDay(p.at);
+        const repeat = p.every ? ` · ${p.every}` : '';
+        ended = { kind: 'reminder' };
+        island.fill('alert', { eyebrow: 'Reminder', hero: p.text ?? when, detail: `${p.day && !p.every ? `${p.day} ` : ''}${when}${repeat}`, secondary: 'Snooze', primary: 'Done' });
+        mode = 'alert';
+        island.drive('alert', OWNER);
+        status.textContent = `Kept for ${p.day ? `${p.day.toLowerCase()} ` : ''}${when}. When it's due, the island opens on it like this.`;
+        break;
+      }
+      case 'focus':
+      case 'stopwatch':
+        status.textContent = 'Focus sessions and the stopwatch run in the app.';
+        break;
+      default:
+        // The card already says what it needs ("Type a length, like 10m").
+        break;
+    }
+  }
+
+  form.addEventListener('submit', (event) => {
+    event.preventDefault();
+    run(parse(input.value || '25m'));
+  });
+  input.addEventListener('input', () => {
+    status.textContent = '';
+    field();
+  });
+  input.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') {
+      input.value = '';
+      field();
+    }
+  });
+
+  // An example types itself into the field, a key at a time, then waits for Enter.
+  let typing = 0;
+  for (const b of section.querySelectorAll<HTMLButtonElement>('[data-example]')) {
+    b.addEventListener('click', () => {
+      clearInterval(typing);
+      const text = b.dataset.example!;
+      input.value = '';
+      input.focus();
+      status.textContent = '';
+      let i = 0;
+      typing = window.setInterval(() => {
+        input.value = text.slice(0, ++i);
+        field();
+        if (i >= text.length) clearInterval(typing);
+      }, 45);
+    });
+  }
+
+  // The card's own buttons: presets start a timer; the end card's two answers.
+  addEventListener('island:action', (event) => {
+    if (!inside) return;
+    const { action } = (event as CustomEvent<{ action: string }>).detail;
+    if (action.startsWith('preset:')) {
+      countdown(Number(action.slice(7)) * 60_000, null);
+    } else if (mode === 'alert' && ended?.kind === 'timer' && action === 'secondary') {
+      countdown(60_000, ended.label);
+    } else if (mode === 'alert') {
+      status.textContent = '';
+      field();
+    }
+  });
+
+  function update() {
+    const r = section.getBoundingClientRect();
+    const now = r.top < innerHeight * 0.45 && r.bottom > innerHeight * 0.55;
+    if (now === inside) return;
+    inside = now;
+    if (now) {
+      if (mode === 'field') field();
+      else island.drive(mode === 'countdown' ? 'countdown' : 'alert', OWNER);
+    } else {
+      clearInterval(ticking);
+      mode = 'field';
+      status.textContent = '';
+      island.drive(null, OWNER);
+    }
+  }
+  addEventListener('scroll', () => requestAnimationFrame(update), { passive: true });
+  update();
+</script>
+
+<style>
+  .timers-scene { position: relative; min-height: 100svh; display: grid; place-items: center; padding: 140px var(--gutter) 100px; background: var(--page); }
+  .inner { display: flex; flex-direction: column; align-items: center; width: min(760px, 100%); text-align: center; }
+  .eyebrow { color: var(--ink-3); font: 500 13px/1 var(--mono); letter-spacing: 0.04em; }
+  h2 { margin-top: 14px; font-size: clamp(44px, 7vw, 112px); font-weight: 600; line-height: 0.95; letter-spacing: -0.055em; }
+  h2 em.serif { letter-spacing: -0.02em; }
+  .text { max-width: 34em; margin-top: 20px; color: var(--ink-2); font-size: clamp(15px, 1.2vw, 17px); text-wrap: pretty; }
+
+  .field {
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    width: 100%;
+    height: 76px;
+    margin-top: 44px;
+    padding: 0 12px 0 22px;
+    border-radius: 999px;
+    background: #fff;
+    box-shadow: 0 0 0 1px var(--line), 0 18px 40px -24px rgb(0 0 0 / 0.3);
+    transition: box-shadow 0.25s ease;
+  }
+  .field:focus-within { box-shadow: 0 0 0 2px var(--ink), 0 18px 40px -24px rgb(0 0 0 / 0.35); }
+  .keys { display: flex; gap: 4px; flex: none; }
+  kbd { padding: 3px 7px; border-radius: 6px; background: rgb(14 14 16 / 0.06); color: var(--ink-2); font: 500 12px/1.2 var(--mono); }
+  input {
+    flex: 1;
+    min-width: 0;
+    height: 100%;
+    border: 0;
+    outline: 0;
+    background: transparent;
+    color: var(--ink);
+    font: 500 clamp(20px, 2.4vw, 28px)/1 var(--mono);
+    letter-spacing: -0.02em;
+  }
+  input::placeholder { color: rgb(14 14 16 / 0.28); }
+  .enter { display: grid; place-items: center; width: 52px; height: 52px; flex: none; border: 0; border-radius: 50%; background: var(--ink); color: #fff; cursor: pointer; transition: transform 0.2s cubic-bezier(0.16, 1, 0.3, 1); }
+  .enter:hover { transform: scale(1.05); }
+  .enter svg { width: 20px; height: 20px; fill: none; stroke: currentColor; stroke-width: 1.7; stroke-linecap: round; stroke-linejoin: round; }
+
+  .examples { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; margin: 18px 0 0; padding: 0; list-style: none; }
+  .examples button { padding: 8px 14px; border: 0; border-radius: 999px; background: rgb(14 14 16 / 0.05); color: var(--ink-2); font: 500 13px/1 var(--mono); cursor: pointer; transition: background-color 0.2s, color 0.2s; }
+  .examples button:hover { background: rgb(14 14 16 / 0.1); color: var(--ink); }
+  .status { min-height: 1.5em; margin-top: 22px; color: var(--ink-3); font: 500 13px/1.5 var(--mono); }
+
+  @media (max-width: 600px) {
+    .keys { display: none; }
+    .field { height: 64px; padding-left: 20px; }
+    .enter { width: 44px; height: 44px; }
+  }
+</style>
