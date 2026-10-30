@@ -12,6 +12,8 @@
 //! cargo run -p reui-hub --example notifications_probe -- latency <interval_ms> <toasts>
 //! cargo run -p reui-hub --example notifications_probe -- scale <toasts>
 //! cargo run -p reui-hub --example notifications_probe -- wnf <names.txt>
+//! cargo run -p reui-hub --example notifications_probe -- wnfwatch [quiet_seconds]
+//! cargo run -p reui-hub --example notifications_probe -- send [n] | clear
 //! ```
 
 use std::time::{Duration, Instant};
@@ -42,6 +44,13 @@ fn main() -> windows::core::Result<()> {
         Some("latency") => latency(&listener, arg(1, 2000), arg(2, 5) as usize),
         Some("scale") => scale(&listener, arg(1, 20) as usize),
         Some("wnfwatch") => wnfwatch(arg(1, 60)),
+        // One test toast left in place (for the module), and taking the probe's toasts away.
+        Some("send") => send(arg(1, 1) as usize),
+        Some("remove") => remove(&listener),
+        Some("clear") => {
+            clear_probes();
+            Ok(())
+        }
         Some("wnf") => wnf(args.get(1).map(String::as_str).unwrap_or("names.txt")),
         _ => {
             eprintln!("access | read [n] | events | poll <ms> <s> [pid] | latency <ms> <n>");
@@ -205,7 +214,9 @@ fn poll(listener: &UserNotificationListener, ms: u64, seconds: u64, service: Opt
     Ok(())
 }
 
-/// Sends test toasts and measures how long a poller at `ms` takes to see each.
+/// Sends test toasts and measures how long until a list shows each (it lists right after
+/// the send, then every `ms`): the time from a send until a toast can be listed at all. A
+/// poller's own delay adds a uniform 0..`ms` on top of that.
 fn latency(listener: &UserNotificationListener, ms: u64, toasts: usize) -> windows::core::Result<()> {
     let mut seen: Vec<u32> = list(listener)?.iter().filter_map(|n| n.Id().ok()).collect();
     for i in 0..toasts {
@@ -337,6 +348,23 @@ fn wnfwatch(quiet: u64) -> windows::core::Result<()> {
     *SENT.lock().unwrap() = Some(Instant::now());
     clear_probes();
     std::thread::sleep(Duration::from_secs(3));
+    Ok(())
+}
+
+/// Whether `RemoveNotification` works without identity, on the probe's own toast only.
+fn remove(listener: &UserNotificationListener) -> windows::core::Result<()> {
+    send(1)?;
+    std::thread::sleep(Duration::from_millis(800));
+    let Some(id) = list(listener)?.iter().find(|n| is_probe(n)).and_then(|n| n.Id().ok()) else {
+        println!("probe toast not found");
+        return Ok(());
+    };
+    let t = Instant::now();
+    let result = listener.RemoveNotification(id);
+    println!("RemoveNotification({id}): {:?} in {:?}", result.as_ref().map_err(|e| format!("{:#010x}", e.code().0 as u32)), t.elapsed());
+    std::thread::sleep(Duration::from_millis(300));
+    println!("still listed: {}", list(listener)?.iter().any(|n| n.Id().is_ok_and(|i| i == id)));
+    clear_probes();
     Ok(())
 }
 

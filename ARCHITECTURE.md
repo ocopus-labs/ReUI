@@ -101,6 +101,12 @@ modules/
                    counted interfaces, the busiest GPU engine, number text; tested), history
                    (the open card's last minute per gauge, sustained-high tone; tested), view,
                    settings (stats.json)
+  notifications/   opt-in (off by default; --notifications or notifications.json): toasts from
+                   allow-listed apps as a Brief. wnf (the shell's notification count as the
+                   trigger), listener (UserNotificationListener on its own thread: list, read
+                   only what's new), schedule (debounce, safety list, polling fallback with
+                   backoff; tested), diff (new and gone ids; tested), view, settings
+                   (notifications.json); examples/notifications_probe.rs measures it all
   updates/         daily update check, the update card (an Alert: Later / Install, then
                    download progress, installing or why it failed), "Updated" brief:
                    update.json + offer/snooze rules, card phases (pure, tested), views,
@@ -222,6 +228,7 @@ stats.rs           idle cost: CPU and private memory of ReUI's processes
 | `%APPDATA%\ReUI\onboarding.json` | first run done (`welcomed`), tips shown, offers answered |
 | `%APPDATA%\ReUI\clipboard.db`, `clipboard.json` | clipboard history and settings |
 | `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json`, `timers.json`, `privacy.json`, `stats.json`, `coding.json` | music, OSD, Devices, Timers, privacy indicator, System stats and coding agent settings (`coding.json` is read by all three agent modules) |
+| `%APPDATA%\ReUI\notifications.json` | notifications (off unless `enabled`): `apps` allowed (AUMIDs), `hide_content`, `seen` (apps that notified lately: AUMID and name, never a toast's text) |
 | `%APPDATA%\ReUI\timer-state.json` | running and paused timers, a focus session, the stopwatch, and whether ReUI turned Do Not Disturb on |
 | `%LOCALAPPDATA%\ReUI\lyrics\` | lyrics cache |
 | `%LOCALAPPDATA%\ReUI\hub.log` | panics |
