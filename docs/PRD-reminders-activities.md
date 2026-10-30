@@ -91,7 +91,7 @@ reui-bridge activity --json          # one JSON object per line on stdin
 - **Ends by itself** when nothing has been heard for 10 minutes (`stale_min`), unless `--keep`. `--end` takes it away now.
 - **Limits:** at most 3 at once per source, 8 in all (the oldest running one makes way); id up to 40 of `a-z 0-9 - _ .`; title 40 and detail 80 characters, control characters dropped; updates coalesced to four a second.
 - **Priority** is never above Alert: a script can't ask a question, take the keyboard or open the card by itself.
-- **Glyphs** by name: `build`, `test`, `deploy`, `download`, `upload`, `sync`, `backup`, `package`, `database`, `script` (default). Unknown names are the default.
+- **Glyphs** by name: `build`, `test`, `download`, `upload` (`deploy`), `sync`, `backup`, `package` (`install`, `update`), `script` (default). Unknown names are the default.
 - **Source:** `--source`, else the name of the program that ran the bridge (`pwsh`, `python`, `bash`). Settings can block sources (`blocked` in `activities.json`).
 
 **Security:** the pipe is per-user (its ACL is the current user only), so only the user's own programs can reach it. Everything is text, length-capped, validated in the hub (not only in the bridge). No URLs are opened, nothing is executed, no images or paths are read in v1.

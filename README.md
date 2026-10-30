@@ -79,6 +79,12 @@ Press **Win+Alt+S** to see how busy your PC is: CPU and memory with their last m
 
 Press **Win+Ctrl+T** and type how long: `10`, `90s`, `1h30`, `10m tea`. Run several at once; they keep going through sleep and restarts, and when one ends the island opens with a sound: **Stop**, or **+1 min**. Type `focus` for focus sessions (25 minutes of work, 5-minute breaks) that can turn on Do Not Disturb while you work, or `sw` for a stopwatch with laps.
 
+The same field takes reminders: `call mom at 6`, `in 2h check build`, `tomorrow 9 dentist`, `every day 21:00 meds`. It shows when one will fire before you press Enter, and at that time the island opens on it: **Snooze**, or **Done**. They survive sleep and restarts, and one that came due while the PC slept says so.
+
+### Scripts
+
+A build, a backup or `winget upgrade` can show its progress in the island with one line: `reui-bridge activity build --title Build --progress 0.42`, then `--state done`. A ring and the percentage sit in the pill while it runs, and the result shows for a moment when it ends. Scripts send text and a number, nothing more; see [Scripts](docs/development.md#scripts).
+
 ### Coding agents
 
 <img src="docs/images/agents.png" width="672" alt="Claude Code asking permission to run npm test, with Deny, Always and Allow">

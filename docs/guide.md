@@ -86,6 +86,33 @@ Type `focus` for a focus session (25 minutes of work, 5-minute breaks, a 15-minu
 
 `reui-bridge timer 10m tea` starts one from a script or a coding agent.
 
+### Reminders
+
+The timer field takes reminders too. While you type, the card shows when it will fire ("6:00 PM · Call mom"); Enter keeps it.
+
+| Type | Fires |
+| --- | --- |
+| `call mom at 6` | The next 6 o'clock to come round (18:00 if it's afternoon) |
+| `standup 9:30`, `at 18:00 take out trash`, `6pm call`, `noon lunch` | At that time, today or else tomorrow |
+| `in 2h check build`, `in 3 days renew` | That long from now |
+| `tomorrow 9 dentist`, `fri 3pm review`, `tonight 9 call` | That day (a bare hour on another day: 7–11 morning, 12–6 afternoon) |
+| `every day 21:00 meds`, `weekdays 9:30 standup`, `every monday 10am review` | Again and again |
+
+How `9:30` reads follows your time format: as written in a 24-hour one, the next one round in a 12-hour one. Alone, `5:00` is still a five-minute timer.
+
+When one is due the island opens on it: **Snooze** (10 minutes) or **Done** (a repeat moves on to its next time). Several due together share one card. Reminders keep through sleep and restarts; one that came due meanwhile says "Was due at 6:00 PM". With the field empty, the next three are listed under it, and Ctrl+Z removes the one you just added. They make no sound unless Settings → Timers → Sound for reminders is on.
+
+## Scripts
+
+Any script can put a live activity in the island through `reui-bridge` (see [Scripts](development.md#scripts) for every option):
+
+```
+reui-bridge activity build --title Build --progress 0.3
+reui-bridge activity build --progress 1 --state done
+```
+
+While it runs the pill shows a ring and the percentage (or the title); the open card has the title, what it's doing and a progress bar. Done or failed shows for a moment, then goes. One a script stops updating ends by itself after 10 minutes. Settings → Coding agents → Activities from scripts turns them off.
+
 ## Mic & camera
 
 While an app uses your microphone or camera, or shares or records your screen, the island shows its icon and what it uses: orange for the microphone, green for the camera, purple for the screen (and blue for location, if you turn it on in Settings → Mic & camera). Click it to see every app using something and since when, mute the microphone, or open Windows' privacy settings for it. A screenshot doesn't count; a camera that turns on for a moment still shows for a few seconds.

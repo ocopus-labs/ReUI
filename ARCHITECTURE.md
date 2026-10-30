@@ -25,7 +25,7 @@ reui-settings.exe  the Settings window, opened from the tray; single instance
 | `reui-design` | `design/tokens.json` compiled into constants at build time (plus a `Palette` per theme); `look.rs` turns the Appearance settings into a `Look` (palette, radii, insets, the concentric maths) for the island and Settings' previews alike; `layout/` is the island's geometry over that `Look` (compact pill and bubble, the expanded header, every row, the card row, gauges and their sparklines, each card's width and height, the view switcher), pure and tested, which both lay out with; `icon.rs` turns `design/logo/reui.ico` into the icon resource every program's `build.rs` links in; `devices.rs` holds the device drawings' bytes (`design/assets/devices/`), one copy for the hub (which sends them) and Settings' Devices preview |
 | `reui-hub` | Feature modules and the hub that orders their activities |
 | `reui-island` | The island window: Windows.UI.Composition + Direct2D/DirectWrite |
-| `reui-bridge` | Hook entry point for coding agents (`main.rs`; `parents.rs`: its parent process chain, sent for "Open terminal"), the hook installer (`install.rs`), and the OpenCode plugin it installs (`opencode-plugin.js`, tested by `tools/opencode-plugin-test.mjs`) |
+| `reui-bridge` | Hook entry point for coding agents (`main.rs`; `parents.rs`: its parent process chain, sent for "Open terminal", and the name of the program that ran it; `activity.rs`: `reui-bridge activity`, a script's live activity), the hook installer (`install.rs`), and the OpenCode plugin it installs (`opencode-plugin.js`, tested by `tools/opencode-plugin-test.mjs`) |
 | `reui-settings` | The Settings window: Direct2D/DirectWrite in the island's design language, every setting in one place |
 
 ## `reui-hub/src`
@@ -88,7 +88,16 @@ modules/
                    lookup order (resolve; pure, tested); families and kinds
   timers/          countdowns, focus sessions, stopwatch: launcher field parser, state
                    machines (fake-clock tests), timer-state.json, finish sound, Do Not
-                   Disturb (WNF read, IQuietHoursSettings, checked), views, settings
+                   Disturb (WNF read, IQuietHoursSettings, checked), views, settings;
+                   launcher.rs (the field: live preview, presets, Ctrl+Z)
+    remind/        reminders typed into the field: grammar (the words; pure), when (which
+                   hour and day, repeats' next time, on a given local clock; pure), list
+                   (fire, snooze, done on the wall clock; pure), card (preview, the next
+                   three, the fired card)
+  activities/      live activities from scripts (`reui-bridge activity`): request (an
+                   update's JSON read and checked; pure), board (merge, per-source caps,
+                   linger, stale end, the pace of publishes; fake-clock tests), view,
+                   settings (activities.json)
   privacy/         mic, camera, screen and location in use: the consent store (consent: what's
                    live, pure; alive: which uses still have their process, pure; store: the
                    reui-privacy thread, RegNotifyChangeKeyValue + process waits), tracker (screen
@@ -222,7 +231,8 @@ stats.rs           idle cost: CPU and private memory of ReUI's processes
 | `%APPDATA%\ReUI\onboarding.json` | first run done (`welcomed`), tips shown, offers answered |
 | `%APPDATA%\ReUI\clipboard.db`, `clipboard.json` | clipboard history and settings |
 | `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json`, `timers.json`, `privacy.json`, `stats.json`, `coding.json` | music, OSD, Devices, Timers, privacy indicator, System stats and coding agent settings (`coding.json` is read by all three agent modules) |
-| `%APPDATA%\ReUI\timer-state.json` | running and paused timers, a focus session, the stopwatch, and whether ReUI turned Do Not Disturb on |
+| `%APPDATA%\ReUI\timer-state.json` | running and paused timers, a focus session, the stopwatch, reminders (text, due time, a repeat's rule and time of day, ringing), and whether ReUI turned Do Not Disturb on |
+| `%APPDATA%\ReUI\activities.json` | script activities: `enabled`, `stale_min`, `per_source`, `blocked` sources |
 | `%LOCALAPPDATA%\ReUI\lyrics\` | lyrics cache |
 | `%LOCALAPPDATA%\ReUI\hub.log` | panics |
 | `%LOCALAPPDATA%\ReUI\bin\reui-bridge.exe` | the installed hook bridge |
