@@ -103,6 +103,9 @@ impl File {
                 "view_switcher": true,
                 "hide_shortcut": "Win+Alt+I",
                 "idle_clock": false,
+                "open_on": "click",
+                "hover_delay": 250,
+                "reveal_zone": "wide",
                 "monitor": "primary",
                 "check_updates": true,
                 "whats_new": true,
@@ -122,6 +125,7 @@ impl File {
                 "retention_days": 30,
                 "ignored_apps": ["keepass.exe", "keepassxc.exe", "bitwarden.exe", "1password.exe", "dashlane.exe", "keeper.exe", "enpass.exe", "lastpass.exe"],
                 "link_previews": true,
+                "copy_toast": true,
                 "layout": "strip",
             }),
             File::Osd => json!({
@@ -186,6 +190,14 @@ impl File {
 }
 
 pub const VISIBILITY: [&str; 3] = ["always", "when-active", "when-needed"];
+/// `open_on`: what a rest on the pill does (docs/PRD-behaviour.md §4.1).
+pub const OPEN_ON: [&str; 2] = ["click", "hover"];
+/// `reveal_zone`: how much of the top edge reveals a hidden island (docs/PRD-behaviour.md §4.2).
+pub const REVEAL_ZONE: [&str; 3] = ["off", "pill", "wide"];
+/// `app_rules` values (docs/PRD-behaviour.md §4.3): hide the island, or only decisions.
+pub const APP_RULES: [&str; 2] = ["hide", "decisions"];
+/// `hover_delay` choices in ms: Quick, Normal (`motion.delay.hover-intent`), Relaxed.
+pub const HOVER_DELAYS: [u64; 3] = [150, 250, 500];
 pub const VISUALIZER: [&str; 3] = ["real", "simple", "off"];
 /// `show_sessions` in `coding.json`.
 pub const SHOW_SESSIONS: [&str; 2] = ["needed", "working"];
@@ -220,6 +232,43 @@ impl Files {
     pub fn visibility(&self) -> usize {
         let doc = self.doc(File::Island);
         doc.str("visibility").and_then(|v| VISIBILITY.iter().position(|x| *x == v)).unwrap_or(0)
+    }
+
+    /// Index into [`OPEN_ON`].
+    pub fn open_on(&self) -> usize {
+        let doc = self.doc(File::Island);
+        doc.str("open_on").and_then(|v| OPEN_ON.iter().position(|x| *x == v)).unwrap_or(0)
+    }
+
+    /// The app rules the island understands, by executable name (lower-cased, as it matches
+    /// them), each an index into [`APP_RULES`].
+    pub fn app_rules(&self) -> Vec<(String, usize)> {
+        let Some(map) = self.doc(File::Island).get("app_rules").and_then(Value::as_object) else { return Vec::new() };
+        let mut rules: Vec<(String, usize)> =
+            map.iter().filter_map(|(exe, rule)| Some((exe.trim().to_lowercase(), APP_RULES.iter().position(|r| Some(*r) == rule.as_str())?))).filter(|(exe, _)| !exe.is_empty()).collect();
+        rules.sort();
+        rules
+    }
+
+    /// The snoozes still running at `now` (Unix ms): module, until.
+    pub fn snoozed(&self, now: u64) -> Vec<(String, u64)> {
+        let Some(map) = self.doc(File::Island).get("snoozed").and_then(Value::as_object) else { return Vec::new() };
+        let mut list: Vec<(String, u64)> = map.iter().filter_map(|(m, until)| Some((m.clone(), until.as_u64()?))).filter(|(_, until)| *until > now).collect();
+        list.sort();
+        list
+    }
+
+    /// Index into [`REVEAL_ZONE`]; Wide when missing or unknown, as the island reads it.
+    pub fn reveal_zone(&self) -> usize {
+        let doc = self.doc(File::Island);
+        doc.str("reveal_zone").and_then(|v| REVEAL_ZONE.iter().position(|x| *x == v)).unwrap_or(2)
+    }
+
+    /// Index into [`HOVER_DELAYS`]: the nearest choice to the file's value (it takes any
+    /// 50–2000 ms; out of range, the island uses Normal).
+    pub fn hover_delay(&self) -> usize {
+        let ms = self.doc(File::Island).get("hover_delay").and_then(Value::as_u64).filter(|ms| (50..=2000).contains(ms)).unwrap_or(250);
+        (0..HOVER_DELAYS.len()).min_by_key(|&i| HOVER_DELAYS[i].abs_diff(ms)).unwrap_or(1)
     }
 
     /// Which monitor the island is on: "primary", "cursor" or a display's device name.
@@ -364,6 +413,7 @@ mod tests {
         let f = files(&dir);
         assert_eq!((f.visibility(), f.paused_until(), f.visualizer(), f.retract_min()), (0, None, 0, 10));
         assert_eq!(f.monitor(), "primary");
+        assert_eq!((f.open_on(), f.hover_delay(), f.reveal_zone()), (0, 1, 2));
         let island = f.doc(File::Island);
         assert!(island.bool("hide_in_fullscreen") && island.bool("check_updates") && island.bool("whats_new"));
         assert!(f.doc(File::Media).bool("enabled") && f.doc(File::Clipboard).bool("enabled") && f.doc(File::Devices).bool("enabled"));
@@ -380,12 +430,13 @@ mod tests {
         std::fs::write(dir.join("media.json"), r#"{ "visualizer": " Simple ", "retract_after_pause_min": 0 }"#).unwrap();
         std::fs::write(dir.join("clipboard.json"), r#"{ "hotkey": "  ", "ignored_apps": ["Foo.EXE", 3, ""], "retention_days": -1 }"#).unwrap();
         std::fs::write(dir.join("osd.json"), r#"{ "scroll_step": 3 }"#).unwrap();
-        std::fs::write(dir.join("settings.json"), r#"{ "visibility": "when-needed", "paused_until": 99 }"#).unwrap();
+        std::fs::write(dir.join("settings.json"), r#"{ "visibility": "when-needed", "paused_until": 99, "open_on": "hover", "hover_delay": 600 }"#).unwrap();
         let f = files(&dir);
         assert_eq!((f.visualizer(), f.retract_min()), (1, 0));
         assert_eq!((f.shortcut(File::Clipboard).as_str(), f.ignored_apps(), f.retention_days()), ("Win+Alt+V", vec!["foo.exe".to_string()], 30));
         assert_eq!(f.scroll_step(), 0.02);
         assert_eq!((f.visibility(), f.paused_until()), (2, Some(99)));
+        assert_eq!((f.open_on(), f.hover_delay()), (1, 2), "600 ms reads as Relaxed");
         _ = std::fs::remove_dir_all(&dir);
     }
 

@@ -162,6 +162,11 @@ impl Pill {
         }
         self.visibility = settings.visibility;
         self.show_on_desktop = settings.show_on_desktop;
+        self.intent.open_on = settings.open_on;
+        self.intent.delay = settings.hover_delay;
+        self.intent.reveal_zone = settings.reveal_zone;
+        self.set_app_rules(settings.app_rules);
+        self.set_snoozed(settings.snoozed);
         self.set_switcher_enabled(settings.view_switcher);
         self.set_idle_clock(settings.idle_clock);
         if self.hide_in_fullscreen != settings.hide_in_fullscreen {
@@ -233,12 +238,14 @@ impl Pill {
     }
 
     fn wants_shown(&self) -> bool {
-        if self.hidden {
+        // Fullscreen, or an app the user hides it for.
+        if self.hidden || self.app_hides() {
             return false;
         }
-        // A pause, or hiding the island, quiets everything except questions only the user
-        // can answer (an agent asking for permission); those still come through.
-        if self.paused {
+        // A pause, hiding the island, or an app that wants only decisions, quiets everything
+        // except questions only the user can answer (an agent asking for permission); those
+        // still come through.
+        if self.paused || self.only_decisions() {
             return self.snapshot.activities.iter().any(|a| a.priority == reui_protocol::Priority::Decision);
         }
         // Hidden: what got through `ordered` (decisions, a card the user summoned).
@@ -260,6 +267,8 @@ impl Pill {
             return;
         }
         self.shown = show;
+        // What just appeared hasn't been aimed at yet (`intent::clicks_at_once`).
+        self.intent.appeared_at = show.then(std::time::Instant::now);
         if show {
             self.raise();
         }
@@ -339,6 +348,7 @@ impl Pill {
         }
         // Switching apps means the summoned card is done with.
         self.dismiss_summoned();
+        self.note_front_app(fg);
         let on_desktop = desktop::on_desktop(desktop::front(fg), self.on_desktop);
         if on_desktop != self.on_desktop {
             self.on_desktop = on_desktop;

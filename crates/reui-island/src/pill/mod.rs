@@ -37,12 +37,13 @@ use crate::render::{self, Hit, Interaction, Renderer, Thumb};
 use crate::drag_guard::DragGuard;
 use crate::place::MonitorChoice;
 use crate::settings::Visibility;
-use crate::order;
 
 mod drop;
+mod gate;
 mod idle;
 mod input;
 mod link;
+mod quiet;
 mod setup;
 mod summon;
 mod switcher;
@@ -99,7 +100,7 @@ pub struct Pill {
     /// runs only while one is moving.
     levels: Levels,
     level_ticking: bool,
-    _keys: KeysRelease,
+    _keys: setup::KeysRelease,
     compositor: Compositor,
     _target: DesktopWindowTarget,
     root: ContainerVisual,
@@ -227,6 +228,10 @@ pub struct Pill {
     idle: idle::Idle,
     /// The file shelf's drop target and drags out of cards.
     drops: drop::Drops,
+    /// Whether a rest opens or peeks, and how long it is (`intent.rs`).
+    intent: crate::intent::Intent,
+    /// What the user has quieted: app rules, snoozes (`gate.rs`, `quiet.rs`).
+    gate: gate::Gate,
     to_hub: UnboundedSender<ClientMsg>,
     events: Receiver<Event>,
 }
@@ -236,9 +241,10 @@ impl Pill {
         self.snapshot.activities.first()
     }
 
-    /// Nothing is happening (no activities from the hub).
+    /// Nothing is showing: no activities from the hub, or none the user lets through (a
+    /// snoozed module's), so the resting pill is itself.
     pub fn idle(&self) -> bool {
-        self.raw.activities.is_empty() && !self.drops.showing
+        self.snapshot.activities.is_empty() && !self.drops.showing
     }
 
     fn apply(&mut self, snapshot: Snapshot) -> Result<()> {
@@ -252,32 +258,6 @@ impl Pill {
         self.render(ordered)
     }
 
-    /// What to show where (see `order::arrange`).
-    fn ordered(&mut self) -> Snapshot {
-        let open = if self.state == State::Expanded { self.open_id.clone() } else { None };
-        // "When needed" hides ongoing things, so a confirmation there leads instead of
-        // waiting in the bubble beside something the user can't see.
-        let briefs_lead = self.visibility == Visibility::WhenNeeded && !self.desktop_shows() && !self.raw.activities.iter().any(|a| a.priority >= reui_protocol::Priority::Alert);
-        let mut raw = self.raw.activities.clone();
-        if self.paused || self.hidden_by_user {
-            // Paused or hidden: only decisions show (see `wants_shown`), alone in the pill;
-            // hidden, so does a card the user summons (a hotkey asks for exactly that).
-            let asked = self.pinned.clone().filter(|_| self.hidden_by_user && !self.paused && self.summoned);
-            raw.retain(|a| a.priority == reui_protocol::Priority::Decision || Some(&a.id) == asked.as_ref());
-        }
-        let (mut activities, pin_alive) = order::arrange(raw, self.pinned.as_ref(), self.summoned, open.as_ref(), briefs_lead);
-        if !pin_alive {
-            self.pinned = None;
-            self.summoned = false;
-        }
-        // A drag over the island: the drop target leads, whatever else is going on, and
-        // stands for the shelf (its own pill would only repeat it in the bubble).
-        if let Some(face) = self.drop_face() {
-            activities.retain(|a| a.id.module != face.id.module);
-            activities.insert(0, face);
-        }
-        Snapshot { activities }
-    }
 
     /// Brings another activity to the front and re-renders.
     fn bring_forward(&mut self, id: ActivityId) {
@@ -357,6 +337,8 @@ impl Pill {
                     // A decision opens itself so it's noticed, then folds back to compact (still
                     // pending) unless the user engages, so it never blocks the top of the screen.
                     self.set_state(State::Expanded);
+                    // A card that opened by itself takes no click until it's been seen.
+                    self.intent.appeared_at = Some(now);
                     if !self.hovered {
                         unsafe { SetTimer(Some(self.hwnd), TIMER_COLLAPSE, motion::delay::DECISION_HOLD, None) };
                     }
@@ -514,28 +496,3 @@ impl Pill {
 
 }
 
-/// Releases the keyboard hook when the pill goes. A field rather than `Drop` on `Pill`, so a
-/// rebuild can move the compositor and renderer out of the old pill ([`Pill::into_gpu`]).
-pub(super) struct KeysRelease;
-
-impl Drop for KeysRelease {
-    fn drop(&mut self) {
-        clipboard_keys::release();
-    }
-}
-
-/// What a rebuild keeps: creating these takes ~140 ms (the D3D device, the factories, the
-/// fonts), while the visual tree a new look needs takes a few.
-pub struct Gpu {
-    compositor: Compositor,
-    target: DesktopWindowTarget,
-    renderer: Renderer,
-}
-
-impl Pill {
-    /// The old pill's compositor, window target and renderer, for the next one; the rest
-    /// (its visuals, timers' state, the keyboard hook) goes.
-    pub fn into_gpu(self) -> Gpu {
-        Gpu { compositor: self.compositor, target: self._target, renderer: self.renderer }
-    }
-}

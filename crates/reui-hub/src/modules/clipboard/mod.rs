@@ -30,7 +30,7 @@ use std::pin::Pin;
 use std::time::Duration;
 
 use reqwest::Client;
-use reui_protocol::{Priority, Rgb, ACTION_COLLAPSED, ACTION_EXPANDED};
+use reui_protocol::{Priority, Quiet, Rgb, ACTION_COLLAPSED, ACTION_EXPANDED};
 use tokio::sync::mpsc::UnboundedSender;
 use tokio::time::{sleep_until, Instant, MissedTickBehavior};
 
@@ -92,9 +92,16 @@ impl Module for ClipboardHistory {
         "clipboard"
     }
 
-    fn run(self: Box<Self>, ctx: ModuleContext) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    fn run(self: Box<Self>, mut ctx: ModuleContext) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        ctx.declare_quiet(quiet);
         Box::pin(run(ctx, self.link_previews))
     }
+}
+
+/// The copy toast can be turned off from itself (`copy_toast`); "Press Ctrl+V" (an alert on
+/// the same key) is an instruction the user needs, so it can't.
+fn quiet(key: &str, priority: Priority) -> Option<Quiet> {
+    (key == KEY && priority == Priority::Brief).then(|| Quiet::setting("clipboard.json", "copy_toast"))
 }
 
 /// What the island (the toast) or the tray sends.
@@ -314,7 +321,11 @@ impl App {
             // The new card slides in (W-10).
             self.send_state().await;
         } else if !claimed {
-            self.toast().await;
+            // Snipping Tool's shots are the screenshot card's; the rest toast unless
+            // the user turned the toast off.
+            if self.settings.copy_toast {
+                self.toast().await;
+            }
             crate::modules::onboarding::note(crate::modules::onboarding::Moment::Copy { hotkey: (!self.hotkey_taken).then(|| self.settings.hotkey.clone()) });
         }
     }

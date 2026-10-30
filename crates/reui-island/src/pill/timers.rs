@@ -46,6 +46,8 @@ pub(super) const TIMER_LEVEL: usize = 13;
 pub(super) const TIMER_PAUSE: usize = 14;
 /// A clock on screen (a timer, a stopwatch) reads differently: one-shot, just after it does.
 pub(super) const TIMER_CLOCK: usize = 15;
+/// The next snooze ends (one-shot, only while something is snoozed).
+pub(super) const TIMER_SNOOZE: usize = 16;
 
 /// How often an open card with a playing timeline redraws its position.
 const TICK_MS: u32 = 1000;
@@ -73,6 +75,7 @@ impl Pill {
         match id {
             TIMER_HOVER => self.on_hover_intent(),
             TIMER_PAUSE => self.apply_settings(Settings::load()),
+            TIMER_SNOOZE => self.gate_changed(),
             TIMER_HOLD if self.state == State::Expanded => {
                 self.redraw_expanded();
                 self.update_tick();

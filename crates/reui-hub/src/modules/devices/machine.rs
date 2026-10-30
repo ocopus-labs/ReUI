@@ -15,7 +15,7 @@ use super::{view, State, DriveCard, Internal};
 use crate::hub::ModuleContext;
 use crate::modules::system_events::{PowerSource, SystemEvent};
 
-const POWER: &str = "power";
+pub(super) const POWER: &str = "power";
 const CHARGING: Duration = Duration::from_secs(4);
 const STATE: Duration = Duration::from_secs(3);
 const DRIVE: Duration = Duration::from_secs(5);

@@ -37,7 +37,7 @@ use std::pin::Pin;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use reui_protocol::{Art, Element, Rgb, ACTION_COLLAPSED, ACTION_EXPANDED, ACTION_SEARCH, ACTION_SUBMIT};
+use reui_protocol::{Art, Element, Priority, Quiet, Rgb, ACTION_COLLAPSED, ACTION_EXPANDED, ACTION_SEARCH, ACTION_SUBMIT};
 use tokio::sync::oneshot;
 use tokio::time::{sleep_until, Instant};
 
@@ -211,7 +211,15 @@ struct Agentry {
     settings: Mutex<Settings>,
 }
 
+/// A finished turn (a brief) turns off with "Finished turns" (`coding.json`
+/// `show_finished`). Questions, failures and permission requests can't be quieted: they're
+/// the agent waiting on the user. `reui-bridge test`'s answer was asked for.
+fn quiet(key: &str, priority: Priority) -> Option<Quiet> {
+    (priority == Priority::Brief && key != view::TEST_KEY).then(|| Quiet::setting("coding.json", "show_finished"))
+}
+
 async fn run(profile: &'static Profile, mut ctx: ModuleContext) {
+    ctx.declare_quiet(quiet);
     let mark = match profile.logo {
         Some(svg) => Element::Art(Art::Logo { image: ctx.image(svg.to_vec()), animated: false }),
         None => Element::Art(Art::Glyph(profile.glyph)),

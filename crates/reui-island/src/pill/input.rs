@@ -11,6 +11,7 @@ use windows::Win32::Foundation::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
 use crate::drag_guard;
+use crate::intent::{self, Rest};
 use crate::features::choices;
 use crate::features::clipboard_keys;
 use crate::features::music::{self, SeekHold, Throttle};
@@ -82,8 +83,12 @@ impl Pill {
         }
         // Dragging something across the screen: the island neither opens nor takes clicks.
         let dragging = self.drag_guard.blocks();
-        // In a hidden mode, pushing the pointer against the top edge above the island reveals it.
-        let at_edge = pt.y <= self.window.top + 1 && pt.x >= self.window.left && pt.x < self.window.right;
+        // In a hidden mode, pushing the pointer against the top edge above the island reveals
+        // it, across as much of the edge as `reveal_zone` says. It only reveals: the pill it
+        // shows waits for a rest before taking clicks (`intent::clicks_at_once`).
+        let (pill_left, _, pill_right, _) = self.shape_rect();
+        let zone = intent::reveals(self.intent.reveal_zone, pt.x, (self.window.left, self.window.right), (pill_left as i32, pill_right as i32));
+        let at_edge = pt.y <= self.window.top + 1 && zone;
         if at_edge && !dragging && !self.hidden && self.visibility != Visibility::Always && !self.shown {
             self.revealed = true;
             self.refresh_visibility();
@@ -99,10 +104,14 @@ impl Pill {
         let on_switcher = interactive && self.switcher_zone().is_some_and(within);
         let inside = interactive && (within(self.hit_rect()) || on_bubble || on_switcher);
         self.on_bubble = on_bubble;
-        // On the visible pill (or bubble) itself, clicks are the island's at once: a quick
-        // click there is clearly aimed at it. The rest delay only gates the peek, and the
-        // thin band above the pill, where browser tabs actually are.
-        if interactive && (within(self.shape_rect()) || on_bubble || on_switcher) {
+        if inside && !self.inside {
+            self.intent.arrived_at = Instant::now();
+        }
+        // On the visible pill (or bubble) itself, clicks are the island's at once when it was
+        // already there for the pointer to aim at: a quick click there is clearly meant for
+        // it. The rest gates the peek, the thin band above the pill (where browser tabs
+        // are), and a pill that has only just appeared.
+        if interactive && (within(self.shape_rect()) || on_bubble || on_switcher) && self.intent.clicks_at_once() {
             self.set_clickthrough(false);
         }
         self.hover_switcher(pt);
@@ -114,8 +123,9 @@ impl Pill {
         }
         self.inside = inside;
         if inside {
-            // Only take over once the pointer rests here (see `hovered`).
-            unsafe { SetTimer(Some(self.hwnd), TIMER_HOVER, motion::delay::HOVER_INTENT, None) };
+            // Only take over once the pointer rests here (see `hovered`), as long as the user
+            // chose (`hover_delay`).
+            unsafe { SetTimer(Some(self.hwnd), TIMER_HOVER, self.intent.delay, None) };
             return;
         }
         unsafe { _ = KillTimer(Some(self.hwnd), TIMER_HOVER) };
@@ -151,9 +161,13 @@ impl Pill {
         unsafe { _ = KillTimer(Some(self.hwnd), TIMER_COLLAPSE) };
         self.set_clickthrough(false);
         // Resting on the bubble makes it clickable without growing the pill. The idle pill
-        // peeks too, with the date and time.
-        if matches!(self.state, State::Compact | State::Idle) && !self.on_bubble {
-            self.set_state(State::Peek);
+        // peeks too, with the date and time. With "open on hover" the rest opens the card.
+        let compact = matches!(self.state, State::Compact | State::Idle);
+        let card = self.front().is_some_and(|a| a.expanded.is_some());
+        match intent::after_rest(self.intent.open_on, compact, card, self.on_bubble) {
+            Rest::Peek => self.set_state(State::Peek),
+            Rest::Open => self.set_state(State::Expanded),
+            Rest::Nothing => {}
         }
     }
 

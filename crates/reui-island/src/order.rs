@@ -72,6 +72,7 @@ mod tests {
             compact: CompactView::default(),
             minimal: Element::Empty,
             audio: None,
+            quiet: None,
             expanded: None,
         }
     }

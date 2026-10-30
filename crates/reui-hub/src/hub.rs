@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
-use reui_protocol::{Activity, ActivityId, CompactView, Destination, Dropped, Element, ExpandedView, ImageId, Priority, Rgb, Snapshot};
+use reui_protocol::{Activity, ActivityId, CompactView, Destination, Dropped, Element, ExpandedView, ImageId, Priority, Quiet, Rgb, Snapshot};
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
 
 /// How an activity presents itself; see the protocol for each presentation.
@@ -125,7 +125,7 @@ impl Hub {
         state.routes.insert(module.to_string(), tx);
         self.rebuild_destinations(&state);
         drop(state);
-        ModuleContext { module, hub: self.clone(), inputs }
+        ModuleContext { module, hub: self.clone(), inputs, quiet: None }
     }
 
     pub fn image(&self, id: ImageId) -> Option<Arc<Vec<u8>>> {
@@ -274,18 +274,38 @@ fn evict_images(state: &mut State) {
     }
 }
 
+/// What a module's declaration says about one activity: only briefs and alerts can be
+/// quieted. Decisions never are (only the user can answer them), and ongoing or passive
+/// activities are the user's own (music, a running timer).
+fn quiet_for(declared: Option<QuietFor>, key: &str, priority: Priority) -> Option<Quiet> {
+    matches!(priority, Priority::Brief | Priority::Alert).then(|| declared.and_then(|f| f(key, priority))).flatten()
+}
+
 /// A module's handle to the hub. Dropping it retracts all of the module's activities.
 pub struct ModuleContext {
     module: &'static str,
     hub: Hub,
     inputs: mpsc::UnboundedReceiver<ModuleInput>,
+    /// Which of the module's moments the user may quiet, and with which setting.
+    quiet: Option<QuietFor>,
 }
+
+/// A module's answer to "which setting turns this moment off?", by its key and priority.
+pub type QuietFor = fn(&str, Priority) -> Option<Quiet>;
 
 impl ModuleContext {
     pub fn publish(&self, key: &str, priority: Priority, view: View) {
         let id = ActivityId { module: self.module.to_string(), key: key.to_string() };
         let View { accent, compact, minimal, expanded, audio } = view;
-        self.hub.publish(Activity { id, priority, accent, compact, minimal, expanded, audio });
+        let quiet = quiet_for(self.quiet, key, priority);
+        self.hub.publish(Activity { id, priority, accent, compact, minimal, expanded, audio, quiet });
+    }
+
+    /// Declares which of this module's briefs and alerts the user may quiet from the moment
+    /// itself (docs/PRD-behaviour.md §4.4), once, before publishing: the module knows which
+    /// of its settings each kind of moment maps to; the hub attaches it to each activity.
+    pub fn declare_quiet(&mut self, quiet: QuietFor) {
+        self.quiet = Some(quiet);
     }
 
     /// Registers encoded image bytes (PNG, JPEG, ...) for use as `Art::Image`.
@@ -336,6 +356,18 @@ mod tests {
 
     fn front(hub: &Hub) -> Vec<String> {
         hub.subscribe().borrow().activities.iter().map(|a| a.id.key.clone()).collect()
+    }
+
+    #[test]
+    fn only_briefs_and_alerts_can_be_quieted() {
+        let declared: QuietFor = |key, _| (key == "volume").then(|| Quiet::setting("osd.json", "volume"));
+        assert_eq!(quiet_for(Some(declared), "volume", Priority::Brief), Some(Quiet::setting("osd.json", "volume")));
+        assert_eq!(quiet_for(Some(declared), "volume", Priority::Alert), Some(Quiet::setting("osd.json", "volume")));
+        assert_eq!(quiet_for(Some(declared), "other", Priority::Brief), None);
+        for never in [Priority::Decision, Priority::Ongoing, Priority::Passive] {
+            assert_eq!(quiet_for(Some(declared), "volume", never), None, "{never:?}");
+        }
+        assert_eq!(quiet_for(None, "volume", Priority::Brief), None);
     }
 
     #[test]

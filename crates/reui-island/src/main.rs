@@ -6,15 +6,19 @@
 #![windows_subsystem = "windows"]
 
 mod desktop;
+mod app_rules;
 mod drag_guard;
 mod dragdrop;
 mod features;
 mod fullscreen;
 mod images;
+mod menus;
+mod intent;
 mod ipc;
 mod order;
 mod pill;
 mod place;
+mod quiet;
 mod render;
 mod settings;
 mod theme;
@@ -35,7 +39,7 @@ use windows::Win32::UI::WindowsAndMessaging::*;
 use crate::features::clipboard_keys;
 use reui_design::look::Look;
 
-use crate::pill::{MenuEntry, Pill};
+use crate::pill::Pill;
 use crate::place::{MonitorChoice, Placement};
 use crate::settings::Settings;
 
@@ -48,7 +52,14 @@ const WM_TEST_POINTER: u32 = WM_APP + 20;
 /// middle, 0: it leaves, 2: it's let go), so the drop target and the shelf's intake can be
 /// checked without a real drag (`Pill::test_drag`).
 #[cfg(debug_assertions)]
-const WM_TEST_DROP: u32 = WM_APP + 21;
+const WM_TEST_DROP: u32 = WM_APP + 23;
+/// Debug builds: a test script's "this process is in front" (wparam: its id), for app rules.
+#[cfg(debug_assertions)]
+const WM_TEST_FOREGROUND: u32 = WM_APP + 21;
+/// Debug builds: a test script picks entry `wparam` of the quiet menu for the moment at
+/// client point `lparam`, without showing a menu at the user's pointer.
+#[cfg(debug_assertions)]
+const WM_TEST_QUIET: u32 = WM_APP + 22;
 
 const TIMER_SETTINGS: usize = 100;
 const SETTINGS_SETTLE_MS: u32 = 150;
@@ -183,47 +194,6 @@ fn rebuild(hwnd: HWND, placement: &Placement) {
     }
 }
 
-fn open_menu(hwnd: HWND) {
-    let (mut paused, mut hidden) = (false, false);
-    with_pill(|pill| (paused, hidden) = (pill.paused(), pill.hidden_by_user()));
-    match tray::menu(hwnd, paused, hidden) {
-        Some(tray::Command::Settings) => tray::open_settings(),
-        Some(tray::Command::TogglePause) => with_pill(|pill| pill.set_paused(!paused)),
-        Some(tray::Command::ToggleHidden) => with_pill(|pill| pill.toggle_hidden()),
-        Some(tray::Command::Module(module, action)) => with_pill(|pill| pill.command(module, &action)),
-        Some(tray::Command::Quit) => unsafe { _ = DestroyWindow(hwnd) },
-        None => {}
-    }
-}
-
-/// Right-click: a card's own menu over a card that has one, the island's menu elsewhere.
-fn right_click(hwnd: HWND, x: f32, y: f32) {
-    let mut entries = None;
-    with_pill(|pill| entries = pill.card_menu(x, y));
-    match entries {
-        Some(entries) => card_menu(hwnd, entries),
-        None => open_menu(hwnd),
-    }
-}
-
-/// A menu from the open card (a card's actions, a slider's output devices). It runs
-/// outside the pill's borrow so hooks and timers keep working meanwhile.
-fn card_menu(hwnd: HWND, entries: Vec<MenuEntry>) {
-    if entries.is_empty() {
-        return;
-    }
-    with_pill(|pill| pill.menu_opened());
-    let items: Vec<(&str, bool)> = entries.iter().map(|(label, _, _, checked)| (label.as_str(), *checked)).collect();
-    let (picked, previous) = tray::item_menu(hwnd, &items);
-    with_pill(|pill| {
-        pill.menu_closed(previous);
-        if let Some(i) = picked {
-            let (_, action, closes, _) = &entries[i];
-            pill.act(action.clone(), *closes);
-        }
-    });
-}
-
 fn press_drag(lparam: LPARAM) -> bool {
     let (x, y) = client_point(lparam);
     let mut pressed = false;
@@ -351,6 +321,17 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             with_pill(|pill| pill.test_drag(wparam.0));
             LRESULT(0)
         }
+        #[cfg(debug_assertions)]
+        WM_TEST_FOREGROUND => {
+            with_pill(|pill| pill.test_front_app(wparam.0 as u32));
+            LRESULT(0)
+        }
+        #[cfg(debug_assertions)]
+        WM_TEST_QUIET => {
+            let (x, y) = client_point(lparam);
+            with_pill(|pill| pill.test_quiet(x, y, wparam.0));
+            LRESULT(0)
+        }
         clipboard_keys::WM_KEYS => {
             with_pill(|pill| pill.on_keys());
             LRESULT(0)
@@ -404,7 +385,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             if dragged {
                 _ = ReleaseCapture();
             } else if let Some(entries) = menu {
-                card_menu(hwnd, entries);
+                menus::card_menu(hwnd, entries);
             } else {
                 with_pill(|pill| pill.on_click(x, y, shift, alt));
             }
@@ -423,13 +404,13 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         }
         WM_RBUTTONUP => {
             let (x, y) = client_point(lparam);
-            right_click(hwnd, x, y);
+            menus::right_click(hwnd, x, y);
             LRESULT(0)
         }
         tray::WM_TRAY => {
             match tray::click(lparam) {
                 Some(tray::Click::Open) => tray::open_settings(),
-                Some(tray::Click::Menu) => open_menu(hwnd),
+                Some(tray::Click::Menu) => menus::open_menu(hwnd, Vec::new()),
                 None => {}
             }
             LRESULT(0)

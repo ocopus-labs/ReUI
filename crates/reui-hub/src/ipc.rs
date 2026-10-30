@@ -272,6 +272,7 @@ mod tests {
             compact: CompactView { leading: Element::Art(Art::Image(ImageId(*i))), trailing: Element::Empty },
             minimal: Element::Art(Art::Image(ImageId(*i))),
             audio: None,
+            quiet: None,
             expanded: None,
         };
         Snapshot { activities: ids.iter().map(activity).collect() }

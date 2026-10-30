@@ -80,7 +80,7 @@ Layout templates fall out of the content, so modules don't pick them:
 | Decision arrives (e.g. agent permission) | Expands itself, then folds back to compact (still pending, accent "Allow?") after `motion.delay.decision-hold` unless you engage |
 | Alert arrives (done, failed, "your turn") | Comes to the front in compact; doesn't expand itself |
 | Decision answered | Folds back to compact (unless hovered) |
-| Pointer rests on the pill for `motion.delay.hover-intent` | Becomes clickable and peeks. Until then it's click-through, so quick moves and clicks reach what's underneath (browser tabs) |
+| Pointer rests on the pill for the hover delay (`hover_delay`; default `motion.delay.hover-intent`, Settings → General: Quick 150 / Normal 250 / Relaxed 500 ms) | Becomes clickable and peeks; with **Open on hover** (`open_on`) a pill with a card opens it instead (the idle pill still only peeks: its row of places opens on a click). Until then the band above the pill is click-through, so quick moves and clicks reach what's underneath (browser tabs). PRD: `docs/PRD-behaviour.md` |
 | Click on compact | Expand |
 | Click on the idle pill | Opens the row of places; a tab opens its place as a switcher tab does (the module's own open command), Esc (the keyboard hook passes every other key on), a press elsewhere or leaving folds it back. Never takes focus |
 | Pointer leaves expanded | Collapse after `motion.delay.collapse` |
@@ -89,6 +89,7 @@ Layout templates fall out of the content, so modules don't pick them:
 | A drag from another app comes within `island.shelf.reach` of the pill (files, an image, a link, text) | The island stops being click-through for that drag only, and while Windows says it's over the pill, the pill grows into the drop target: the shelf's mark and "Drop to hold" in `label.secondary`, `island.shelf.drop-grow` wider and as tall as a peek, on `motion.spring.expand` (critically damped). Letting go holds it; moving away folds it back. Never over an open card other than the shelf's, never paused, hidden or in fullscreen. Effects: Copy, else Link, never Move |
 | Press a held file's card, or the shelf's pill, and move past the system's drag distance | Windows' own drag, with the shell's image of the files; the pill drags every file held. Copy or Link, never Move: the original stays where it is |
 | Right-click the pill, or the tray icon | Short menu: Settings, Pause ReUI for 1 hour / Resume, Hide the island / Show the island, Clipboard history, Devices, System stats, Shelf (Open shelf, Clear shelf), Timer, Quit. A left-click on the tray icon opens Settings |
+| Right-click a brief or an alert (in the pill or the bubble) | The menu starts with the moment's own entries, when its module declared them (`Activity::quiet`): **Don't show these** (the module's own setting for this kind of moment goes off: the island writes it as Settings does, keeping other keys, and sends the module `reload`; the moment goes at once) and **Snooze for 1 hour** (that module's briefs and alerts wait, settings.json `snoozed`; Settings → General → Snoozed has Undo). Never for a decision, nor for what's ongoing. PRD: `docs/PRD-behaviour.md` §4.4 |
 | Click the minimal bubble | Swaps that activity into the pill |
 | Click a tab on the view switcher (or wheel over it; Ctrl+Tab while the card has the keyboard) | Sends that place's own open command (the tray's); its card replaces the open one as a summoned card. The switcher and the gap above it count as the card for hover; a press there isn't "outside" |
 | A brief confirmation (copied) while something else is in the pill | Shows in the minimal bubble for its moment (copy icon), never takes the pill; alone, it takes the pill with a glimpse of what was copied |
@@ -108,7 +109,9 @@ Layout templates fall out of the content, so modules don't pick them:
 
 **Hidden** (the hide shortcut, Win+Alt+I by default, or the tray; settings.json `hidden`, `hide_shortcut`): over any mode, the island stays out of sight until asked again, like a pause for the island alone: modules and clipboard recording carry on, decisions still come through, and a card the user summons with its own shortcut shows. The top edge doesn't reveal it. The hub registers the shortcut on its shared hotkey window and sends the island `ToggleHidden`; the island keeps the state.
 
-In the hidden modes, pushing the pointer against the top edge above the island reveals it; it hides again `motion.delay.reveal-hold` after the pointer leaves. Showing and hiding use the presence animation (`motion.show`): the island emerges from the top edge (slides down, scales up from `from-scale` with a slight overshoot) and retracts into it, quicker, on hide.
+**App rules** (Settings → General; `app_rules` in settings.json, exe → rule): while a listed app is in front, *Hide the island* hides it as fullscreen does (everything, decisions too), and *Only decisions* lets only decisions through, alone in the pill. The island reads the front process's executable name on each foreground change (the hook it already has, no polling); the taskbar, Start and Alt+Tab keep the last answer so switching away doesn't flash the island, and the desktop has no rule. Pure rule: `app_rules.rs`; applied in `pill/gate.rs`.
+
+In the hidden modes, pushing the pointer against the top edge reveals it, across as much of the edge as **Reveal from the top edge** says (`reveal_zone`: *Off*; *Pill*, the pill's own width; *Wide*, the island's window, the widest card plus its margin: 608 DIP at 100 %, the default). It hides again `motion.delay.reveal-hold` after the pointer leaves. The reveal only reveals: **a pill that has just appeared** (revealed, shown by a moment while the pointer was up there, or a decision opening itself) takes no click until the pointer has rested on it for the hover delay, so a click meant for a browser tab under it goes to the tab (`intent::clicks_at_once`). A pill that was on screen for the hover delay before the pointer got there takes clicks on its shape at once. Showing and hiding use the presence animation (`motion.show`): the island emerges from the top edge (slides down, scales up from `from-scale` with a slight overshoot) and retracts into it, quicker, on hide.
 
 ## Appearance
 
@@ -147,7 +150,7 @@ The user picks a look in Settings → Appearance (`settings.json`; PRD: `docs/PR
 | `component` | Ring, art, app icon, button (with the roomy card's alert-style inset and gap), progress, bars, dot, choice, block, gauge (gap, glyph, sparkline) and fact sizes, the header button's target |
 | `motion.spring` | `expand`, `collapse`, `peek`, `settle`, `reduced` (damping ratio + period) |
 | `motion.height` | Height springs are slightly calmer than width: `damping-offset`, `period-factor` |
-| `motion.delay` | `collapse`, `hover-intent`, `decision-hold`, `reveal-hold`, `fade` |
+| `motion.delay` | `collapse`, `hover-intent` (the default hover delay; the user's `hover_delay` overrides it), `decision-hold`, `reveal-hold`, `fade` |
 | `motion.show` | Presence animation: `in`, `out`, `from-scale`, `rise` |
 | `motion.logo` | Brand-logo working animation (ticks: `interval`, `turn`); built but unused, logos are static for now |
 | `motion.crossfade` | When compact content fades out and expanded content fades and scales in, as fractions of the morph |

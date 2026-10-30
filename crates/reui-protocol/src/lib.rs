@@ -15,7 +15,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
-pub const PROTOCOL_VERSION: u32 = 23;
+pub const PROTOCOL_VERSION: u32 = 24;
 const MAX_FRAME: usize = 16 * 1024 * 1024;
 
 /// Per-user pipe name; the hub also restricts the pipe's ACL to the current user. A test
@@ -576,6 +576,41 @@ pub struct Activity {
     /// The process whose sound this activity is about (a music player), for audio-reactive
     /// visuals. The surface captures it only while the bars are live and shown.
     pub audio: Option<u32>,
+    /// How the user may quiet this kind of moment from the moment itself (a brief or an
+    /// alert; never a decision). `None`: it can't be.
+    pub quiet: Option<Quiet>,
+}
+
+/// A kind of moment the user may quiet where it shows (docs/PRD-behaviour.md §4.4): turn
+/// off the module's own setting for it, or snooze the module's moments for a while. Which
+/// setting is the module's to say; how the surface offers it (a menu) is the surface's.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct Quiet {
+    /// The setting that turns this kind of moment off. `None`: there's no such setting, so it
+    /// can only be snoozed.
+    pub setting: Option<QuietSetting>,
+}
+
+/// A boolean key in one of ReUI's settings files (`%APPDATA%\ReUI\<file>`) whose `false`
+/// stops this kind of moment. The surface writes it as Settings does, then sends the
+/// module `reload`.
+#[derive(Serialize, Deserialize, Debug, Clone, PartialEq, Eq)]
+pub struct QuietSetting {
+    /// The file's name ("osd.json"), never a path.
+    pub file: String,
+    pub key: String,
+}
+
+impl Quiet {
+    /// Turned off by `key` in `file`.
+    pub fn setting(file: &str, key: &str) -> Self {
+        Self { setting: Some(QuietSetting { file: file.into(), key: key.into() }) }
+    }
+
+    /// No setting for it; it can only be snoozed.
+    pub fn snooze_only() -> Self {
+        Self { setting: None }
+    }
 }
 
 /// Everything a surface needs, front activity first.
@@ -752,6 +787,7 @@ mod tests {
                 compact: CompactView { leading: Element::Ring(0.4), trailing: Element::Text { text: "01:45".into(), tone: Tone::Primary } },
                 minimal: Element::Ring(0.4),
                 audio: None,
+                quiet: None,
                 expanded: Some(ExpandedView {
                     leading: Element::Ring(0.4),
                     eyebrow: Some("Timer".into()),

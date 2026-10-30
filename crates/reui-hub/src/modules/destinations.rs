@@ -72,7 +72,7 @@ mod tests {
             pager: None,
             open: None,
         });
-        Activity { id: ActivityId { module: module.into(), key: "k".into() }, priority: Priority::Ongoing, accent: None, compact: CompactView::default(), minimal: Element::Empty, expanded, audio: None }
+        Activity { id: ActivityId { module: module.into(), key: "k".into() }, priority: Priority::Ongoing, accent: None, compact: CompactView::default(), minimal: Element::Empty, expanded, audio: None, quiet: None }
     }
 
     fn names(list: &[Destination]) -> Vec<&str> {

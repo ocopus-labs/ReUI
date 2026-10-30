@@ -111,6 +111,8 @@ impl Pill {
             minimal: Element::Empty,
             expanded: None,
             audio: None,
+            // The drop target is the island answering a drag, not a moment to quiet.
+            quiet: None,
         })
     }
 

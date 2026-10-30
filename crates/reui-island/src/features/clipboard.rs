@@ -232,6 +232,7 @@ mod tests {
                     compact: CompactView { leading: Element::Art(Art::Image(ImageId(i))), trailing: Element::Empty },
                     minimal: Element::Empty,
                     audio: None,
+                    quiet: None,
                     expanded: None,
                 })
                 .collect(),

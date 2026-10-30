@@ -21,11 +21,13 @@ pub struct Settings {
     pub link_previews: bool,
     /// The window's card layout: "strip" or "grid" (remembered from the window).
     pub layout: String,
+    /// The copy confirmation in the island (a moment's glimpse of what was copied).
+    pub copy_toast: bool,
 }
 
 impl Default for Settings {
     fn default() -> Self {
-        Self { hotkey: "Win+Alt+V".into(), retention_days: 30, ignored_apps: PASSWORD_MANAGERS.map(String::from).to_vec(), link_previews: true, layout: "strip".into() }
+        Self { hotkey: "Win+Alt+V".into(), retention_days: 30, ignored_apps: PASSWORD_MANAGERS.map(String::from).to_vec(), link_previews: true, layout: "strip".into(), copy_toast: true }
     }
 }
 
@@ -74,6 +76,7 @@ impl Settings {
                 .map_or(d.ignored_apps, |apps| apps.iter().filter_map(Value::as_str).map(|s| s.trim().to_lowercase()).filter(|s| !s.is_empty()).collect()),
             link_previews: map.get("link_previews").and_then(Value::as_bool).unwrap_or(d.link_previews),
             layout: map.get("layout").and_then(Value::as_str).and_then(layout).map_or(d.layout, String::from),
+            copy_toast: map.get("copy_toast").and_then(Value::as_bool).unwrap_or(d.copy_toast),
         })
     }
 
@@ -84,6 +87,7 @@ impl Settings {
             "ignored_apps": self.ignored_apps,
             "link_previews": self.link_previews,
             "layout": self.layout,
+            "copy_toast": self.copy_toast,
         });
         serde_json::to_string_pretty(&value).unwrap_or_default()
     }
@@ -132,6 +136,7 @@ mod tests {
         assert!(d.link_previews);
         assert!(d.ignores("KeePassXC.exe") && d.ignores(r"C:\Program Files\Bitwarden\bitwarden.exe"));
         assert!(!d.ignores("chrome.exe"));
+        assert!(d.copy_toast && !Settings::parse(r#"{ "copy_toast": false }"#).unwrap().copy_toast);
         assert_eq!(Settings::parse(&d.to_json()), Some(d));
     }
 

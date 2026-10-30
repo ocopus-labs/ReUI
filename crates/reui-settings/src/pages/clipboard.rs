@@ -20,7 +20,8 @@ pub fn build(state: &State) -> Vec<Block> {
 
     let hotkey_row = shortcut::row(state, File::Clipboard, "Opens clipboard history");
     let retention = Row::new("retention", "Keep history").detail("Pinned items are kept forever").part(Part::Dropdown { label: days(state.files.retention_days()) }).enabled(ok);
-    blocks.push(group("History", vec![hotkey_row, retention, flag(state, File::Clipboard, "link_previews", "Link previews", "Fetches the title and image of copied links from their sites")]));
+    let toast = flag(state, File::Clipboard, "copy_toast", "Copy confirmation", "A glimpse of what you copied in the island");
+    blocks.push(group("History", vec![hotkey_row, retention, flag(state, File::Clipboard, "link_previews", "Link previews", "Fetches the title and image of copied links from their sites"), toast]));
 
     let mut apps: Vec<Row> = state.files.ignored_apps().iter().map(|app| Row::new(&format!("app:{app}"), app).mono().part(Part::Remove).enabled(ok)).collect();
     apps.push(
