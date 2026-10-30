@@ -10,7 +10,8 @@
     "build": "astro build",
     "preview": "astro preview",
     "astro": "astro",
-    "images": "node scripts/island-images.mjs"
+    "images": "node scripts/island-images.mjs",
+    "readme-images": "node scripts/readme-images.mjs"
   },
   "dependencies": {
     "@fluentui/svg-icons": "^1.1.344",

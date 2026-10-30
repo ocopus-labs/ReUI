@@ -1,0 +1,17 @@
+---
+// The README pictures' stage, not part of the site: the page's island alone on the sky of
+// the hero photograph, as at the top of a screen. scripts/readme-images.mjs opens it with
+// `#island=<moment>&theme=…&style=…` and photographs the island.
+import { Image } from 'astro:assets';
+import Base from '../layouts/Base.astro';
+import Island from '../components/Island.astro';
+import wallpaper from '../assets/hero.jpg';
+---
+<Base title="ReUI pictures" description="The stage the README's pictures are taken on." bare>
+  <Image class="sky" src={wallpaper} alt="" widths={[1920, 2560, 3840]} sizes="100vw" loading="eager" />
+  <Island />
+</Base>
+
+<style>
+  .sky { position: fixed; inset: 0; width: 100%; height: 100%; object-fit: cover; object-position: 50% 0; }
+</style>

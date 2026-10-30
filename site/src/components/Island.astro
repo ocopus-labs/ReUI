@@ -225,6 +225,18 @@ const places = [
       <svg class="ring" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9.5" class="track" /><circle cx="12" cy="12" r="9.5" class="arc" style="stroke-dashoffset: 10.7" /></svg>
     </div>
 
+    <!-- Earbuds connecting, open (devices/view.rs connect_view): the mark, Connected, the
+         name, model · battery, the battery ring. -->
+    <div class="layer expanded earbuds-card" data-moment="earbuds-card" data-w="420" data-h="96" style="--tone: var(--blue)">
+      <span class="tile device-tile"><i class="ico" set:html={icons.earbuds}></i></span>
+      <span class="text">
+        <span class="eyebrow">Connected</span>
+        <span class="hero">Galaxy Buds2 Pro</span>
+        <span class="detail">Samsung · 82%</span>
+      </span>
+      <svg class="big-ring" viewBox="0 0 56 56"><circle cx="28" cy="28" r="23" class="track" /><circle cx="28" cy="28" r="23" class="arc" style="stroke-dashoffset: 26" /></svg>
+    </div>
+
     <div class="layer compact" data-moment="call" data-w="132" data-h="36.67" style="--tone: var(--green)">
       <span class="app" style="background:#0b5cff" set:html={icons.zoom}></span>
       <span class="clock green" data-field="clock">0:42</span>
@@ -643,6 +655,14 @@ const places = [
   .stats-card .facts { display: flex; justify-content: space-between; margin-top: 18px; font-size: 13.5px; font-weight: 600; white-space: pre; }
   .stats-card .facts small { display: block; color: var(--tertiary); font-size: 12px; }
 
+  .earbuds-card { display: flex; align-items: center; gap: 16px; }
+  .earbuds-card .eyebrow { color: var(--tone); }
+  .device-tile { background: var(--fill-soft); color: var(--primary); }
+  .device-tile .ico { width: 30px; height: 30px; }
+  .earbuds-card .big-ring { margin-left: auto; }
+  .earbuds-card .big-ring .track { stroke: color-mix(in srgb, var(--tone) 22%, transparent); }
+  .earbuds-card .big-ring .arc { stroke: var(--tone); stroke-dasharray: 144.5; }
+
   .launcher .header, .alert .header { display: flex; align-items: center; gap: 16px; }
   .tile.orange { background: rgb(255 159 10 / 0.2); color: var(--orange); }
   .launcher .eyebrow, .alert .eyebrow { color: var(--orange); }
@@ -876,7 +896,7 @@ const places = [
   // Each compact moment opens its own card, as in ReUI (a level has none); the resting
   // pill opens the row of places, a place opens its card, and a card folds back to
   // wherever it was opened from.
-  const opens: Record<string, string> = { music: 'now-playing', copied: 'clipboard', timer: 'timer-card', agent: 'permission', idle: 'places' };
+  const opens: Record<string, string> = { music: 'now-playing', copied: 'clipboard', timer: 'timer-card', agent: 'permission', idle: 'places', earbuds: 'earbuds-card' };
   const folds: Record<string, string> = Object.fromEntries(Object.entries(opens).map(([compact, card]) => [card, compact]));
   const placeCards = new Map([...switcher.querySelectorAll<HTMLElement>('[data-place]')].map((b) => [b.dataset.place!, b.dataset.card!]));
   const isPlace = (name: string) => [...placeCards.values()].includes(name);
@@ -971,8 +991,12 @@ const places = [
   document.addEventListener('visibilitychange', () => (document.hidden ? clearTimeout(timer) : !held && hold(false)));
 
   draw();
-  // `#island=<moment>` holds one moment, for reviewing a state without the loop.
-  const pinned = location.hash.match(/^#island=([\w-]+)/)?.[1];
+  // `#island=<moment>&theme=light&style=notch` holds one moment, for reviewing a state
+  // without the loop; the README's pictures are taken this way (/shots).
+  const params = new URLSearchParams(location.hash.slice(1));
+  const pinned = params.get('island');
+  if (params.get('style') === 'notch') style('notch');
+  if (params.get('theme') === 'light') theme('light');
   if (pinned) {
     held = true;
     show(pinned);

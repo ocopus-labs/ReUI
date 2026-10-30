@@ -8,8 +8,10 @@ import '../styles/global.css';
 interface Props {
   title: string;
   description: string;
+  /** A page that isn't part of the site (the README pictures' stage): no grain, not indexed. */
+  bare?: boolean;
 }
-const { title, description } = Astro.props;
+const { title, description, bare = false } = Astro.props;
 ---
 <!doctype html>
 <html lang="en">
@@ -18,6 +20,7 @@ const { title, description } = Astro.props;
     <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>{title}</title>
     <meta name="description" content={description} />
+    {bare && <meta name="robots" content="noindex" />}
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta name="theme-color" content="#efeee9" />
@@ -27,7 +30,7 @@ const { title, description } = Astro.props;
   </head>
   <body>
     <slot />
-    <div class="grain" aria-hidden="true"></div>
+    {!bare && <div class="grain" aria-hidden="true"></div>}
     <script>
       import Lenis from 'lenis';
 

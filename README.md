@@ -30,10 +30,10 @@
 </p>
 
 <p align="center">
-  <img src="docs/images/hero.png" width="960" alt="The island open at the top of the screen, playing Clair de Lune">
+  <img src="docs/images/hero.png" width="960" alt="The island open at the top of the screen, playing Blinding Lights by The Weeknd in Spotify, with the view switcher under it">
 </p>
 
-ReUI puts a small black island at the top of your screen. It shows what's playing, what you copied, your timers, your devices and the coding agents waiting on you, and lets you act on them without leaving the window you're in. Rest the pointer on it to peek, click to open, scroll to step through everything that's going on. Clicks pass through to the window underneath until you pause on the island, so it never gets in the way of a browser tab.
+ReUI puts a small black island at the top of your screen. It shows what's playing, what you copied, your timers, your devices and the coding agents waiting on you, and lets you act on them without leaving the window you're in. Rest the pointer on it to peek, click to open, scroll to step through everything that's going on. Everywhere outside its own shape it lets clicks through, including the strip above it at the very top of the screen, where a maximised browser keeps its tabs.
 
 It's a native Windows app written in Rust, and it sits idle until something happens: it follows Windows' own events and draws nothing while nothing moves.
 
@@ -41,13 +41,13 @@ It's a native Windows app written in Rust, and it sits idle until something happ
 
 ### Now Playing
 
-<img src="docs/images/now-playing.png" width="403" alt="The pill with music playing and a timer in the bubble beside it">
+<img src="docs/images/now-playing.png" width="212" alt="The pill with music playing: the album cover and the level bars">
 
 Whatever plays on your PC shows in the pill: Spotify, a browser, VLC, Media Player, anything in Windows' media controls. Open it for the artwork, a timeline you can scrub, the player's own controls and the volume. Swipe sideways on the pill to skip a track. Synced lyrics are there when you turn them on.
 
 ### Clipboard history
 
-<img src="docs/images/clipboard.png" width="752" alt="Clipboard history open: a search field and a row of cards for a note, a link, a colour and a command">
+<img src="docs/images/clipboard.png" width="656" alt="Clipboard history open: a search field and a row of cards for a note, a link, a colour and a command, with the view switcher under it">
 
 **Win+Alt+V** brings back everything you copied: text with its formatting, images, files, links with their page's title, colours, code. Type to search, press Enter to paste into the app you were in, or Alt+1 to Alt+9 to paste one of the first nine. Pin what you want to keep. Copies from password managers and anything that looks like a password, key or token are never saved, and the history is kept only on your PC.
 
@@ -57,13 +57,13 @@ Drag files, an image, a link or some text to the top of the screen and the islan
 
 ### Volume and brightness
 
-<img src="docs/images/volume.png" width="392" alt="The volume level in the island, at 56 %">
+<img src="docs/images/volume.png" width="296" alt="The volume level in the island, at 56 %">
 
 The volume and brightness keys show their level in the island, and ReUI can replace Windows' own pop-up. Drag or scroll to change the level, click the icon to mute, switch the output device from its menu. The mixer button lists every app that's playing under it, each with its own level; click an app's icon to mute just that app. Caps Lock, Num Lock, battery saver and microphone mute can show there too.
 
 ### Devices
 
-<img src="docs/images/devices.png" width="612" alt="Wireless earbuds just connected, at 82 % battery">
+<img src="docs/images/devices.png" width="516" alt="Galaxy Buds2 Pro just connected, at 82 % battery">
 
 Bluetooth devices show their battery when they connect. Your PC and its devices warn at 20 % and 10 %, plugging in shows the time to full, and USB drives and memory cards come with **Eject**.
 
@@ -78,7 +78,7 @@ A call in Teams, Zoom, Discord, Slack, Webex, WhatsApp, Telegram or Signal shows
 
 ### System stats
 
-<img src="docs/images/system-stats.png" width="672" alt="System stats open: CPU at 8 % and memory at 42 % as rings with their last minute drawn under them, then GPU, disk and network">
+<img src="docs/images/system-stats.png" width="576" alt="System stats open: CPU at 8 % and memory at 42 % as rings, then GPU, disk and network">
 
 Press **Win+Alt+S** to see how busy your PC is: CPU and memory with their last minute, then GPU, disk and network, live. A number that stays over 90 % turns orange, and the button at the top right opens Task Manager. It reads them only while the card is open, so it costs nothing the rest of the time.
 
@@ -88,7 +88,7 @@ A download from your browser shows in the island while it arrives, with its size
 
 ### Timers and focus
 
-<img src="docs/images/timers.png" width="612" alt="A tea timer counting down, 3:42 left">
+<img src="docs/images/timers.png" width="516" alt="A tea timer counting down, 3:42 left">
 
 Press **Win+Ctrl+T** and type how long: `10`, `90s`, `1h30`, `10m tea`. Run several at once; they keep going through sleep and restarts, and when one ends the island opens with a sound: **Stop**, or **+1 min**. Type `focus` for focus sessions (25 minutes of work, 5-minute breaks) that can turn on Do Not Disturb while you work, or `sw` for a stopwatch with laps.
 
@@ -104,13 +104,13 @@ Your next meeting comes to the island in its last ten minutes, a ring counting d
 
 ### Coding agents
 
-<img src="docs/images/agents.png" width="672" alt="Claude Code asking permission to run npm test, with Deny, Always and Allow">
+<img src="docs/images/agents.png" width="576" alt="Claude Code asking permission to run npm test, with Deny, Always and Allow">
 
 Claude Code, Codex and OpenCode show in the island only when they need you: a permission to allow or deny, a question, a plan or an MCP server's form, a turn that failed. Answer from the island and stay in your editor, or jump straight to the agent's terminal. Each card says which session is asking, shows the full command or the changed lines, and hides anything that looks like a secret. A card never takes your keyboard by itself, so a stray Enter can't allow anything. Connect an agent in Settings → Coding agents.
 
 ### Out of your way
 
-You decide how the island behaves. Open it with a click, or by resting the pointer on it, and choose how long that rest is. Keep it hidden until something needs you, and choose how much of the top edge brings it back, or none. Clicks still go to the browser tab underneath until you rest on it, even when it has only just appeared. Give an app its own rule: hide the island while a game or a presentation is in front, or let only permission requests through while you record. Right-click a moment you don't need (a copy, the volume, a device connecting) to turn that kind off or snooze it for an hour. Permission requests always come through.
+You decide how the island behaves. Open it with a click, or by resting the pointer on it, and choose how long that rest is. Keep it hidden until something needs you, and choose how much of the top edge brings it back, or none. Give an app its own rule: hide the island while a game or a presentation is in front, or let only permission requests through while you record. Right-click a moment you don't need (a copy, the volume, a device connecting) to turn that kind off or snooze it for an hour. Permission requests always come through.
 
 ### Appearance
 
@@ -176,3 +176,5 @@ Settings → Privacy & data lists all of it and opens the folders.
 ## License
 
 Free and open source, under either the [MIT License](LICENSE-MIT) or the [Apache License 2.0](LICENSE-APACHE), at your option.
+
+The pictures in this README are taken from the website's island (`site/`, `npm run readme-images`) on a background from [Super Visuals](https://www.figma.com/community/file/1626392436817658229/super-visuals-50-stunning-backgrounds-v1) ([CC BY 4.0](https://creativecommons.org/licenses/by/4.0/)). Product names and logos belong to their owners.

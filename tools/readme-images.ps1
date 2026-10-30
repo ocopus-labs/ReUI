@@ -1,11 +1,15 @@
-# Renders the README's pictures into docs/images: each island moment on its own stage,
+# Not the README's pictures any more: those come from the website's island, with real content
+# (site/scripts/readme-images.mjs, `npm run readme-images`). This renders the app's own
+# stages (into %TEMP%\reui-stages unless -Out says otherwise), e.g. to compare the site's
+# island against the app.
+# Renders each island moment on its own stage,
 # drawn offscreen by Settings' shot mode (`reui-settings --shots <dir> --stages`) at 200 %,
 # on a flat backdrop colour instead of anyone's wallpaper. Runs Settings sandboxed
 # (REUI_CONFIG_DIR in %TEMP%), so it reads default settings, touches no real files, and
 # runs beside an open Settings window. Nothing is captured from the screen.
 #   pwsh -File tools\readme-images.ps1 [-Backdrop "#5E6670"]
 param(
-    [string]$Out = "$PSScriptRoot\..\docs\images",
+    [string]$Out = "$env:TEMP\reui-stages",
     [string]$Backdrop = "#5E6670"
 )
 
