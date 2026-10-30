@@ -136,9 +136,14 @@ reui-bridge activity build --progress 1 --state done
 
 While it runs the pill shows a ring and the percentage (or the title); the open card has the title, what it's doing and a progress bar. Done or failed shows for a moment, then goes. One a script stops updating ends by itself after 10 minutes. Settings → Coding agents → Activities from scripts turns them off.
 
-## Calendar
+## Calendar (Beta)
+
+Calendar is in beta: it reads calendars only by their secret links, and a link is as fresh as Google or Outlook rebuild it, which can be hours behind your calendar. Signing in with your account is planned.
 
 Add a calendar in Settings → Calendar → Add a calendar: paste its secret address in iCal format (Google Calendar: Settings → your calendar → *Secret address in iCal format*; Outlook: Settings → Calendar → Shared calendars → *Publish a calendar*, "Can view all details", the ICS link). Add as many as you like; each shows by its host with how its last refresh went. ReUI asks for them every 15 minutes, as soon as the PC wakes up, and when the internet comes back; a copy is kept (encrypted) so the island is right offline.
+
+- Each calendar's row says when ReUI last checked it and, when that differs, when the calendar last changed ("42 events · checked 2 min ago · changed 3 h ago"): a check that finds nothing new isn't an update.
+- A calendar that can't be refreshed says why on its row, in orange, with **Try again**; the island goes on with the last copy it had.
 
 - Ten minutes before a meeting (Settings → Calendar → Count down from) the pill shows a ring running down and the meeting's title. Click it for the card: the time, the room or the meeting service, **Join**, and the next two meetings of the day.
 - When it starts the island shows it in front (it doesn't open by itself). **Join** opens the meeting link (Teams, Zoom, Google Meet, Webex, GoTo, Whereby, Jitsi, Chime) in your browser, which passes it to the app. Joining, or opening and closing the card, dismisses it; otherwise it goes five minutes in.

@@ -125,7 +125,8 @@ modules/
                    (the open card's last minute per gauge, sustained-high tone; tested), view,
                    settings (stats.json)
   calendar/        the next meeting: secret ICS links (fetch: conditional GET, backoff, the
-                   DPAPI-encrypted last copy; network: connectivity hints) and Windows' own
+                   DPAPI-encrypted last copy; line: one link's refreshing, stale fetches
+                   dropped, checked vs changed; fake clock; network: connectivity hints) and Windows' own
                    store (windows_store, opt-in), read by ics/ (lines, time + VTIMEZONE,
                    rrule, zones via Windows' ICU; feeds into occurrences; tested), links
                    (meeting-link detection, Safe Links unwrapped; pure, tested), schedule
@@ -281,7 +282,7 @@ stats.rs           idle cost: CPU and private memory of ReUI's processes
 | `%APPDATA%\ReUI\clipboard.db`, `clipboard.json` | clipboard history and settings |
 | `%APPDATA%\ReUI\media.json`, `osd.json`, `devices.json`, `timers.json`, `privacy.json`, `stats.json`, `shelf.json`, `coding.json`, `downloads.json`, `screenshots.json` | music, OSD (and the volume card's `mixer`), Devices, Timers, privacy indicator, System stats, downloads, screenshots, file shelf and coding agent settings (`coding.json` is read by all three agent modules) |
 | `%APPDATA%\ReUI\calendar.json` | Calendar: `lead_min`, `windows`, `sources` (each link DPAPI-sealed, shown by `host`) |
-| `%LOCALAPPDATA%\ReUI\calendar\` | each calendar's last good copy (`<id>.cache`, DPAPI-encrypted) and `status.json` (each source's last refresh, read by Settings) |
+| `%LOCALAPPDATA%\ReUI\calendar\` | each calendar's last good copy (`<id>.cache`, DPAPI-encrypted) and `status.json` (each source's last refresh and when its body last changed, read by Settings) |
 | `%APPDATA%\ReUI\notifications.json` | notifications (off unless `enabled`): `apps` allowed (AUMIDs), `hide_content`, `seen` (apps that notified lately: AUMID and name, never a toast's text) |
 | `%APPDATA%\ReUI\timer-state.json` | running and paused timers, a focus session, the stopwatch, reminders (text, due time, a repeat's rule and time of day, ringing), and whether ReUI turned Do Not Disturb on |
 | `%APPDATA%\ReUI\activities.json` | script activities: `enabled`, `stale_min`, `per_source`, `blocked` sources |
