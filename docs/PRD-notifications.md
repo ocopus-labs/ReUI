@@ -1,6 +1,6 @@
 # PRD: Notifications, opt-in per app
 
-Status: spike done Oct 30, 2026 (measurements, a prototype module off by default); the phase A/B decision is open (§12) · Owner: Rohit · Item 1 of [research-features.md](research-features.md)
+Status: spike done Oct 30, 2026 (measurements, a prototype module off by default); phase A on the WNF trigger decided (§12) · Owner: Rohit · Item 1 of [research-features.md](research-features.md)
 
 **In one paragraph:** ReUI can show other apps' notifications without package identity, cheaply. `UserNotificationListener` reads the notification centre from a plain per-user exe. Its change event fails without identity, but the shell keeps the notification count in a WNF state. That state changes within ~35–220 ms of every toast and every removal, and never otherwise, so ReUI lists only when it moves. Measured on the prototype: **0.0 ms CPU in 120 s idle** (one thread, +1.1 MB) and ~8 ms per toast. Plain polling, the other option without identity, costs more as the notification centre fills (0.5 % of a core at 5 s with twenty toasts waiting). A signed sparse package (phase B) would replace the undocumented WNF trigger with the documented event, once ReUI has code signing.
 
@@ -78,7 +78,7 @@ Windows 11 Pro 26200, release build, `crates/reui-hub/examples/notifications_pro
 ### 6.3 Actions
 
 - **Open** starts the app or brings it forward (`shell:AppsFolder\<AUMID>`). What the toast itself opens (a chat, a mail) is the app's own activation, which only Windows' toast UI can invoke (§9).
-- **Also remove from the notification centre** (off by default; an M3 setting): after Open, `RemoveNotification(id)`, which works without identity. Never `ClearNotifications`.
+- **Never removes from the notification centre** (§12): not `RemoveNotification`, never `ClearNotifications`.
 
 ### 6.4 Privacy
 
@@ -147,7 +147,6 @@ From Microsoft Learn ([grant identity to unpackaged apps](https://learn.microsof
   - The secret filter on the text.
   - Grouping a burst from one conversation (Notchify).
   - Keeping the Brief while it's open (it needs a "the card is open" signal from the island).
-- **M3:** Remove from the notification centre on Open (off by default).
 - **Phase B:**
   - The identity package in `package.ps1`, signed in CI.
   - `reui-setup` registers and unregisters it.
@@ -161,11 +160,11 @@ From Microsoft Learn ([grant identity to unpackaged apps](https://learn.microsof
 - A toast updated in place (same tag) keeps its id and the count, so it isn't announced again. That's probably right for progress toasts, and possibly wrong for a chat app that replaces its toast.
 - The Denied path, by turning Windows' switch off (not done here; it's the user's setting).
 
-## 12. Open decisions
+## 12. Decisions (Oct 30, 2026)
 
-1. **Phase A on the WNF trigger** (recommended: event-driven, measured free at idle, undocumented but checked and with a fallback) **or polling only** (documented; 0.03–0.6 % of a core depending on what's waiting) **or nothing until phase B**.
-2. **Code signing** (Azure Artifact Signing, or SignPath for OSS): it unlocks phase B, and the end of the SmartScreen warning.
-3. Whether **Remove from the notification centre** belongs in the product at all (M3).
+1. **Phase A runs on the WNF trigger**, with the safety list and polling as the fallback.
+2. **No code signing for now:** releases stay unsigned, so phase B waits.
+3. **Remove from the notification centre is out:** ReUI only shows a toast; the notification centre stays Windows'. M3 drops it.
 
 ## Appendix: sources
 

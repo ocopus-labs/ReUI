@@ -53,8 +53,8 @@ The delay is the one rest everywhere: the peek, a hover-open, and when the band 
 | `reveal_zone` | Pushing the pointer to the top edge in *When active* / *When needed* |
 |---|---|
 | **Off** | Never reveals; the island shows only when its mode says |
-| **Pill** | Only across the pill's own width (the shape it would show) |
-| **Wide** (default: today) | Across the island's window: the widest card's width |
+| **Pill** (default) | Only across the pill's own width (the shape it would show) |
+| **Wide** (the default before 0.1) | Across the island's window: the widest card's width |
 
 **A just-shown pill doesn't take quick clicks.** The drawn shape takes clicks at once only once it has been on screen for the hover delay before the pointer got there. A pill that appears under the pointer (revealed from the edge, or shown by a brief while the pointer is at the top) is click-through until the pointer rests on it: the reveal only reveals. Pure rule: `intent::takes_clicks_at_once`.
 

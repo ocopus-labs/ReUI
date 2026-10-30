@@ -247,7 +247,7 @@ mod tests {
         let opening = Settings::parse(r#"{"open_on":"hover","hover_delay":500}"#);
         assert_eq!((opening.open_on, opening.hover_delay), (OpenOn::Hover, 500));
         assert_eq!((Settings::default().open_on, Settings::default().hover_delay), (OpenOn::Click, 250));
-        assert_eq!((Settings::parse(r#"{"reveal_zone":"pill"}"#).reveal_zone, Settings::default().reveal_zone), (RevealZone::Pill, RevealZone::Wide));
+        assert_eq!((Settings::parse(r#"{"reveal_zone":"pill"}"#).reveal_zone, Settings::default().reveal_zone), (RevealZone::Pill, RevealZone::Pill));
         assert_eq!(Settings::parse(r#"{"app_rules":{"game.exe":"hide"}}"#).app_rules, vec![("game.exe".to_string(), AppRule::Hide)]);
         // Missing or extra fields fall back to defaults instead of failing.
         assert_eq!(Settings::parse(r#"{"other":1}"#), Settings::default());

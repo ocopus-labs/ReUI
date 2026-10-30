@@ -188,8 +188,8 @@ mod tests {
         act(&mut state, &Target::new("open_on", 0), Act::Choose(1));
         act(&mut state, &Target::new("hover_delay", 0), Act::Choose(0));
         assert_eq!((state.files.open_on(), state.files.hover_delay()), (1, 0));
-        act(&mut state, &Target::new("reveal_zone", 0), Act::Choose(1));
-        assert_eq!((state.files.reveal_zone(), state.files.doc(File::Island).str("reveal_zone")), (1, Some("pill")));
+        act(&mut state, &Target::new("reveal_zone", 0), Act::Choose(2));
+        assert_eq!((state.files.reveal_zone(), state.files.doc(File::Island).str("reveal_zone")), (2, Some("wide")));
         assert_eq!(state.files.doc(File::Island).get("hover_delay").and_then(Value::as_u64), Some(150));
         crate::pages::act(crate::pages::Page::General, &mut state, &Target::new("island:hide_in_fullscreen", 0), Act::Press);
         assert!(!state.files.doc(File::Island).bool("hide_in_fullscreen"));

@@ -32,10 +32,11 @@ impl OpenOn {
 pub enum RevealZone {
     /// The top edge never reveals it.
     Off,
-    /// Only across the pill's own width, so the rest of the edge stays the browser's.
-    Pill,
-    /// Across the island's window, the widest card's width (as ReUI always did).
+    /// Only across the pill's own width, so the rest of the edge stays the browser's (tabs
+    /// sit up there, so this is the default).
     #[default]
+    Pill,
+    /// Across the island's window, the widest card's width (as ReUI did before).
     Wide,
 }
 
@@ -138,7 +139,7 @@ mod tests {
     fn settings_parse_with_defaults() {
         assert_eq!((OpenOn::parse("hover"), OpenOn::parse("click"), OpenOn::parse("tap")), (Some(OpenOn::Hover), Some(OpenOn::Click), None));
         assert_eq!((RevealZone::parse("off"), RevealZone::parse("pill"), RevealZone::parse("wide"), RevealZone::parse("")), (Some(RevealZone::Off), Some(RevealZone::Pill), Some(RevealZone::Wide), None));
-        assert_eq!((OpenOn::default(), RevealZone::default()), (OpenOn::Click, RevealZone::Wide), "today's behaviour");
+        assert_eq!((OpenOn::default(), RevealZone::default()), (OpenOn::Click, RevealZone::Pill), "the top edge stays the browser's");
         assert_eq!((hover_delay(Some(150)), hover_delay(Some(500))), (150, 500));
         assert_eq!(hover_delay(None), motion::delay::HOVER_INTENT);
         assert_eq!((hover_delay(Some(0)), hover_delay(Some(10_000)), hover_delay(Some(u64::MAX))), (250, 250, 250));
