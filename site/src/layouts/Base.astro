@@ -12,6 +12,7 @@ interface Props {
   bare?: boolean;
 }
 const { title, description, bare = false } = Astro.props;
+const canonical = new URL(Astro.url.pathname, Astro.site);
 ---
 <!doctype html>
 <html lang="en">
@@ -21,6 +22,9 @@ const { title, description, bare = false } = Astro.props;
     <title>{title}</title>
     <meta name="description" content={description} />
     {bare && <meta name="robots" content="noindex" />}
+    <link rel="canonical" href={canonical} />
+    <meta property="og:url" content={canonical} />
+    <meta property="og:type" content="website" />
     <meta property="og:title" content={title} />
     <meta property="og:description" content={description} />
     <meta name="theme-color" content="#efeee9" />
