@@ -28,6 +28,8 @@ updates:
         versions: [">= 0.100"]
       - dependency-name: "windows-future"
         versions: [">= 0.100"]
+      - dependency-name: "windows-collections"
+        versions: [">= 0.100"]
 
   - package-ecosystem: github-actions
     directory: /
