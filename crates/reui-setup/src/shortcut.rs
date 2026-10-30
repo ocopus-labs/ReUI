@@ -90,7 +90,9 @@ mod tests {
 
         create(&lnk, &target_exe, "ReUI", "ReUI.Test").unwrap();
         assert!(lnk.is_file());
-        assert_eq!(target(&lnk).unwrap().to_string_lossy().to_lowercase(), target_exe.to_string_lossy().to_lowercase());
+        // Compared as the files they name: a temp folder can be spelled with its short 8.3
+        // name (CI's C:UsersRUNNER~1) while the shortcut stores the long one.
+        assert_eq!(std::fs::canonicalize(target(&lnk).unwrap()).unwrap(), std::fs::canonicalize(&target_exe).unwrap());
         // Replacing an existing one works (upgrades).
         create(&lnk, &target_exe, "ReUI", "ReUI.Test").unwrap();
         _ = std::fs::remove_dir_all(dir);

@@ -60,7 +60,8 @@ fn install_upgrade_uninstall() {
     assert_eq!(sys.0, [format!("stop {}", layout.install_dir.display()), "launch reui-hub.exe".into()]);
     assert_eq!(std::fs::read(layout.exe("reui-hub.exe")).unwrap(), b"v1");
     assert_eq!(std::fs::read(layout.exe(SETUP_EXE)).unwrap(), b"setup v1");
-    assert_eq!(crate::shortcut::target(&layout.shortcut()).unwrap().to_string_lossy().to_lowercase(), layout.exe("reui-hub.exe").to_string_lossy().to_lowercase());
+    // As the files they name: the temp folder may be spelled short (CI's RUNNER~1).
+    assert_eq!(std::fs::canonicalize(crate::shortcut::target(&layout.shortcut()).unwrap()).unwrap(), std::fs::canonicalize(layout.exe("reui-hub.exe")).unwrap());
     assert!(registry::has_uninstall_entry(&layout));
     assert_eq!(registry::autostart(&layout), Some(quoted(&layout.exe("reui-hub.exe"))));
 
