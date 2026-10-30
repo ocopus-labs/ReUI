@@ -485,5 +485,7 @@ impl State {
             None => ctx.retract(STOPWATCH),
         }
         self.publish_reminders(ctx);
+        // An open timer field lists the next reminders, which may just have fired.
+        self.publish_launcher(ctx);
     }
 }
