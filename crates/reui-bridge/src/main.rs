@@ -13,7 +13,10 @@
 //! so the island's "Open terminal" can find the window the agent runs in.
 //!
 //! `reui-bridge install claude [--scope user|project|local] [--project DIR]` and
-//! `reui-bridge uninstall claude [...]` add or remove the hook entries.
+//! `reui-bridge uninstall claude [...]` add or remove the hook entries;
+//! `reui-bridge install|uninstall powershell|bash` a shell's hook (`shells.rs`), which runs
+//! `reui-bridge finished --exit N --seconds S --shell NAME` (the command in `REUI_COMMAND`)
+//! after a long command; that one prints nothing and always exits 0 (`finished.rs`).
 //!
 //! `reui-bridge test claude` sends a synthetic event through the same pipe a hook uses
 //! (Settings' "Send test event"); the agent module answers it with a short "connected"
@@ -31,8 +34,10 @@
 //! running or the arguments don't read.
 
 mod activity;
+mod finished;
 mod install;
 mod parents;
+mod shells;
 
 use std::io::{Read, Write};
 use std::time::Duration;
@@ -54,6 +59,27 @@ const ERROR_PIPE_BUSY: i32 = 231;
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();
     let code = match args.first().map(String::as_str) {
+        // A shell's hook (docs/PRD-terminal-commands.md) rather than an agent's.
+        Some(verb @ ("install" | "uninstall")) if args.get(1).and_then(|s| shells::Shell::parse(s)).is_some() => {
+            let shell = args.get(1).and_then(|s| shells::Shell::parse(s)).expect("checked");
+            match shells::run(shell, verb == "install") {
+                Ok(message) => {
+                    println!("{message}");
+                    0
+                }
+                Err(e) => {
+                    eprintln!("reui-bridge: {e}");
+                    1
+                }
+            }
+        }
+        // Run by a shell's prompt: prints nothing and always succeeds, whatever happens.
+        Some("finished") => {
+            if let Some(action) = finished::action(&args[1..], std::env::var("REUI_COMMAND").ok(), parents::own(), parents::console()) {
+                _ = command("commands", &action);
+            }
+            0
+        }
         Some("install") | Some("uninstall") => match install::run(&args) {
             Ok(message) => {
                 println!("{message}");
@@ -107,7 +133,7 @@ fn main() {
             0
         }
         None => {
-            eprintln!("usage: reui-bridge <agent>  |  reui-bridge install|uninstall <agent> [--scope user|project|local] [--project DIR]  |  reui-bridge test <agent>  |  reui-bridge timer <length> [label]  |  reui-bridge stats  |  reui-bridge hide  |  reui-bridge activity <id> --title <text> [--detail <text>] [--progress 0.42] [--state running|done|failed] [--glyph <name>] [--done-after 5s] [--keep] [--end]  |  reui-bridge activity --json");
+            eprintln!("usage: reui-bridge <agent>  |  reui-bridge install|uninstall <agent> [--scope user|project|local] [--project DIR]  |  reui-bridge install|uninstall powershell|bash  |  reui-bridge test <agent>  |  reui-bridge timer <length> [label]  |  reui-bridge stats  |  reui-bridge hide  |  reui-bridge activity <id> --title <text> [--detail <text>] [--progress 0.42] [--state running|done|failed] [--glyph <name>] [--done-after 5s] [--keep] [--end]  |  reui-bridge activity --json");
             0
         }
     };

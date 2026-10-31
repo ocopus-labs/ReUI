@@ -33,7 +33,7 @@ To drive a sandboxed island without touching the real mouse or keyboard, post to
 
 ## The hub's flags
 
-The hub starts the island plus every module. `--no-agents`, `--no-media`, `--no-clipboard`, `--no-osd`, `--no-devices`, `--no-timers`, `--no-privacy`, `--no-stats`, `--no-shelf`, `--no-downloads`, `--no-screenshots`, `--no-activities` skip one; `--no-link-previews` keeps clipboard links offline; `--no-updates` never looks for updates or mentions them. `--no-island` runs the hub alone so you can start `reui-island.exe` yourself (under a debugger, say). `--no-onboarding` skips the first run and one-time tips; `--first-run` replays the demo and welcome. The full list is the doc comment at the top of `crates/reui-hub/src/main.rs`.
+The hub starts the island plus every module. `--no-agents`, `--no-media`, `--no-clipboard`, `--no-osd`, `--no-devices`, `--no-timers`, `--no-privacy`, `--no-stats`, `--no-shelf`, `--no-downloads`, `--no-screenshots`, `--no-activities`, `--no-commands` skip one; `--no-link-previews` keeps clipboard links offline; `--no-updates` never looks for updates or mentions them. `--no-island` runs the hub alone so you can start `reui-island.exe` yourself (under a debugger, say). `--no-onboarding` skips the first run and one-time tips; `--first-run` replays the demo and welcome. The full list is the doc comment at the top of `crates/reui-hub/src/main.rs`.
 
 `--demo` enables a module that shows now-playing, a 5-minute timer and, 25 s after each one is settled, the next agent moment: a permission with a scrolling script, a three-step question (one step multi-select) and a plan to approve. They take over the pill, answer nothing real, and time out and fail open (20 s for the permission, 60 s for the others). Hover to peek, click to expand, right-click the pill to quit ReUI. `--demo-music` runs only its music (no timer, no moments): what `tools/perf-sample.ps1` measures for "music playing".
 
@@ -69,6 +69,7 @@ Setup options: `--no-autostart` (don't start with Windows), `--no-launch`, `--qu
 | `%LOCALAPPDATA%\ReUI\shelf\` | What the file shelf holds (`held.json`) and the copies it made (`files\<card>\`) |
 | `%LOCALAPPDATA%\ReUI\agents.json` | Each coding agent's last event (at most one write per 10 s) |
 | `%LOCALAPPDATA%\ReUI\bin\reui-bridge.exe` | The bridge the hooks run; the hub keeps it in step with itself when it starts |
+| `Documents\PowerShell\profile.ps1`, `Documents\WindowsPowerShell\profile.ps1` (only if it exists), `~\.bashrc` | When a terminal is connected (Settings → Coding agents → Terminals; `reui-bridge install powershell\|bash`): a block between `# >>> ReUI: long commands >>>` and `# <<< ReUI: long commands <<<` that runs `reui-bridge finished` after a command of 10 s or more. Disconnect removes exactly that block |
 
 ## Updates
 

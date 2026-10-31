@@ -17,6 +17,10 @@ pub enum Agent {
     Claude,
     Codex,
     OpenCode,
+    /// The shells' hook for long commands (docs/PRD-terminal-commands.md), removed the same
+    /// way: `reui-bridge uninstall powershell|bash`.
+    PowerShell,
+    Bash,
 }
 
 impl Agent {
@@ -25,9 +29,14 @@ impl Agent {
             Agent::Claude => "claude",
             Agent::Codex => "codex",
             Agent::OpenCode => "opencode",
+            Agent::PowerShell => "powershell",
+            Agent::Bash => "bash",
         }
     }
 }
+
+/// The line the bridge starts a shell's hook with (`reui-bridge/src/shells.rs`).
+const SHELL_MARKER: &str = "# >>> ReUI: long commands >>>";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Step {
@@ -51,6 +60,21 @@ pub fn plan(agents: &[Agent], delete_data: bool) -> Vec<Step> {
     }
     steps.push(Step::RemoveInstallDir);
     steps
+}
+
+/// Shells with ReUI's hook in their startup file. `documents` is the user's Documents
+/// folder (PowerShell's profiles live there, often moved into OneDrive). A hook left behind
+/// stays quiet anyway: it ignores a missing bridge.
+pub fn hooked_shells(home: &Path, documents: &Path) -> Vec<Agent> {
+    let has = |path: &Path| std::fs::read_to_string(path).is_ok_and(|t| t.contains(SHELL_MARKER));
+    let mut shells = Vec::new();
+    if has(&documents.join(r"PowerShell\profile.ps1")) || has(&documents.join(r"WindowsPowerShell\profile.ps1")) {
+        shells.push(Agent::PowerShell);
+    }
+    if has(&home.join(".bashrc")) {
+        shells.push(Agent::Bash);
+    }
+    shells
 }
 
 /// Agents with ReUI's user-scope integration in place. (Project-scope hooks live in
@@ -182,6 +206,21 @@ mod tests {
         std::fs::create_dir_all(home.join(r".config\opencode\plugins")).unwrap();
         std::fs::write(home.join(r".config\opencode\plugins\reui.js"), "").unwrap();
         assert_eq!(hooked_agents(&home), [Agent::Claude, Agent::OpenCode]);
+        _ = std::fs::remove_dir_all(home);
+    }
+
+    #[test]
+    fn finds_hooked_shells() {
+        let home = std::env::temp_dir().join(format!("reui-setup-shells-{}", std::process::id()));
+        _ = std::fs::remove_dir_all(&home);
+        let docs = home.join("OneDrive").join("Documents");
+        assert!(hooked_shells(&home, &docs).is_empty());
+        std::fs::create_dir_all(docs.join("WindowsPowerShell")).unwrap();
+        std::fs::write(docs.join(r"WindowsPowerShell\profile.ps1"), format!("Set-Alias g git\n{SHELL_MARKER}\n")).unwrap();
+        std::fs::write(home.join(".bashrc"), "alias ll='ls -l'\n").unwrap();
+        assert_eq!(hooked_shells(&home, &docs), [Agent::PowerShell], "a .bashrc without our block");
+        std::fs::write(home.join(".bashrc"), SHELL_MARKER).unwrap();
+        assert_eq!(hooked_shells(&home, &docs), [Agent::PowerShell, Agent::Bash]);
         _ = std::fs::remove_dir_all(home);
     }
 }

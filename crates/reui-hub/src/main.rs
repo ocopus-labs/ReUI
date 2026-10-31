@@ -2,9 +2,9 @@
 //!
 //! Flags: `--demo` enables the demo module (`--demo-music`: only its music, no timer or
 //! agent moments, for measuring what playing music costs), `--no-agents` / `--no-media` / `--no-osd` /
-//! `--no-devices` / `--no-timers` / `--no-privacy` / `--no-stats` / `--no-calendar` / `--no-shelf` / `--no-activities` disable the coding agent
+//! `--no-devices` / `--no-timers` / `--no-privacy` / `--no-stats` / `--no-calendar` / `--no-shelf` / `--no-activities` / `--no-commands` disable the coding agent
 //! (Claude Code, Codex, OpenCode) / Now Playing / system OSD / Devices / Timers / privacy
-//! indicator / System stats / Calendar / file shelf / script activity modules, `--no-link-previews` keeps clipboard links offline,
+//! indicator / System stats / Calendar / file shelf / script activity / terminal command modules, `--no-link-previews` keeps clipboard links offline,
 //! `--no-island` doesn't launch the island (run `reui-island` yourself, e.g. under a
 //! debugger). `--no-downloads` / `--no-screenshots` disable the downloads and screenshot
 //! moments. `--no-updates` never looks for updates or mentions them. `--notifications` turns
@@ -114,6 +114,11 @@ async fn main() -> Result<()> {
     // read on every reload, so switching it off needs no restart.
     if !has("--no-activities") {
         enabled.push(Box::new(modules::activities::ScriptActivities));
+    }
+    // Long terminal commands: nothing reaches it until a shell's hook is installed
+    // (Settings → Coding agents), so it costs nothing until then.
+    if !has("--no-commands") {
+        enabled.push(Box::new(modules::commands::TerminalCommands));
     }
     if !has("--no-updates") {
         enabled.push(Box::new(modules::updates::Updates));

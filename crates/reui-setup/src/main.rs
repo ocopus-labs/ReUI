@@ -84,7 +84,10 @@ fn run_uninstall(quiet: bool) -> Result<(), String> {
     _ = std::env::set_current_dir(std::env::temp_dir());
     let layout = Layout::for_user()?;
     let delete_data = !quiet && ui::ask("Also delete your ReUI data?\n\nClipboard history, settings and caches. Choose No to keep them for a later install.");
-    let steps = uninstall::plan(&uninstall::hooked_agents(&layout.home), delete_data);
+    let mut hooked = uninstall::hooked_agents(&layout.home);
+    let documents = shortcut::documents_folder().unwrap_or_else(|| layout.home.join("Documents"));
+    hooked.extend(uninstall::hooked_shells(&layout.home, &documents));
+    let steps = uninstall::plan(&hooked, delete_data);
     let failures = uninstall::run(&layout, &steps, &exe, &mut system::Real);
     if failures.is_empty() {
         println!("uninstalled ReUI");
