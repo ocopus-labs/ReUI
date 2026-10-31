@@ -754,6 +754,11 @@ const places = [
 
   let notch = false;
   let withBubble = false;
+  // A section's close-up (`stage`) and the screen's width (`fitTo`).
+  const FIT_MARGIN = 12;
+  let staged = { drop: 0, scale: 1 };
+  let fit = Infinity;
+  let fitWidth = 120;
 
   function size(name: string) {
     if (notch && name === 'idle') return NOTCH_IDLE;
@@ -807,6 +812,7 @@ const places = [
 
   function target(name: string, grow: number) {
     const s = size(name);
+    fitTo(s.w + grow);
     const expanding = s.h > h.value;
     const preset = expanding ? springs.expand : springs.collapse;
     w.to(s.w + grow, grow ? springs.peek : preset);
@@ -1049,12 +1055,28 @@ const places = [
   /** Moves the island off the edge for a close-up: `drop` px below where it rests (in
    *  either style), `scale`× its size. */
   function stage(drop: number, scale: number) {
-    root.style.transform = drop <= 0 && scale === 1 ? '' : `translateY(${drop}px) scale(${scale})`;
+    staged = { drop, scale };
+    place();
   }
 
   /** Writes a moment's text: `[data-field]` elements by name; `arc` is a ring's progress
    *  (0–1); an empty `query` shows the field's placeholder. */
   function fill(name: string, fields: Record<string, string | number>) {
+  // On a phone the cards are wider than the screen: the island never grows past the
+  // screen less a margin each side, whatever scale a section stages it at.
+  function fitTo(width: number) {
+    fitWidth = width;
+    const next = (document.documentElement.clientWidth - 2 * FIT_MARGIN) / width;
+    if (next === fit) return;
+    fit = next;
+    place();
+  }
+  function place() {
+    const scale = Math.min(staged.scale, fit);
+    root.style.transform = staged.drop <= 0 && scale === 1 ? '' : `translateY(${staged.drop}px) scale(${scale})`;
+  }
+  addEventListener('resize', () => fitTo(fitWidth));
+
     const layer = layers.get(name);
     if (!layer) return;
     for (const [key, value] of Object.entries(fields)) {
