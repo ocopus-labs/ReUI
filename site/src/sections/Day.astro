@@ -300,7 +300,7 @@ const browsers = ['chrome', 'firefox', 'brave', 'opera'] as const;
   h2 { margin-top: 14px; font-size: clamp(44px, 7vw, 112px); font-weight: 600; line-height: 0.95; letter-spacing: -0.055em; }
   h2 em.serif { letter-spacing: -0.02em; }
 
-  .bento { display: grid; grid-template-columns: repeat(3, 1fr); gap: 14px; max-width: 1240px; margin: 0 auto; }
+  .bento { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 14px; max-width: 1240px; margin: 0 auto; }
   .tile {
     position: relative;
     display: flex;
@@ -332,7 +332,7 @@ const browsers = ['chrome', 'firefox', 'brave', 'opera'] as const;
 
   .specimen { flex: 1; display: flex; flex-direction: column; justify-content: center; gap: 10px; min-height: 120px; }
   .meta { color: var(--ink-3); font: 500 13px/1.4 var(--mono); }
-  .logos { display: flex; gap: 14px; margin-top: 6px; }
+  .logos { display: flex; flex-wrap: wrap; gap: 14px; margin-top: 6px; }
   .logos .ico { width: 22px; height: 22px; }
   .chips { display: flex; gap: 8px; }
   .chips b { padding: 7px 14px; border-radius: 999px; background: rgb(14 14 16 / 0.06); font: 600 13px/1 var(--sans); }
@@ -396,10 +396,10 @@ const browsers = ['chrome', 'firefox', 'brave', 'opera'] as const;
   .dragging .tile { pointer-events: none; }
 
   @media (max-width: 900px) {
-    .bento { grid-template-columns: 1fr 1fr; }
+    .bento { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   }
   @media (max-width: 600px) {
-    .bento { grid-template-columns: 1fr; }
+    .bento { grid-template-columns: minmax(0, 1fr); }
     .tile.wide { grid-column: auto; }
   }
   @media (prefers-reduced-motion: reduce) {

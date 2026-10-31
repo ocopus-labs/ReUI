@@ -209,7 +209,7 @@ const beats = [
   /* Windows Terminal, One Half Light, as a window. */
   .terminal { align-self: stretch; display: flex; flex-direction: column; min-height: 0; background: #fafafa; border-radius: 12px; box-shadow: 0 30px 60px -30px rgb(0 0 0 / 0.35), 0 0 0 1px rgb(0 0 0 / 0.06); overflow: hidden; }
   .titlebar { display: flex; align-items: flex-end; height: 42px; padding-left: 10px; background: #e8e8e8; font: 400 12.5px/1 "Segoe UI Variable Text", "Segoe UI", system-ui, sans-serif; color: #383a42; }
-  .tab { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; border-radius: 8px 8px 0 0; background: #fafafa; }
+  .tab { display: flex; align-items: center; gap: 8px; height: 34px; padding: 0 12px; white-space: nowrap; border-radius: 8px 8px 0 0; background: #fafafa; }
   .tab .icon { color: #d97757; font-size: 14px; }
   .tab i { margin-left: 18px; color: #8a8a8a; font-style: normal; }
   .plus { align-self: center; padding: 0 12px; color: #6a6a6a; font-size: 16px; }
@@ -255,5 +255,9 @@ const beats = [
     .stage { grid-template-columns: 1fr; grid-template-rows: 1fr auto; align-items: stretch; padding-top: 72px; }
     .copy { align-items: center; text-align: center; }
     .beats { height: 2.3em; }
+  }
+  /* The longest beat takes three lines on a narrow phone. */
+  @media (max-width: 420px) {
+    .beats { height: 3.4em; }
   }
 </style>

@@ -38,7 +38,8 @@ const download = `${repo}/releases/latest`;
   let ticking = 0;
 
   function arrive() {
-    clearInterval(ticking);
+    // Already arriving (focus after hover, a repeated enter): let it run.
+    if (ticking) return;
     const start = performance.now();
     const step = () => {
       const k = Math.min(1, (performance.now() - start) / 3000);
@@ -52,6 +53,7 @@ const download = `${repo}/releases/latest`;
   }
   function leave() {
     clearInterval(ticking);
+    ticking = 0;
     island.drive(null, OWNER);
   }
   button.addEventListener('pointerenter', arrive);

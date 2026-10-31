@@ -110,7 +110,7 @@ const download = `${repo}/releases/latest`;
   }
   @keyframes fade { from { opacity: 0; transform: translateY(8px); } }
   .lede { max-width: 32em; color: rgb(255 255 255 / 0.88); font-size: clamp(15px, 1.25vw, 18px); line-height: 1.5; }
-  .cta { display: flex; flex-direction: column; align-items: flex-end; gap: 10px; }
+  .cta { display: flex; flex: none; flex-direction: column; align-items: flex-end; gap: 10px; white-space: nowrap; }
   .download {
     display: inline-flex;
     align-items: center;
@@ -133,8 +133,16 @@ const download = `${repo}/releases/latest`;
     .wallpaper { object-position: 50% 100%; }
     .scrim { inset: 50% 0 0; background: linear-gradient(transparent, rgb(20 18 10 / 0.55) 35%, rgb(20 18 10 / 0.7)); }
     .foot { flex-direction: column; align-items: stretch; }
-    .cta { align-items: stretch; }
+    .cta { align-items: stretch; white-space: normal; }
     .download { justify-content: space-between; }
+  }
+  /* The island's wider moments reach the wordmark, then the mark, on a narrow phone. */
+  @media (max-width: 420px) {
+    .brand span { display: none; }
+  }
+  @media (max-width: 320px) {
+    .brand { visibility: hidden; }
+    h1 { font-size: 40px; }
   }
   @media (prefers-reduced-motion: reduce) {
     .wallpaper, .line > span, .foot { animation: none; }

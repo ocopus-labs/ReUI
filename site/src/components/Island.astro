@@ -862,6 +862,8 @@ const places = [
   let held = false;
 
   function next() {
+    // A section took the island before the loop's first step.
+    if (driven || held) return;
     const [name, ms, withBubble] = loop[step % loop.length];
     step++;
     show(name, { bubble: withBubble });
@@ -942,13 +944,14 @@ const places = [
     collapse = window.setTimeout(() => {
       collapse = 0;
       if (stillOver()) return;
-      if (folds[current] || isPlace(current)) fold();
+      // A section driving the island keeps its card open (Chrome moves the pointer on scroll).
+      if (!driven && (folds[current] || isPlace(current))) fold();
       hold(false);
     }, 450);
   }
   // A pointer left in the gap when a card shrank: leaving from there folds it.
   addEventListener('pointermove', () => {
-    if ((isPlace(current) || folds[current]) && !stillOver() && !collapse) leave();
+    if (!driven && (isPlace(current) || folds[current]) && !stillOver() && !collapse) leave();
   }, { passive: true });
   pill.addEventListener('pointerleave', () => {
     clearTimeout(rest);
@@ -1007,7 +1010,7 @@ const places = [
     held = true;
     show(pinned);
   } else {
-    setTimeout(next, 700);
+    timer = window.setTimeout(next, 700);
   }
 
   // Sections ask for their own moment through this.
@@ -1059,9 +1062,6 @@ const places = [
     place();
   }
 
-  /** Writes a moment's text: `[data-field]` elements by name; `arc` is a ring's progress
-   *  (0–1); an empty `query` shows the field's placeholder. */
-  function fill(name: string, fields: Record<string, string | number>) {
   // On a phone the cards are wider than the screen: the island never grows past the
   // screen less a margin each side, whatever scale a section stages it at.
   function fitTo(width: number) {
@@ -1077,6 +1077,9 @@ const places = [
   }
   addEventListener('resize', () => fitTo(fitWidth));
 
+  /** Writes a moment's text: `[data-field]` elements by name; `arc` is a ring's progress
+   *  (0–1); an empty `query` shows the field's placeholder. */
+  function fill(name: string, fields: Record<string, string | number>) {
     const layer = layers.get(name);
     if (!layer) return;
     for (const [key, value] of Object.entries(fields)) {
