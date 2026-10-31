@@ -26,6 +26,7 @@ pub use self::about::VERSION;
 pub use self::shortcut::chord;
 pub use self::welcome::{finish as finish_welcome, start as start_welcome};
 
+use crate::model::files::Shortcut;
 use serde_json::Value;
 
 use crate::model::files::File;
@@ -180,7 +181,7 @@ pub enum Effect {
     None,
     Navigate(Page),
     /// Listen for a new shortcut for this file.
-    Record(File),
+    Record(Shortcut),
     /// The welcome is done: close, or carry on into Settings.
     Finish { open_settings: bool },
     /// About's Install: download and verify the update.

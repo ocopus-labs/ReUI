@@ -666,6 +666,10 @@ pub enum HubMsg {
     /// Hide the island until asked again, or show it again (the hide shortcut, or
     /// `reui-bridge hide`). The surface keeps the state; the hub only relays the request.
     ToggleHidden,
+    /// Open whatever is waiting with the keyboard on it, a decision first; with nothing
+    /// waiting, the places (the island's shortcut, `reui-bridge open`;
+    /// docs/PRD-keyboard-island.md). Pressed again while it has the keyboard: close.
+    OpenIsland,
 }
 
 /// A place the user can go to on purpose (clipboard history, the timer launcher), as

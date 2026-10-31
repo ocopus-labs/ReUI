@@ -28,6 +28,8 @@ pub enum Event {
     Destinations(Vec<Destination>),
     /// The hide shortcut was pressed: hide the island, or show it again.
     ToggleHidden,
+    /// The open shortcut was pressed: open what's waiting with the keyboard on it.
+    OpenIsland,
     Disconnected,
 }
 
@@ -104,6 +106,7 @@ async fn read_loop(reader: &mut ReadHalf<NamedPipeClient>, notifier: &Notifier) 
             HubMsg::Focus { id } => notifier.send(Event::Focus(id)),
             HubMsg::Destinations(places) => notifier.send(Event::Destinations(places)),
             HubMsg::ToggleHidden => notifier.send(Event::ToggleHidden),
+            HubMsg::OpenIsland => notifier.send(Event::OpenIsland),
             _ => {}
         }
     }
