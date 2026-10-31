@@ -53,6 +53,7 @@ mod pnp;
 /// Shared with the stats card, which reads the battery's charge rate.
 pub(crate) mod power;
 mod registry;
+mod rehearse;
 mod settings;
 mod spam;
 mod view;
@@ -246,6 +247,8 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
         }
     });
     d.rescan_drives(Duration::ZERO);
+    let rehearsing = rehearse::enabled();
+    let mut rehearsal = tokio::time::interval(rehearse::POLL);
 
     loop {
         let deadline = d.next_deadline();
@@ -257,6 +260,11 @@ async fn run(ctx: &mut ModuleContext) -> Result<(), String> {
             Some(sighting) = sightings.recv() => d.on_sighting(ctx, sighting),
             Some(message) = internal.recv() => d.on_internal(ctx, message),
             _ = sleep_until(deadline.unwrap_or_else(Instant::now)), if deadline.is_some() => d.tick(ctx),
+            _ = rehearsal.tick(), if rehearsing => {
+                if rehearse::due().await {
+                    d.rehearse_connect(ctx);
+                }
+            }
             input = ctx.next() => match input {
                 Some(ModuleInput::Action(action)) => d.act(ctx, action),
                 Some(_) => {}

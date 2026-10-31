@@ -87,7 +87,8 @@ modules/
                    Device ID reads, AirPods ads with colour and lid), anti-spam gate, low
                    battery, controllers, laptop power and time to full, drives and Eject,
                    phones, overview, OSD hand-off, settings; art.rs looks up ReUI's device
-                   drawings by kind or family (design/assets/devices/, sent as Art::Logo)
+                   drawings by kind or family (design/assets/devices/, sent as Art::Logo);
+                   rehearse.rs is a sandbox-only rehearsed connect for demos (REUI_DEMO_DEVICE)
     catalog/       exact models, offline: Device ID parsing (ids), Apple/Beats and
                    controller tables with a source per row, chip vendors to refuse, the
                    lookup order (resolve; pure, tested); families and kinds
