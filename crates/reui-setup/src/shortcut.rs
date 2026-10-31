@@ -10,7 +10,7 @@ use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoTaskMemAlloc, CoTaskMemFree, IPersistFile, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED};
 use windows::Win32::System::Variant::VT_LPWSTR;
 use windows::Win32::UI::Shell::PropertiesSystem::IPropertyStore;
-use windows::Win32::UI::Shell::{FOLDERID_Programs, IShellLinkW, SHGetKnownFolderPath, ShellLink, KF_FLAG_DEFAULT};
+use windows::Win32::UI::Shell::{FOLDERID_Programs, FOLDERID_SendTo, IShellLinkW, SHGetKnownFolderPath, ShellLink, KF_FLAG_DEFAULT};
 
 fn com() {
     // S_FALSE (already initialised) and RPC_E_CHANGED_MODE are both fine for our use.
@@ -19,16 +19,26 @@ fn com() {
 
 /// The current user's Start menu Programs folder.
 pub fn programs_folder() -> Option<PathBuf> {
+    known_folder(&FOLDERID_Programs)
+}
+
+/// The current user's Send to folder (`shell:sendto`).
+pub fn send_to_folder() -> Option<PathBuf> {
+    known_folder(&FOLDERID_SendTo)
+}
+
+fn known_folder(id: &windows::core::GUID) -> Option<PathBuf> {
     unsafe {
-        let raw = SHGetKnownFolderPath(&FOLDERID_Programs, KF_FLAG_DEFAULT, None).ok()?;
+        let raw = SHGetKnownFolderPath(id, KF_FLAG_DEFAULT, None).ok()?;
         let path = raw.to_string().ok().map(PathBuf::from);
         CoTaskMemFree(Some(raw.0 as *const _));
         path
     }
 }
 
-/// Creates (or replaces) `lnk` pointing at `target`.
-pub fn create(lnk: &Path, target: &Path, description: &str, app_id: &str) -> windows::core::Result<()> {
+/// Creates (or replaces) `lnk` pointing at `target`, run with `args` (Send to adds the
+/// selected files after them).
+pub fn create(lnk: &Path, target: &Path, args: &str, description: &str, app_id: &str) -> windows::core::Result<()> {
     com();
     if let Some(dir) = lnk.parent() {
         _ = std::fs::create_dir_all(dir);
@@ -36,6 +46,9 @@ pub fn create(lnk: &Path, target: &Path, description: &str, app_id: &str) -> win
     unsafe {
         let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)?;
         link.SetPath(&HSTRING::from(target.as_os_str()))?;
+        if !args.is_empty() {
+            link.SetArguments(&HSTRING::from(args))?;
+        }
         if let Some(dir) = target.parent() {
             link.SetWorkingDirectory(&HSTRING::from(dir.as_os_str()))?;
         }
@@ -57,6 +70,20 @@ pub fn create(lnk: &Path, target: &Path, description: &str, app_id: &str) -> win
         store.Commit()?;
 
         link.cast::<IPersistFile>()?.Save(&HSTRING::from(lnk.as_os_str()), true)
+    }
+}
+
+/// The arguments of an existing shortcut.
+#[cfg(test)]
+pub fn arguments(lnk: &Path) -> windows::core::Result<String> {
+    com();
+    unsafe {
+        let link: IShellLinkW = CoCreateInstance(&ShellLink, None, CLSCTX_INPROC_SERVER)?;
+        link.cast::<IPersistFile>()?.Load(&HSTRING::from(lnk.as_os_str()), windows::Win32::System::Com::STGM_READ)?;
+        let mut buf = [0u16; 1024];
+        link.GetArguments(&mut buf)?;
+        let n = buf.iter().position(|&c| c == 0).unwrap_or(buf.len());
+        Ok(String::from_utf16_lossy(&buf[..n]))
     }
 }
 
@@ -88,13 +115,13 @@ mod tests {
         std::fs::write(&target_exe, b"MZ").unwrap();
         let lnk = dir.join("Start").join("ReUI.lnk");
 
-        create(&lnk, &target_exe, "ReUI", "ReUI.Test").unwrap();
+        create(&lnk, &target_exe, "", "ReUI", "ReUI.Test").unwrap();
         assert!(lnk.is_file());
         // Compared as the files they name: a temp folder can be spelled with its short 8.3
         // name (CI's C:UsersRUNNER~1) while the shortcut stores the long one.
         assert_eq!(std::fs::canonicalize(target(&lnk).unwrap()).unwrap(), std::fs::canonicalize(&target_exe).unwrap());
         // Replacing an existing one works (upgrades).
-        create(&lnk, &target_exe, "ReUI", "ReUI.Test").unwrap();
+        create(&lnk, &target_exe, "", "ReUI", "ReUI.Test").unwrap();
         _ = std::fs::remove_dir_all(dir);
     }
 
