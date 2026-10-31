@@ -233,6 +233,7 @@ mod tests {
                     minimal: Element::Empty,
                     audio: None,
                     quiet: None,
+                    private: false,
                     expanded: None,
                 })
                 .collect(),

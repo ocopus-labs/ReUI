@@ -94,7 +94,7 @@ mod tests {
     use reui_protocol::{ActivityId, Element, Quiet};
 
     fn moment(module: &str, priority: Priority, quiet: Option<Quiet>) -> Activity {
-        Activity { id: ActivityId { module: module.into(), key: "k".into() }, priority, accent: None, compact: Default::default(), minimal: Element::Empty, expanded: None, audio: None, quiet }
+        Activity { id: ActivityId { module: module.into(), key: "k".into() }, priority, accent: None, compact: Default::default(), minimal: Element::Empty, expanded: None, audio: None, quiet, private: false }
     }
 
     #[test]

@@ -107,7 +107,7 @@ Claude Code, Codex and OpenCode show in the island only when they need you: a pe
 
 ### Out of your way
 
-You decide how the island behaves. Open it with a click, or by resting the pointer on it, and choose how long that rest is. Keep it hidden until something needs you, and choose how much of the top edge brings it back, or none. Give an app its own rule: hide the island while a game or a presentation is in front, or let only permission requests through while you record. Right-click a moment you don't need (a copy, the volume, a device connecting) to turn that kind off or snooze it for an hour. Permission requests always come through.
+You decide how the island behaves. Open it with a click, or by resting the pointer on it, and choose how long that rest is. Keep it hidden until something needs you, and choose how much of the top edge brings it back, or none. Give an app its own rule: hide the island while a game or a presentation is in front, or let only permission requests through while you record. Right-click a moment you don't need (a copy, the volume, a device connecting) to turn that kind off or snooze it for an hour. Permission requests always come through. Share your screen and the people watching don't see your clipboard, an agent's request or a notification on the island; you still do.
 
 ### Appearance
 

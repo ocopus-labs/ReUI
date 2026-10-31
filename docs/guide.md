@@ -29,6 +29,8 @@ The island hides while a game, video or presentation fills the screen (Settings 
 
 The island picks up a change within a moment; nothing else restarts.
 
+**Screen sharing** (Settings → General → Hide from screen shares): while your clipboard, a coding agent's request, a notification or the shelf is showing, the island is left out of screen shares, recordings and screenshots. You still see it; the people watching your Teams, Zoom or Meet share, an OBS recording or a Snipping Tool screenshot see what's underneath instead. Choose **Island** to keep the whole island out of them all the time, or **Nothing** to have them show it as you see it. It works for anything that captures through Windows, not for a camera pointed at the screen, and needs Windows 10 version 2004 or later.
+
 **Pause ReUI** (tray, or Settings → General) quiets the island and stops recording the clipboard for an hour. Permission requests from coding agents still show.
 
 **Win+Alt+I** hides the island until you press it again (or pick Tray → Show the island). Unlike a pause, everything keeps working: the clipboard is still recorded, timers still run, and permission requests and questions from coding agents still show; a card you open with its shortcut (Win+Alt+V, Win+Ctrl+T, Win+Alt+S) shows too. Change it in Settings → General → Hide the island. (Not Win+Alt+H: Windows uses that for voice typing.)

@@ -168,6 +168,8 @@ desktop.rs         whether the desktop (not an app) is in front, for "Always sho
 intent.rs          reading the pointer: open on click or hover, the hover delay, the reveal
                    zone, when a just-appeared pill may take a click
 app_rules.rs       per-app rules: which applies to the app in front, its executable's name
+capture.rs         screen shares and recordings: the `captures` setting, and leaving them
+                   (WDA_EXCLUDEFROMCAPTURE) while a private card is in front
 quiet.rs           quieting a moment from itself: its menu, snoozes, writing a module's setting off
 drag_guard.rs      no hover intent while a drag from elsewhere passes over
 dragdrop/          OLE drag and drop for the file shelf: target.rs (the island's IDropTarget:

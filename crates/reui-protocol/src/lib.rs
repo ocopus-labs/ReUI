@@ -579,6 +579,10 @@ pub struct Activity {
     /// How the user may quiet this kind of moment from the moment itself (a brief or an
     /// alert; never a decision). `None`: it can't be.
     pub quiet: Option<Quiet>,
+    /// It may carry text the user wouldn't show to others (a copied item, an agent's
+    /// request, a notification). The surface keeps it out of screen shares and recordings
+    /// while it's in front, as the user chose (docs/PRD-share-privacy.md).
+    pub private: bool,
 }
 
 /// A kind of moment the user may quiet where it shows (docs/PRD-behaviour.md §4.4): turn
@@ -788,6 +792,7 @@ mod tests {
                 minimal: Element::Ring(0.4),
                 audio: None,
                 quiet: None,
+                private: false,
                 expanded: Some(ExpandedView {
                     leading: Element::Ring(0.4),
                     eyebrow: Some("Timer".into()),

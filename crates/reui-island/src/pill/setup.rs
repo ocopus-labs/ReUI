@@ -394,6 +394,8 @@ impl Pill {
             idle: Default::default(),
             drops: Default::default(),
             gate: Default::default(),
+            captures: Default::default(),
+            capture_excluded: None,
             intent: Default::default(),
             to_hub,
             events,

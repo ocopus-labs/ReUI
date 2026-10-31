@@ -46,7 +46,9 @@ impl Module for FileShelf {
         "shelf"
     }
 
-    fn run(self: Box<Self>, ctx: ModuleContext) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+    fn run(self: Box<Self>, mut ctx: ModuleContext) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        // Held text, links and file names.
+        ctx.declare_private();
         Box::pin(run(ctx))
     }
 }

@@ -232,6 +232,10 @@ pub struct Pill {
     intent: crate::intent::Intent,
     /// What the user has quieted: app rules, snoozes (`gate.rs`, `quiet.rs`).
     gate: gate::Gate,
+    /// What screen shares see (`captures` in settings.json), and whether the window is left
+    /// out of them now (`None` until first set, so a rebuilt pill applies it again).
+    captures: crate::capture::Captures,
+    capture_excluded: Option<bool>,
     to_hub: UnboundedSender<ClientMsg>,
     events: Receiver<Event>,
 }
@@ -239,6 +243,16 @@ pub struct Pill {
 impl Pill {
     fn front(&self) -> Option<&Activity> {
         self.snapshot.activities.first()
+    }
+
+    /// Leaves screen captures while a private card is in front (`capture.rs`), switching the
+    /// window's affinity only when that changes.
+    fn update_share(&mut self) {
+        let excluded = self.captures.excluded(self.front().is_some_and(|a| a.private));
+        if self.capture_excluded != Some(excluded) {
+            self.capture_excluded = Some(excluded);
+            crate::capture::set_excluded(self.hwnd, excluded);
+        }
     }
 
     /// Nothing is showing: no activities from the hub, or none the user lets through (a
@@ -289,6 +303,7 @@ impl Pill {
             self.block_scroll = 0.0;
         }
         self.prune_hold();
+        self.update_share();
         self.front_audio = self.front().and_then(|a| a.audio);
         self.minimal_audio = self.snapshot.activities.get(1).and_then(|a| a.audio);
         let front = self.snapshot.activities.first();

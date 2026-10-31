@@ -5,7 +5,7 @@ use serde_json::Value;
 use super::{button, flag, footed, group, head, Effect, Page};
 use crate::ui::icons;
 use reui_design::tokens::color::system as palette;
-use crate::model::files::{File, HOVER_DELAYS, MONITOR_CURSOR, MONITOR_PRIMARY, OPEN_ON, REVEAL_ZONE, VISIBILITY};
+use crate::model::files::{File, CAPTURES, HOVER_DELAYS, MONITOR_CURSOR, MONITOR_PRIMARY, OPEN_ON, REVEAL_ZONE, VISIBILITY};
 use crate::state::State;
 use crate::system::{self, Startup};
 use crate::ui::{Act, Block, Part, Role, Row, Target, Tone};
@@ -72,6 +72,14 @@ pub fn build(state: &State) -> Vec<Block> {
     let hide = super::shortcut::named(state, File::Island, "Hide the island", "Until you press it again; permission requests still show")
         .icon(icons::tile(icons::KEYBOARD, palette::GRAY));
     blocks.push(group("Island", vec![visibility, desktop, reveal, opening, delay, monitor, fullscreen, switcher, clock, hide]));
+    // What others see when you share or record your screen (docs/PRD-share-privacy.md).
+    let captures = state.files.captures();
+    let share = Row::new("captures", "Hide from screen shares")
+        .detail(["Clipboard, agents, notifications and the shelf", "Only you see the island", "Others see the island as you do"][captures])
+        .part(Part::Segmented { options: vec!["Private cards".into(), "Island".into(), "Nothing".into()], selected: captures })
+        .enabled(doc_ok)
+        .icon(icons::tile(icons::SCREEN, palette::PURPLE));
+    blocks.push(footed("Screen sharing", vec![share], "Also screenshots and recordings. You still see everything."));
     blocks.extend(super::quiet::blocks(state, doc_ok));
 
     let left = state.files.paused_until().and_then(|until| until.checked_sub(reui_protocol::unix_ms())).filter(|&ms| ms > 0);
@@ -135,6 +143,7 @@ pub fn act(state: &mut State, target: &Target, act: Act) -> Effect {
         }
         ("visibility", Act::Choose(i)) if i < VISIBILITY.len() => state.set(File::Island, "visibility", Value::String(VISIBILITY[i].into())),
         ("open_on", Act::Choose(i)) if i < OPEN_ON.len() => state.set(File::Island, "open_on", Value::String(OPEN_ON[i].into())),
+        ("captures", Act::Choose(i)) if i < CAPTURES.len() => state.set(File::Island, "captures", Value::String(CAPTURES[i].into())),
         ("reveal_zone", Act::Choose(i)) if i < REVEAL_ZONE.len() => state.set(File::Island, "reveal_zone", Value::String(REVEAL_ZONE[i].into())),
         ("hover_delay", Act::Choose(i)) if i < HOVER_DELAYS.len() => state.set(File::Island, "hover_delay", Value::from(HOVER_DELAYS[i])),
         // The island sees the file change, hides, and pauses clipboard recording itself.
@@ -193,6 +202,17 @@ mod tests {
         assert_eq!(state.files.doc(File::Island).get("hover_delay").and_then(Value::as_u64), Some(150));
         crate::pages::act(crate::pages::Page::General, &mut state, &Target::new("island:hide_in_fullscreen", 0), Act::Press);
         assert!(!state.files.doc(File::Island).bool("hide_in_fullscreen"));
+        _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn screen_shares_hide_private_cards_until_chosen_otherwise() {
+        let (mut state, dir) = state("general-captures");
+        assert_eq!(state.files.captures(), 0);
+        act(&mut state, &Target::new("captures", 0), Act::Choose(1));
+        assert_eq!((state.files.captures(), state.files.doc(File::Island).str("captures")), (1, Some("island")));
+        act(&mut state, &Target::new("captures", 0), Act::Choose(2));
+        assert_eq!(state.files.doc(File::Island).str("captures"), Some("everything"));
         _ = std::fs::remove_dir_all(&dir);
     }
 }
