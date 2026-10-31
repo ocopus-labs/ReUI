@@ -9,3 +9,8 @@
 
 # Agent worktrees (Claude Code)
 /.claude/worktrees/
+
+# Local recordings of the app and the site (not shipped)
+/video/
+/site/scripts/record.mjs
+/site/scripts/record-shots.mjs
