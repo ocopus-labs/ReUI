@@ -6,6 +6,7 @@ mod cards;
 mod choices;
 mod context;
 mod controls;
+mod faces;
 mod gauges;
 mod lyrics;
 mod mixer;

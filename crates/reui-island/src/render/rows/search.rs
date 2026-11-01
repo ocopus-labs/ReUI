@@ -27,12 +27,21 @@ impl Renderer {
                 text => rows::search_button(text),
             };
             right -= bw;
-            self.button(rt, button, right, y, bw, h, accent, hits)?;
+            if button.role == ButtonRole::Secondary {
+                // In the toolbar, a button sits on the same quiet well as the field.
+                unsafe { self.round_rect(rt, right, y, right + bw, y + h, self.capsule(h, inset), self.pal().fill_quaternary)? };
+                self.button(rt, &Button { role: ButtonRole::Plain, ..button.clone() }, right, y, bw, h, accent, hits)?;
+            } else {
+                self.button(rt, button, right, y, bw, h, accent, hits)?;
+            }
             right -= component::search::BUTTON_GAP;
         }
         let group = Filters::new(inset, filters.len());
         self.filters(rt, filters, &group, y, accent, hits)?;
         let field = group.field_left();
+        if !filters.is_empty() {
+            right = right.min(field + component::search::TOOLBAR_WIDTH);
+        }
         unsafe { self.round_rect(rt, field, y, right, y + h, self.capsule(h, inset), self.pal().fill_quaternary)? };
         let glyph = icon::SEARCH;
         self.text(rt, &glyph_char.unwrap_or('\u{E721}').to_string(), &self.fonts.icon_search, field + pad, y + (h - glyph) / 2.0, glyph, Align::Center, self.pal().label_secondary)?;
@@ -85,6 +94,11 @@ impl Renderer {
                 self.pal().label_secondary
             };
             match tab.glyph {
+                // A letter ("T" for text) is set in the text face; the icon font has none.
+                Some(g) if g.is_ascii_alphanumeric() => {
+                    let line = self.fonts.filter_letter.style.line_height;
+                    self.text(rt, &g.to_string(), &self.fonts.filter_letter, l, top + (chip - line) / 2.0, chip, Align::Center, ink)?
+                }
                 Some(g) => self.text(rt, &g.to_string(), &self.fonts.icon_search, l, top + (chip - glyph) / 2.0, chip, Align::Center, ink)?,
                 None => {
                     let line = self.fonts.tab.style.line_height;

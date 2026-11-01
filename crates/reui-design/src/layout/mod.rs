@@ -38,8 +38,10 @@ pub enum Card {
     Regular,
     /// Agent moments: wider, and its buttons and detail sit like an alert's.
     Roomy,
-    /// A panel (clipboard history).
+    /// A panel (the shelf).
     Wide,
+    /// The widest panel: a toolbar over a row of landscape cards (clipboard history).
+    Gallery,
 }
 
 impl Card {
@@ -48,6 +50,7 @@ impl Card {
             Card::Regular => island::expanded::WIDTH,
             Card::Roomy => island::expanded::ROOMY_WIDTH,
             Card::Wide => island::expanded::WIDE_WIDTH,
+            Card::Gallery => island::expanded::GALLERY_WIDTH,
         }
     }
 
@@ -58,7 +61,7 @@ impl Card {
     /// Its corner radius: the wide panel's is calmer than the card's.
     pub fn radius(self, look: &Look) -> f32 {
         match self {
-            Card::Wide => look.panel_radius(),
+            Card::Wide | Card::Gallery => look.panel_radius(),
             _ => look.radius(),
         }
     }
@@ -88,10 +91,10 @@ impl Card {
     }
 }
 
-/// The expanded surface: wide enough for the wide card and tall enough for the roomy one
+/// The expanded surface: wide enough for the gallery and tall enough for the roomy card
 /// at the look's padding; narrower cards are drawn centred in it.
 pub fn expanded_surface(look: &Look) -> (f32, f32) {
-    (island::expanded::WIDE_WIDTH, look.max_height(island::expanded::ROOMY_MAX_HEIGHT))
+    (island::expanded::GALLERY_WIDTH, look.max_height(island::expanded::ROOMY_MAX_HEIGHT))
 }
 
 /// The gap above full-width row `index` (0 is the first under the header): a section gap

@@ -5,7 +5,7 @@
 
 use reui_protocol::{
     Button, ButtonContent, ButtonRole, CardSize, CompactView, Element, ExpandedView, Headline, ImageId, Item, ItemAction, ItemKey, MenuOption, Preview, Rgb, Row, Tab,
-    ACTION_SEARCH, ACTION_UNDO,
+    Tone, ACTION_SEARCH, ACTION_UNDO,
 };
 use serde_json::json;
 
@@ -21,7 +21,7 @@ const GLYPH_UNDO: char = '\u{E7A7}';
 const GLYPH_SETTINGS: char = '\u{E713}';
 /// The type filters after "All": (kind, label, glyph). Text covers code too.
 const TYPES: [(&str, &str, char); 5] =
-    [("text", "Text", '\u{E8D2}'), ("links", "Links", '\u{E71B}'), ("images", "Images", '\u{EB9F}'), ("files", "Files", '\u{E8A5}'), ("colors", "Colors", '\u{E790}')];
+    [("text", "Text", 'T'), ("links", "Links", '\u{E71B}'), ("images", "Images", '\u{EB9F}'), ("files", "Files", '\u{E8A5}'), ("colors", "Colors", '\u{E790}')];
 
 /// The notch panel for a view: the toolbar, then the cards (or one quiet line).
 pub fn panel(view: &cv::View, accent: Rgb) -> View {
@@ -59,7 +59,7 @@ pub fn panel(view: &cv::View, accent: Rgb) -> View {
             detail: None,
             trailing: Element::Empty,
             rows: vec![Row::Search { query: view.query.clone(), buttons, placeholder: Some("Search history\u{2026}".into()), glyph: None, filters: filters(view) }, content],
-            context: None, size: CardSize::Wide,
+            context: None, size: CardSize::Gallery,
             tint: false,
             pager: None,
             open: None,
@@ -108,15 +108,60 @@ fn item(it: &cv::Item, view: &cv::View) -> Item {
         "code" => Preview::Code(text),
         _ => Preview::Text(text),
     };
+    let (tag, name, meta) = footer(it);
     Item {
         action: format!("paste:{}", it.id),
         preview,
-        icon: image(&it.icon),
-        age: it.age.clone(),
-        meta: it.meta.clone(),
+        // The design has no app icon on the card; the app stays searchable.
+        icon: None,
+        age: ago(&it.age),
+        tag: Some(tag),
+        tag_tone: if it.kind == "image" { Tone::Accent } else { Tone::Secondary },
+        name,
+        meta,
         pinned: it.pinned,
         actions: actions(it, view),
         drag: None,
+    }
+}
+
+/// A card's footer: what it is (lowercase, as the design writes it), its name when it has
+/// one, and the fact after the tag on a one-line footer.
+fn footer(it: &cv::Item) -> (String, Option<String>, Option<String>) {
+    match it.kind.as_str() {
+        "link" => ("links".into(), None, it.url.as_deref().map(|u| host(u).to_string())),
+        // Until a copied image's file name is known (M3), its size names it.
+        "image" => ("image".into(), it.meta.clone(), None),
+        "files" => {
+            let files = it.files.as_deref().unwrap_or_default();
+            let tag = if it.missing {
+                "missing".to_string()
+            } else if files.len() == 1 {
+                "file".to_string()
+            } else {
+                format!("{} files", files.len())
+            };
+            (tag, files.first().cloned(), None)
+        }
+        "color" => ("color".into(), it.color.clone().or_else(|| it.text.clone()), None),
+        "code" => ("code".into(), None, None),
+        _ => ("text".into(), None, None),
+    }
+}
+
+/// The host of a URL, without `www.`.
+fn host(url: &str) -> &str {
+    let rest = url.split_once("://").map_or(url, |(_, r)| r);
+    rest.split(['/', '?', '#']).next().unwrap_or(rest).trim_start_matches("www.")
+}
+
+/// "just now", "4m ago", "2h ago": the card's age as the design says it. Minutes at the
+/// finest, since the panel isn't redrawn every second.
+fn ago(age: &str) -> String {
+    if age == "now" {
+        "just now".into()
+    } else {
+        format!("{age} ago")
     }
 }
 
@@ -265,5 +310,19 @@ mod tests {
         let Row::Search { filters, buttons, .. } = &rows[0] else { panic!() };
         assert!(!filters[0].selected && filters[0].glyph == Some(GLYPH_PINNED) && filters[2].selected);
         assert_eq!(buttons[1].action, ACTION_UNDO);
+    }
+
+    #[test]
+    fn card_footers_say_what_each_clip_is() {
+        let v = view();
+        let card = |it: cv::Item| item(&it, &v);
+        let files = card(cv::Item { id: 1, kind: "files".into(), files: Some(vec!["Itinerary.pdf".into(), "b.pdf".into(), "c.pdf".into()]), age: "now".into(), ..Default::default() });
+        assert_eq!((files.tag.as_deref(), files.name.as_deref(), files.age.as_str()), (Some("3 files"), Some("Itinerary.pdf"), "just now"));
+        let link = card(cv::Item { id: 2, kind: "link".into(), url: Some("https://www.en.wikipedia.org/wiki/Sea_of_clouds".into()), age: "4m".into(), ..Default::default() });
+        assert_eq!((link.tag.as_deref(), link.name, link.meta.as_deref(), link.age.as_str()), (Some("links"), None, Some("en.wikipedia.org"), "4m ago"));
+        let image = card(cv::Item { id: 3, kind: "image".into(), meta: Some("1920 × 1080".into()), age: "2h".into(), ..Default::default() });
+        assert_eq!((image.tag.as_deref(), image.tag_tone, image.name.as_deref()), (Some("image"), Tone::Accent, Some("1920 × 1080")));
+        let text = card(cv::Item { id: 4, kind: "text".into(), text: Some("hi".into()), age: "1d".into(), ..Default::default() });
+        assert_eq!((text.tag.as_deref(), text.tag_tone, text.name, text.icon), (Some("text"), Tone::Secondary, None, None));
     }
 }

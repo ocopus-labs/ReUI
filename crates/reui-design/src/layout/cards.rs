@@ -1,4 +1,5 @@
-//! A panel's scrolling row of cards (clipboard history) and its row of filter tabs.
+//! A panel's scrolling row of cards (clipboard history), what's where inside a card, and a
+//! row of filter tabs.
 
 use crate::tokens::component;
 
@@ -104,25 +105,75 @@ pub fn tabs_offset(widths: &[f32], gap: f32, selected: Option<usize>, avail: f32
     (right - avail).clamp(0.0, total - avail)
 }
 
+/// Where things go inside a card at (`left`, `top`), `width` wide and
+/// `component::card::HEIGHT` tall: the body above, then the footer's two lines at the
+/// bottom (the tag over the name and age), or its one line when there is no name.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Face {
+    pub left: f32,
+    pub right: f32,
+    pub top: f32,
+    /// The body ends here, a padding above the footer.
+    pub body_bottom: f32,
+    /// The tag's line top, when the card has a name under it.
+    pub tag_top: f32,
+    /// The name's (and the age's) line top; also the top of a one-line footer, whose
+    /// line is as tall, so cards with and without names end level.
+    pub name_top: f32,
+}
+
+impl Face {
+    pub fn new(left: f32, top: f32, width: f32) -> Self {
+        use crate::tokens::typography;
+        let pad = component::card::PADDING;
+        let bottom = top + component::card::HEIGHT - pad;
+        let name_top = bottom - typography::CARD_NAME.line_height;
+        let tag_top = name_top - component::card::TAG_GAP - typography::CARD_TAG.line_height;
+        Face { left: left + pad, right: left + width - pad, top: top + pad, body_bottom: tag_top - pad * 0.5, tag_top, name_top }
+    }
+
+    pub fn width(&self) -> f32 {
+        self.right - self.left
+    }
+
+    /// The body when the footer is one line: it runs down to that line.
+    pub fn tall_body_bottom(&self) -> f32 {
+        self.name_top - component::card::PADDING * 0.5
+    }
+
+    /// An image `w` × `h` shown whole in the body, centred, no wider or taller than its
+    /// share of it (`card.thumb-width`, `card.thumb-height`): (left, top, width, height).
+    pub fn contain(&self, w: f32, h: f32) -> (f32, f32, f32, f32) {
+        let (bw, bh) = (self.width(), self.body_bottom - self.top);
+        if w <= 0.0 || h <= 0.0 || bw <= 0.0 || bh <= 0.0 {
+            return (self.left, self.top, 0.0, 0.0);
+        }
+        let k = (bw * component::card::THUMB_WIDTH / w).min(bh * component::card::THUMB_HEIGHT / h);
+        let (cw, ch) = (w * k, h * k);
+        (self.left + (bw - cw) / 2.0, self.top + (bh - ch) / 2.0, cw, ch)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use crate::tokens::island;
 
-    const W: f32 = 560.0;
+    const W: f32 = island::expanded::GALLERY_WIDTH;
 
     #[test]
-    fn four_fit_and_more_show_a_half_card() {
-        let four = CardRow::new(W, 4, island::expanded::INSET);
-        assert_eq!(four.max_scroll(), 0.0);
-        let right = four.left(3, 0.0) + four.card_width();
+    fn three_fit_and_more_show_the_edge_of_a_fourth() {
+        let three = CardRow::new(W, 3, island::expanded::INSET);
+        assert_eq!(three.max_scroll(), 0.0);
+        let right = three.left(2, 0.0) + three.card_width();
         assert!((right - (W - island::expanded::INSET)).abs() < 0.01);
 
         let many = CardRow::new(W, 10, island::expanded::INSET);
-        // Four whole cards, then half of the fifth cut by the panel's edge.
-        let fifth = many.left(4, 0.0);
-        assert!((W - fifth - many.card_width() / 2.0).abs() < 0.01);
-        assert_eq!(many.visible(0.0), 0..5);
+        // Three whole cards, then a sliver of the fourth cut by the panel's edge.
+        let fourth = many.left(3, 0.0);
+        let sliver = component::card::VISIBLE_MORE - component::card::VISIBLE_MORE.floor();
+        assert!((W - fourth - many.card_width() * sliver).abs() < 0.01);
+        assert_eq!(many.visible(0.0), 0..4);
     }
 
     #[test]
@@ -140,8 +191,8 @@ mod tests {
     fn revealing_a_card_scrolls_just_enough() {
         let row = CardRow::new(W, 10, island::expanded::INSET);
         assert_eq!(row.reveal(0.0, 2), 0.0);
-        let s = row.reveal(0.0, 4);
-        assert!((row.left(4, s) + row.card_width() - (W - island::expanded::INSET)).abs() < 0.01);
+        let s = row.reveal(0.0, 3);
+        assert!((row.left(3, s) + row.card_width() - (W - island::expanded::INSET)).abs() < 0.01);
         assert_eq!(row.reveal(s, 1), s, "already in view");
         assert!((row.left(1, row.reveal(row.max_scroll(), 1)) - island::expanded::INSET).abs() < 0.01);
         assert_eq!(row.first_shown(row.step() * 3.0), 3);

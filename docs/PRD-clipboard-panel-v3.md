@@ -1,8 +1,8 @@
 # PRD: Clipboard panel v3 (the new design)
 
-Status: **decided, Nov 1, 2026; M1 next.** Decisions are in §7.
+Status: **M1 (toolbar) and M2 (cards) built, Nov 1, 2026; M3 (file thumbnails, image names) next.** Decisions are in §7.
 
-Reference: [`docs/images/design/clipboard-v3.png`](images/design/clipboard-v3.png) (Rohit's design).
+Reference: [`docs/images/design/clipboard-v3.png`](images/design/clipboard-v3.png) (Rohit's design). As built (M2, drawn by the island offscreen): [`clipboard-v3-built.png`](images/design/clipboard-v3-built.png).
 
 The clipboard stays in the notch (see [PRD-clipboard-window](PRD-clipboard-window.md) for why the separate window went). This PRD changes **how the notch panel looks and is arranged**. It does not change capture, storage, paste-back or privacy ([PRD-clipboard](PRD-clipboard.md)).
 
@@ -12,16 +12,16 @@ The clipboard stays in the notch (see [PRD-clipboard-window](PRD-clipboard-windo
 |---|---|---|
 | Header | Full-width search, then a row of tabs (History 24, Pinned 3, collections) | **One toolbar:** a group of type icons, a search pill, a count, Clear, settings |
 | Type filters | None in the notch (the window had them) | Icon chips: All · Text · Links · Images · Files · Colors |
-| Cards | About 116 × 116, 4.5 across, the footer shows app icon · age · fact | **Landscape, about 1.45 : 1, 3.5 across.** Content on top; at the bottom a quiet tag line, then a name and the age |
+| Cards | About 116 × 116, 4.5 across, the footer shows app icon · age · fact | **Landscape, about 1.45 : 1, three across and the edge of a fourth.** Content on top; at the bottom a quiet tag line, then a name and the age |
 | Card surface | Flat fill | Flat fill with a **fine grain** |
-| Panel width | 560 DIP | About 760 DIP (*D4*) |
+| Panel width | 560 DIP | 800 DIP (*D4*) |
 
 ```
  ╭─(ear)──────────────────────────────────────────────────────────────(ear)─╮
  │ (◷ T 🔗 ▣ ⧉ 🎨)  ( ⌕ Search history…                  )   (4) (🗑 Clear) ⚙ │  toolbar
  │ ╭──────────────╮ ╭──────────────╮ ╭──────────────╮ ╭───────                │
  │ │   ▤▤▤ files  │ │ 🔗 Wikipedia·│ │   ┌──────┐   │ │ A sea of               │
- │ │   fanned     │ │ Sea of clouds│ │   │ img  │   │ │ cloud fills            │  cards: 3.5 across,
+ │ │   fanned     │ │ Sea of clouds│ │   │ img  │   │ │ cloud fills            │  cards: 3 + an edge,
  │ │ 3 files      │ │ en.wiki…     │ │ image        │ │                        │  the row scrolls
  │ │ Itinerary.pdf  just now │ links · en.wikipedia.org 6s │ Summit.png 9s │ text   │
  │ ╰──────────────╯ ╰──────────────╯ ╰──────────────╯ ╰───────                │
@@ -52,7 +52,7 @@ Left to right, one row, vertically centred, the height of the search field:
 
 ## 3. Cards
 
-Size: about 212 × 146 DIP at a 760 panel. That is 3.5 across, the half card says the row scrolls, with a 10 DIP gap and a radius concentric with the panel's. The body is on top. The **footer** is two lines, pinned to the bottom:
+Size: about 225 × 156 DIP in an 800 panel. That is three across and the edge of a fourth, which says the row scrolls, with a 12 DIP gap and a radius concentric with the panel's. The body is on top. The **footer** is two lines, pinned to the bottom:
 
 - **Tag** (small, semibold, quiet): what it is or how many ("3 files", "text", "image"). The image tag uses the clipboard accent, as in the design. Others are quiet (*D6*).
 - **Name** (body, primary, one line, ellipsis) on the left and **age** (small, tertiary) on the right.
@@ -63,12 +63,16 @@ Size: about 212 × 146 DIP at a 760 panel. That is 3.5 across, the half card say
 | Code | Same, monospaced | `code` | none, as text |
 | Link | `🔗 Site · Kind` (quiet, semibold), the **title** (semibold), the URL (tertiary, one line) | `links · host` (tag bold, host quiet) | none; the age on the tag line |
 | Image | The image **contained** (aspect kept, not cropped), centred, its own small radius | `image` (accent) | file name when known (copied from a file or a page's `<img src>`), else `W × H` |
-| Files | Up to three of the files' **thumbnails, fanned** (shell thumbnails: a PDF's first page, an image, else the type's icon) | `N files` (or `file`) | the first file's name |
+| Files | Up to three of the files' **thumbnails, fanned** (shell thumbnails: a PDF's first page, an image, else the type's icon); until M3, the document glyph | `N files` (or `file`) | the first file's name |
 | Color | The swatch fills the card, as today | `color` | the value (`#5E5CE6`) |
 
 What goes: the app icon in the footer (the design has none; the app stays searchable and appears in the card's menu as "From Edge"), the hover pin/delete circles stay as they are, the `★` for pinned stays at the tag line's end.
 
-**Grain:** a 64 × 64 noise tile made once at start, drawn over each card's fill as a tiled bitmap brush at about 4 % opacity (`card.grain` token). It costs no idle work: it's part of the card's drawing, not an animation. Light look: same tile, darker ink. With **Reduce transparency** on in Windows, no grain.
+**Grain:** a 64 × 64 noise tile drawn over the fill of a card holding media (an image, files) as a tiled bitmap brush at 5 % opacity (`card.grain`), at the screen's pixels, the same tile every time. The text and link cards are flat, as in the design. It costs no idle work: it's part of the card's drawing, not an animation.
+
+**Colours, from the reference:** cards, the field, the count and Clear all sit on the quietest well (`fill.quaternary`, about RGB 20 on black, as sampled from the picture); the chosen chip is a primary fill. **Ages** say "just now", "4m ago", "2h ago": minutes at the finest, since the panel isn't redrawn every second (the design's "6s ago" would go stale while it's open). **Size:** 800 DIP wide (`expanded.gallery-width`), cards 156 tall, three across and the edge of a fourth. Settings' Clipboard page shows the panel when its stage is wide enough, else the copy toast (the island is never shrunk to fit).
+
+**Checking it:** `cargo test -p reui-island clipboard_panel_sheet -- --ignored` draws the panel offscreen with the island's own renderer (`target/clipboard-panel/`), so it can be compared with the reference without opening a window.
 
 **Selected card** (keyboard): the hairline ring as today, following the new radius.
 
@@ -86,11 +90,11 @@ The module says what's there; the island decides how it looks.
 - `Row::Search` gains `filters: Vec<Tab>` (drawn as the icon group before the field) and `trailing: Vec<Button>` keeps today's buttons.
 - `ButtonContent::Count(u32)`: a number in a circle (*D2*).
 - `Button.role` `Secondary` with `ButtonContent::Text` + glyph → `ButtonContent::Labelled(char, String)` for "🗑 Clear".
-- `Item` gains `tag: Option<String>`, `name: Option<String>` and `tag_tone: Tone` (normal / accent). `meta` goes (its facts move into tag and name).
+- `Item` gains `tag: Option<String>`, `name: Option<String>` and `tag_tone: Tone` (secondary / accent). `meta` stays: the fact after the tag on a one-line footer ("links · en.wikipedia.org"), and the shelf's cards still use it alone.
 - `Preview::Files` gains `thumbs: Vec<ImageId>` (up to 3); `Preview::Link` gains `kind: Option<String>` ("Article", from `og:type`).
 - Hub: `clipboard/panel.rs` builds the new toolbar and items; a new `clipboard/thumbs.rs` makes file thumbnails on a worker thread (`IShellItemImageFactory`, COM, never on the hub thread) and caches them by path and modified time.
 - Island: `render/rows/search.rs` draws the toolbar; `render/rows/cards.rs` is split into `cards.rs` (row, scrolling, hit-testing) and `card_faces.rs` (one face per kind) to stay under ~500 lines; `render/grain.rs` makes the tile.
-- `reui-design`: `layout/cards.rs` takes `visible`/`visible-more` 3/3.5 and the card's aspect from tokens; new tokens `card.grain`, `card.tag`, `toolbar.*`, `expanded.clipboard-width`.
+- `reui-design`: `layout/cards.rs` takes `visible`/`visible-more` 3/3.3 and lays out a card's face (`Face`: body, tag, name, an image contained); `CardSize::Gallery` / `Card::Gallery`; new tokens `card.grain`, `card.tag-gap`, `card.thumb-*`, `search.filter-*`, `search.toolbar-width`, `expanded.gallery-width` and the `card-tag`, `card-name`, `card-age`, `filter-letter` type styles.
 
 ## 6. Milestones
 
@@ -107,7 +111,7 @@ Each milestone is its own PR. The README picture, `docs/guide.md` and `ARCHITECT
 - **D1 Emoji button: left out.** Windows has Win+. for emoji; the toolbar has no emoji button.
 - **D2 The count: kept.** Rohit drew it, and it answers "did my search find anything" at a glance. It's the one count the panel shows, an exception to the no-counts rule.
 - **D3 Pinned and collections: a menu on the All chip** (§2), not a seventh chip or a second row.
-- **D4 Panel width: 760 DIP.** 760 DIP fits 3.5 cards at a readable size and is still under half of a 1920 display. The design's own proportions suggest wider (about 1040), which is too wide at 100 % on a 1280 display.
+- **D4 Panel width: 800 DIP.** The design's proportions measured against its toolbar (32 DIP tall): about 790. 800 fits three cards and the edge of a fourth at the design's size, and still fits a 1280 display at 100 %.
 - **D5 Empty chips: always show all six,** so the group never changes shape (rather than hiding empty ones as tabs do today).
 - **D6 Tag colour: as drawn.** The accent for images only; the other tags quiet. Accent on every tag would be louder.
 

@@ -249,9 +249,16 @@ pub struct Item {
     pub preview: Preview,
     /// Icon of the app it came from.
     pub icon: Option<ImageId>,
-    /// How long ago ("2 min").
+    /// How long ago ("2m ago").
     pub age: String,
-    /// One fact about the content ("1920 × 1080", "12 lines").
+    /// What it is, or how many ("3 files", "image", "links"): over `name` when there is
+    /// one, else on the card's last line with `meta` after it.
+    pub tag: Option<String>,
+    /// The tag's tone: secondary, or the accent for the kind worth noticing (images).
+    pub tag_tone: Tone,
+    /// What it's called ("Itinerary.pdf", "#5E5CE6"), at the bottom with the age.
+    pub name: Option<String>,
+    /// One fact about the content after the tag ("en.wikipedia.org").
     pub meta: Option<String>,
     /// Kept by the user (shown with a small star).
     pub pinned: bool,
@@ -571,8 +578,10 @@ pub enum CardSize {
     Regular,
     /// A little wider, for a moment with a session strip and a body (agent moments).
     Roomy,
-    /// Rich content (a row of preview cards); a view of only rows has no header.
+    /// Rich content (the shelf's cards); a view of only rows has no header.
     Wide,
+    /// The widest: a toolbar over a row of landscape cards (clipboard history).
+    Gallery,
 }
 
 /// One quiet line above the header saying whose card this is: a mark, a title and a few

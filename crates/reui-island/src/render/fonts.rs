@@ -36,6 +36,12 @@ pub(super) struct Fonts {
     pub(super) card_code: Font,
     pub(super) card_label: Font,
     pub(super) card_title: Font,
+    /// A card's footer: what it is, its name, how long ago.
+    pub(super) card_tag: Font,
+    pub(super) card_name: Font,
+    pub(super) card_age: Font,
+    /// A filter whose glyph is a letter ("T"), as large as the icons beside it.
+    pub(super) filter_letter: Font,
     pub(super) tab: Font,
     pub(super) tab_count: Font,
     pub(super) search: Font,

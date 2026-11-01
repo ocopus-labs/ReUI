@@ -10,13 +10,13 @@ fn look(a: Appearance) -> Look {
     Look::new(&a, false, None)
 }
 
-/// The clipboard panel: no header; search, tabs, then the cards.
+/// The clipboard panel: no header; the toolbar, then the cards.
 fn panel(l: &Look) -> (f32, f32) {
     let mut y = l.inset();
-    for (i, h) in [component::search::HEIGHT, component::tabs::HEIGHT, component::card::HEIGHT].into_iter().enumerate() {
+    for (i, h) in [component::search::HEIGHT, component::card::HEIGHT].into_iter().enumerate() {
         y += row_gap(l, i, true) + h;
     }
-    (Card::Wide.width(), Card::Wide.height(l, y + Card::Wide.bottom(l, false)))
+    (Card::Gallery.width(), Card::Gallery.height(l, y + Card::Gallery.bottom(l, false)))
 }
 
 /// A running timer: the ring, value hero, inline pause and cancel.
@@ -38,8 +38,8 @@ fn permission(l: &Look) -> (f32, f32) {
 #[test]
 fn todays_island_sizes() {
     let l = Look::default();
-    // Inset, search 32, gap, tabs 28, gap, cards 116, inset.
-    assert_eq!(panel(&l), (560.0, 20.0 + 32.0 + 12.0 + 28.0 + 12.0 + 116.0 + 20.0));
+    // Inset, toolbar 32, gap, cards 156, inset.
+    assert_eq!(panel(&l), (800.0, 20.0 + 32.0 + 12.0 + 156.0 + 20.0));
     assert_eq!(compact::meter(&l, 0.5).width, 200.0);
     // A timer card: the value font's line sets the header.
     let (w, h) = timer(&l);
@@ -59,7 +59,7 @@ fn roomy_padding_grows_cards_and_their_tallest() {
     assert!(Card::Roomy.max_height(&roomy) > Card::Roomy.max_height(&l));
     assert_eq!(Card::Regular.height(&l, 10.0), island::expanded::MIN_HEIGHT, "never under the minimum");
     assert_eq!(Card::Regular.height(&l, 9999.0), Card::Regular.max_height(&l));
-    assert_eq!(super::expanded_surface(&l), (island::expanded::WIDE_WIDTH, island::expanded::ROOMY_MAX_HEIGHT));
+    assert_eq!(super::expanded_surface(&l), (island::expanded::GALLERY_WIDTH, island::expanded::ROOMY_MAX_HEIGHT));
 }
 
 #[test]
@@ -238,4 +238,50 @@ fn icon_filters_sit_before_the_field() {
     assert_eq!(last_right + search::FILTER_INSET, 20.0 + six.width());
     assert_eq!(six.field_left(), 20.0 + six.width() + search::FILTER_GAP);
     assert_eq!(Filters::chip() + 2.0 * search::FILTER_INSET, search::HEIGHT);
+}
+
+#[test]
+fn a_card_face_keeps_its_footer_at_the_bottom() {
+    use super::cards::Face;
+    use crate::tokens::typography;
+    let f = Face::new(10.0, 100.0, 225.0);
+    let pad = component::card::PADDING;
+    assert_eq!((f.left, f.right, f.top), (10.0 + pad, 235.0 - pad, 100.0 + pad));
+    // The name's line ends one padding above the card's bottom, the tag sits over it.
+    assert_eq!(f.name_top + typography::CARD_NAME.line_height, 100.0 + component::card::HEIGHT - pad);
+    assert_eq!(f.tag_top + typography::CARD_TAG.line_height + component::card::TAG_GAP, f.name_top);
+    assert!(f.body_bottom < f.tag_top && f.tall_body_bottom() > f.tag_top);
+    // Leaves the body room for a picture.
+    assert!(f.body_bottom - f.top > 70.0, "{}", f.body_bottom - f.top);
+}
+
+#[test]
+fn an_image_is_shown_whole_and_centred() {
+    use super::cards::Face;
+    let f = Face::new(0.0, 0.0, 225.0);
+    let (bw, bh) = (f.width(), f.body_bottom - f.top);
+    let (mw, mh) = (bw * component::card::THUMB_WIDTH, bh * component::card::THUMB_HEIGHT);
+    // Wide: as wide as it may be, centred both ways.
+    let (l, t, w, h) = f.contain(1600.0, 400.0);
+    assert!((w - mw).abs() < 0.01 && (h - mw / 4.0).abs() < 0.01);
+    assert!((l - (f.left + (bw - w) / 2.0)).abs() < 0.01 && (t - (f.top + (bh - h) / 2.0)).abs() < 0.01);
+    // Tall: as tall as it may be.
+    let (l, _, w, h) = f.contain(100.0, 400.0);
+    assert!((h - mh).abs() < 0.01 && (l - (f.left + (bw - w) / 2.0)).abs() < 0.01);
+    assert_eq!(f.contain(0.0, 10.0).2, 0.0);
+}
+
+#[test]
+fn the_gallery_fits_three_cards_and_the_edge_of_a_fourth() {
+    use super::cards::CardRow;
+    let l = look(Appearance::default());
+    assert_eq!(Card::Gallery.width(), island::expanded::GALLERY_WIDTH);
+    assert_eq!(super::expanded_surface(&l).0, island::expanded::GALLERY_WIDTH);
+    let row = CardRow::new(Card::Gallery.width(), 10, l.inset());
+    let cw = row.card_width();
+    // Landscape, about the design's 1.45 : 1.
+    let aspect = cw / component::card::HEIGHT;
+    assert!((1.35..1.55).contains(&aspect), "{aspect}");
+    let fourth = row.left(3, 0.0);
+    assert!(fourth < Card::Gallery.width() && fourth + cw > Card::Gallery.width());
 }

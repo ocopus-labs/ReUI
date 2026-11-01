@@ -100,7 +100,7 @@ pub fn size(moment: Moment, look: &Look) -> (f32, f32) {
         // As wide as its text: measured where it's drawn.
         Moment::Toast => (island::idle::WIDTH, island::HEIGHT),
         Moment::Clipboard => {
-            let card = Card::Wide;
+            let card = Card::Gallery;
             let bottom = panel_rows(look)[1] + component::card::HEIGHT;
             (card.width(), card.height(look, bottom + card.bottom(look, false)))
         }
@@ -156,7 +156,7 @@ mod tests {
     #[test]
     fn each_moment_is_its_cards_size() {
         let l = Look::default();
-        assert_eq!(size(Moment::Clipboard, &l), (560.0, 20.0 + 32.0 + 12.0 + 116.0 + 20.0));
+        assert_eq!(size(Moment::Clipboard, &l), (800.0, 20.0 + 32.0 + 12.0 + 156.0 + 20.0));
         assert_eq!(size(Moment::Meter, &l), (200.0, island::HEIGHT));
         assert_eq!(size(Moment::Timer, &l).0, 420.0);
         assert_eq!(size(Moment::Permission, &l).0, 480.0);
@@ -178,9 +178,10 @@ mod tests {
     #[test]
     fn a_panel_too_wide_for_the_stage_shows_the_toast() {
         let clipboard = |size: f32| Preview { moment: Moment::Clipboard, look: look(Appearance { size, ..Appearance::default() }), switcher: false };
-        assert_eq!(shown(clipboard(1.0), 640.0), Moment::Clipboard);
-        assert_eq!(shown(clipboard(1.25), 640.0), Moment::Toast);
-        assert!(height(clipboard(1.25), 640.0) < height(clipboard(1.0), 640.0));
+        assert_eq!(shown(clipboard(1.0), 900.0), Moment::Clipboard);
+        assert_eq!(shown(clipboard(1.25), 900.0), Moment::Toast);
+        assert!(height(clipboard(1.25), 900.0) < height(clipboard(1.0), 900.0));
+        assert_eq!(shown(clipboard(1.0), 640.0), Moment::Toast);
     }
 
     #[test]

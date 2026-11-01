@@ -55,6 +55,8 @@ mod minimal;
 mod notch;
 mod rows;
 #[cfg(test)]
+mod panel_sheet;
+#[cfg(test)]
 mod sheet;
 mod switcher;
 mod text;
@@ -377,6 +379,7 @@ pub fn card(size: CardSize) -> layout::Card {
         CardSize::Regular => layout::Card::Regular,
         CardSize::Roomy => layout::Card::Roomy,
         CardSize::Wide => layout::Card::Wide,
+        CardSize::Gallery => layout::Card::Gallery,
     }
 }
 
@@ -437,6 +440,10 @@ fn fonts(dwrite: &IDWriteFactory, scale: f32) -> Result<Fonts> {
         card_code: wrapped(typography::CARD_CODE)?,
         card_label: f(typography::CARD_LABEL, false)?,
         card_title: wrapped(typography::CARD_TITLE)?,
+        card_tag: f(typography::CARD_TAG, false)?,
+        card_name: f(typography::CARD_NAME, false)?,
+        card_age: f(typography::CARD_AGE, true)?,
+        filter_letter: f(typography::FILTER_LETTER, false)?,
         tab: f(typography::TAB, false)?,
         tab_count: f(typography::TAB, true)?,
         search: f(typography::SEARCH, false)?,
