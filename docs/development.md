@@ -68,6 +68,7 @@ Setup options: `--no-autostart` (don't start with Windows), `--no-launch`, `--qu
 | `%APPDATA%\ReUI\shelf.json` | File shelf: `keep` (`removed` \| `restart` \| `day` \| `week`), `saved_cap_mb` |
 | `%LOCALAPPDATA%\ReUI\shelf\` | What the file shelf holds (`held.json`) and the copies it made (`files\<card>\`) |
 | `%LOCALAPPDATA%\ReUI\agents.json` | Each coding agent's last event (at most one write per 10 s) |
+| `%APPDATA%\Microsoft\Windows\Start Menu\Programs\ReUI.lnk` | The Start menu entry: made by the installer, or by Settings → General → Start menu entry for a copy run from the zip or a build folder (pointing at the hub next to Settings) |
 | `%APPDATA%\Microsoft\Windows\SendTo\ReUI shelf.lnk` | Explorer's Send to → ReUI shelf: runs `reui-hub.exe --shelf` with the selected files (the installer adds it, uninstall removes it) |
 | `%LOCALAPPDATA%\ReUI\bin\reui-bridge.exe` | The bridge the hooks run; the hub keeps it in step with itself when it starts |
 | `Documents\PowerShell\profile.ps1`, `Documents\WindowsPowerShell\profile.ps1` (only if it exists), `~\.bashrc` | When a terminal is connected (Settings → Coding agents → Terminals; `reui-bridge install powershell\|bash`): a block between `# >>> ReUI: long commands >>>` and `# <<< ReUI: long commands <<<` that runs `reui-bridge finished` after a command of 10 s or more. Disconnect removes exactly that block |
