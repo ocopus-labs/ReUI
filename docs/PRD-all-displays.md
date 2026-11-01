@@ -1,6 +1,6 @@
 # PRD: The island on all displays
 
-Status: proposed · Owner: Rohit · Extends Settings → General → Display ([PRD-behaviour.md](PRD-behaviour.md)) · Nov 1, 2026
+Status: decided (§9), M1 next · Owner: Rohit · Extends Settings → General → Display ([PRD-behaviour.md](PRD-behaviour.md)) · Nov 1, 2026
 
 **References:**
 - **macOS notch apps** (NotchNook, boring.notch, Atoll) offer "show on all displays" or "show on the display with the menu bar" / "the active display". Users with an external monitor and a closed or open laptop lid ask for the island on the screen they look at; users with two equal monitors ask for it on both (boring.notch's multi-display setting).
@@ -39,7 +39,7 @@ With two or more displays, the island is on one of them. "Where the pointer is" 
 | # | Scenario | Result |
 |---|---|---|
 | S1 | Two displays, All displays, music playing | the music pill on both, bars moving on the pointer's display (§5.6) |
-| S2 | A Claude permission arrives | the card opens by itself on both displays. Answer on either: both close (the hub retracts the moment) |
+| S2 | A Claude permission arrives, pointer on display 2 | the card opens by itself on display 2 only; display 1 shows the waiting pill ("Allow?"). Move the pointer to display 1: the open card goes with it (display 1 opens it, display 2 folds to the pill). Answered: gone from both |
 | S3 | Win+Alt+V with the pointer on display 2 | clipboard history opens on display 2 only, with the keyboard; display 1 keeps the pill |
 | S4 | Then the pointer moves to display 1 and Win+Alt+V again | display 2's panel closes, display 1's opens: one panel with the keyboard at a time |
 | S5 | Win+Alt+N (open what's waiting) | acts on the pointer's display's island (PRD keyboard island) |
@@ -86,6 +86,7 @@ With two or more displays, the island is on one of them. "Where the pointer is" 
   - A click gives the keys to the clicked island.
   - When one island takes the keyboard, the island that had it lets go: a summoned card closes, an engaged decision is released.
 - **Open and closed to modules:** a module hears `expanded` when the first island opens its card, and `collapsed` when the last one closes it. Example: System stats samples while its card is open anywhere. The process combines the islands' open cards before telling the hub, so the hub and modules don't change.
+- **An open card is where the pointer is.** Anything that opens by itself (a decision, an alert that expands) opens only on the pointer's display; the others show its pill. When the pointer settles on another display (`place::FOLLOW_DWELL_MS`), the open card moves there: that island opens it, the one it left folds back. Same for a summoned card. The keyboard goes along with it if it had it.
 - **Pinned and summoned:** these are per island. Bringing an activity forward on display 1 (the bubble, the wheel) doesn't change display 2.
 - **The tray icon:** one, owned by the process. Its menu works on all islands (Pause, Hide, Quit).
 
@@ -141,8 +142,8 @@ With two or more displays, the island is on one of them. "Where the pointer is" 
 - **Cost:** idle private memory with one display, then two, in All displays. Target: under 15 MB more per extra display. CPU at rest: 0 % over a minute, with music paused and with it playing.
 - **Regression:** the existing island tests, and one display in every mode behaves exactly as before.
 
-## 9. Open questions
+## 9. Decisions (Nov 1, 2026)
 
-1. **Decisions on every display, or on the pointer's only?** Proposed: every display, since you might be looking at either; answering on one closes both.
-2. **Should "Where the pointer is" become "All displays, opening on the pointer's"?** No: some people want one island, and the setting keeps both.
-3. **Per-display app rules:** is the app's display the right scope, or should a rule hide every island? Proposed: the app's display.
+1. **Open cards only where the pointer is.** A decision, or any card that opens by itself, opens on the pointer's display; the others show its pill, and the open card follows the pointer (§5.4).
+2. **"Where the pointer is" stays a separate choice** from All displays: some people want one island.
+3. **App rules apply to the app's display** only (§5.5).
