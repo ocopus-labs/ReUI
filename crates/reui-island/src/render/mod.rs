@@ -58,6 +58,8 @@ mod rows;
 mod panel_sheet;
 #[cfg(test)]
 mod sheet;
+#[cfg(test)]
+mod update_sheet;
 mod switcher;
 mod text;
 
