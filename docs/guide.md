@@ -29,6 +29,8 @@ The island hides while a game, video or presentation fills the screen (Settings 
 
 The island picks up a change within a moment; nothing else restarts.
 
+**Screen sharing** (Settings → General → Hide from screen shares): while your clipboard, a coding agent's request, a notification or the shelf is showing, the island is left out of screen shares, recordings and screenshots. You still see it; the people watching your Teams, Zoom or Meet share, an OBS recording or a Snipping Tool screenshot see what's underneath instead. Choose **Island** to keep the whole island out of them all the time, or **Nothing** to have them show it as you see it. It works for anything that captures through Windows, not for a camera pointed at the screen, and needs Windows 10 version 2004 or later.
+
 **Pause ReUI** (tray, or Settings → General) quiets the island and stops recording the clipboard for an hour. Permission requests from coding agents still show.
 
 **Win+Alt+I** hides the island until you press it again (or pick Tray → Show the island). Unlike a pause, everything keeps working: the clipboard is still recorded, timers still run, and permission requests and questions from coding agents still show; a card you open with its shortcut (Win+Alt+V, Win+Ctrl+T, Win+Alt+S) shows too. Change it in Settings → General → Hide the island. (Not Win+Alt+H: Windows uses that for voice typing.)
@@ -172,7 +174,7 @@ Take a screenshot (Win+Shift+S, PrtScn, or Win+PrtScn) and its thumbnail shows i
 
 ## Coding agents
 
-Claude Code, Codex and OpenCode show in the island only when they need you: a permission request you can answer with **Allow** / **Deny** (Claude Code and OpenCode also offer **Always**), a question from Claude Code or OpenCode, a plan or an MCP server's form from Claude Code, a question from Codex to answer in its terminal, or a turn that failed. While they think and run tools, the island stays with your music and timers. Each card starts with a quiet line saying which session it is (the project, what you asked, how long it has been working); a long command or an edit's changed lines show underneath, and the mouse wheel scrolls them. Anything that looks like a password or token shows as dots.
+Claude Code, Codex and OpenCode show in the island only when they need you: a permission request you can answer with **Allow** / **Deny** (Claude Code and OpenCode also offer **Always**), a question from Claude Code or OpenCode, a plan or an MCP server's form from Claude Code, a question from Codex to answer in its terminal, or a turn that failed. While they think and run tools, the island stays with your music and timers. Each card starts with a quiet line saying which session it is (the folder it's working in, with your home folder as `~` and a long path shortened in the middle, then what you asked and how long it has been working); a long command or an edit's changed lines show underneath, and the mouse wheel scrolls them. Anything that looks like a password or token shows as dots.
 
 - **Deny and say why:** Alt+click **Deny** (or Shift+Enter once the card has the keyboard) opens a field, "Tell Claude what to do instead"; Enter sends it with the deny.
 - **Questions:** click an option to answer. With several to pick, tick them and press **Next** (the last step says **Send**); ‹ on the top line goes back with your answers kept. Type in "Type an answer" for something else (OpenCode only offers it when the question allows it). Nothing reaches the agent until the last step. A long list scrolls with the wheel.

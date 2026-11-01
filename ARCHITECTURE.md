@@ -62,7 +62,9 @@ modules/
                    (state + queue, views, system: fullscreen/pause, agent processes, Connect);
                    other modules report moments with `onboarding::note`
   agent/           Claude Code / Codex / OpenCode: sessions tracked, published only when
-                   they need you; events (a hook event into sessions and moments), queue
+                   they need you; events (a hook event into sessions and moments), folder
+                   (the working folder the strip names: `~`, shortened in the middle; pure,
+                   tested), queue
                    (the moments in line, paged as one card; the async and blocking
                    PreToolUse duplicates made one), moments (a permission, question, plan,
                    MCP form or link: steps, answers, the field; Codex questions read-only),
@@ -170,6 +172,8 @@ desktop.rs         whether the desktop (not an app) is in front, for "Always sho
 intent.rs          reading the pointer: open on click or hover, the hover delay, the reveal
                    zone, when a just-appeared pill may take a click
 app_rules.rs       per-app rules: which applies to the app in front, its executable's name
+capture.rs         screen shares and recordings: the `captures` setting, and leaving them
+                   (WDA_EXCLUDEFROMCAPTURE) while a private card is in front
 quiet.rs           quieting a moment from itself: its menu, snoozes, writing a module's setting off
 drag_guard.rs      no hover intent while a drag from elsewhere passes over
 dragdrop/          OLE drag and drop for the file shelf: target.rs (the island's IDropTarget:

@@ -273,6 +273,7 @@ mod tests {
             minimal: Element::Art(Art::Image(ImageId(*i))),
             audio: None,
             quiet: None,
+            private: false,
             expanded: None,
         };
         Snapshot { activities: ids.iter().map(activity).collect() }

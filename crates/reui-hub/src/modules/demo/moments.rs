@@ -141,7 +141,7 @@ impl Moments {
         let text = |action: &str, label: &str, role| Button { action: action.into(), content: ButtonContent::Text(label.into()), role };
         let mark = Element::Art(Art::Glyph(GLYPH_TERMINAL));
         let elapsed = self.started.elapsed().as_secs() / 60 + 3;
-        let context = |prompt: &str| Some(Context { mark: mark.clone(), title: "ReUI".into(), facts: vec![prompt.into(), format!("{elapsed}m")] });
+        let context = |prompt: &str| Some(Context { mark: mark.clone(), title: r"~\code\ReUI".into(), facts: vec![prompt.into(), format!("{elapsed}m")] });
         let glyph = |g| Element::Glyph { glyph: g, tone: Tone::Accent };
         let (compact, expanded) = match kind {
             Kind::Permission => (

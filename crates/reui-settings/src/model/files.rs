@@ -112,6 +112,7 @@ impl File {
                 "hover_delay": 250,
                 "reveal_zone": "pill",
                 "monitor": "primary",
+                "captures": "private",
                 "check_updates": true,
                 "whats_new": true,
                 // The look, as reui_design::look::Appearance reads it.
@@ -201,6 +202,8 @@ pub const VISIBILITY: [&str; 3] = ["always", "when-active", "when-needed"];
 pub const OPEN_ON: [&str; 2] = ["click", "hover"];
 /// `reveal_zone`: how much of the top edge reveals a hidden island (docs/PRD-behaviour.md §4.2).
 pub const REVEAL_ZONE: [&str; 3] = ["off", "pill", "wide"];
+/// `captures` values (docs/PRD-share-privacy.md): what screen shares and recordings see.
+pub const CAPTURES: [&str; 3] = ["private", "island", "everything"];
 /// `app_rules` values (docs/PRD-behaviour.md §4.3): hide the island, or only decisions.
 pub const APP_RULES: [&str; 2] = ["hide", "decisions"];
 /// `hover_delay` choices in ms: Quick, Normal (`motion.delay.hover-intent`), Relaxed.
@@ -263,6 +266,13 @@ impl Files {
         let mut list: Vec<(String, u64)> = map.iter().filter_map(|(m, until)| Some((m.clone(), until.as_u64()?))).filter(|(_, until)| *until > now).collect();
         list.sort();
         list
+    }
+
+    /// Index into [`CAPTURES`]; private cards hidden when missing or unknown, as the island
+    /// reads it.
+    pub fn captures(&self) -> usize {
+        let doc = self.doc(File::Island);
+        doc.str("captures").and_then(|v| CAPTURES.iter().position(|x| *x == v)).unwrap_or(0)
     }
 
     /// Index into [`REVEAL_ZONE`]; Wide when missing or unknown, as the island reads it.

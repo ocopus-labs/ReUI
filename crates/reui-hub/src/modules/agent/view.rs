@@ -63,14 +63,14 @@ fn present(phase: &Phase, session: &Session) -> (Priority, Element, String) {
     }
 }
 
-/// The session strip: the agent's mark, the project, what you asked, how long the turn has
-/// run.
+/// The session strip: the agent's mark, where it works (the whole folder, so two projects
+/// with one name differ; PRD agent folder), what you asked, how long the turn has run.
 fn context(me: &Agentry, session: &Session) -> Context {
     let mut facts: Vec<String> = session.prompt.iter().cloned().collect();
     if let Some(started) = session.turn_started {
         facts.push(short_duration(started.elapsed()));
     }
-    Context { mark: me.mark.clone(), title: session.project.clone(), facts }
+    Context { mark: me.mark.clone(), title: session.folder.clone().unwrap_or_else(|| session.project.clone()), facts }
 }
 
 /// A card that needs you: the strip, then eyebrow → hero → detail in the roomy width.

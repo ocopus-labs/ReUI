@@ -53,6 +53,7 @@ impl Module for Notifications {
     }
 
     fn run(self: Box<Self>, mut ctx: ModuleContext) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        ctx.declare_private();
         Box::pin(async move { supervise("notifications", &mut ctx, |ctx| Box::pin(run(ctx))).await })
     }
 }
