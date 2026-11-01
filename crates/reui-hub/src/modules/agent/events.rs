@@ -17,6 +17,7 @@ use serde_json::Value;
 use tokio::time::Instant;
 
 use super::describe::short_tool_name;
+use super::folder::shown_folder;
 use super::terminal::Origin;
 use super::moments::Moment;
 use super::view::publish_moments;
@@ -51,6 +52,7 @@ pub(super) async fn on_hook(ctx: &ModuleContext, me: &Agentry, call: HookCall, s
     }
     let session = sessions.entry(session_id.clone()).or_insert_with(|| Session {
         project: project_name(str_field("cwd"), me.profile.display),
+        folder: None,
         prompt: None,
         transcript: None,
         phase: None,
@@ -62,6 +64,9 @@ pub(super) async fn on_hook(ctx: &ModuleContext, me: &Agentry, call: HookCall, s
         origin: None,
     });
     session.last_event = Instant::now();
+    if let Some(folder) = shown_folder(str_field("cwd"), &crate::paths::home()) {
+        session.folder = Some(folder);
+    }
     if let Some(origin) = Origin::of(&event) {
         session.origin = Some(origin);
     }

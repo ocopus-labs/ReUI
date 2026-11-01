@@ -60,7 +60,9 @@ modules/
                    (state + queue, views, system: fullscreen/pause, agent processes, Connect);
                    other modules report moments with `onboarding::note`
   agent/           Claude Code / Codex / OpenCode: sessions tracked, published only when
-                   they need you; events (a hook event into sessions and moments), queue
+                   they need you; events (a hook event into sessions and moments), folder
+                   (the working folder the strip names: `~`, shortened in the middle; pure,
+                   tested), queue
                    (the moments in line, paged as one card; the async and blocking
                    PreToolUse duplicates made one), moments (a permission, question, plan,
                    MCP form or link: steps, answers, the field; Codex questions read-only),
