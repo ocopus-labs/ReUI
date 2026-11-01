@@ -163,7 +163,9 @@ impl Pill {
     pub(super) fn left_places(&mut self) {
         self.idle.hover = None;
         self.idle.keyboard = false;
-        clipboard_keys::limit(clipboard_keys::Limit::All);
+        if clipboard_keys::held_by(self.hwnd) {
+            clipboard_keys::limit(clipboard_keys::Limit::All);
+        }
     }
 }
 

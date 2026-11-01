@@ -8,7 +8,6 @@
 //! Layer offsets are rounded to whole pixels: a fractional offset makes the compositor
 //! resample the content bitmaps, which visibly softens thin strokes and text.
 
-use std::sync::mpsc::Receiver;
 use std::time::Instant;
 
 use reui_design::look::{Appearance, Look};
@@ -32,7 +31,6 @@ use crate::features::clipboard_keys;
 use crate::features::level::Levels;
 use crate::features::music::{self, SeekHold, Swipe, Throttle};
 use crate::features::visualizer::Visualizer;
-use crate::ipc::Event;
 use crate::render::{self, Hit, Interaction, Renderer, Thumb};
 use crate::drag_guard::DragGuard;
 use crate::place::MonitorChoice;
@@ -42,7 +40,7 @@ mod drop;
 mod gate;
 mod idle;
 mod input;
-mod link;
+pub mod link;
 mod quiet;
 mod setup;
 mod summon;
@@ -53,6 +51,7 @@ mod visuals;
 
 use self::timers::*;
 pub use self::visibility::WM_LOOK;
+pub use self::link::drain;
 
 /// A press on a bar in the open card, followed with the mouse captured until release.
 enum Drag {
@@ -60,6 +59,13 @@ enum Drag {
     Seek { left: f32, right: f32, length: u64, ms: u64 },
     /// A slider: sends its value as it moves (throttled) and once more on release.
     Slider { left: f32, right: f32, action: String, value: f32, throttle: Throttle },
+}
+
+/// An open card moving to the island on the pointer's display (All displays).
+pub struct HandOff {
+    id: ActivityId,
+    summoned: bool,
+    engaged: bool,
 }
 
 /// A context menu entry: label, action, whether picking it closes a summoned panel, and
@@ -95,6 +101,11 @@ pub struct Pill {
     screen: RECT,
     /// A move to the pointer's display was asked for and hasn't happened yet.
     follow_pending: bool,
+    /// The display's device name, to match the island to its display after a change.
+    display: String,
+    /// The island on the pointer's display (or the only one): it alone opens cards by
+    /// itself, takes hotkeys and animates bars (docs/PRD-all-displays.md §5.4).
+    lead: bool,
     reduced_motion: bool,
     /// The lyric line last drawn, and the one before it with when it changed (while the
     /// column slides up).
@@ -241,7 +252,6 @@ pub struct Pill {
     captures: crate::capture::Captures,
     capture_excluded: Option<bool>,
     to_hub: UnboundedSender<ClientMsg>,
-    events: Receiver<Event>,
 }
 
 impl Pill {
@@ -272,6 +282,60 @@ impl Pill {
     /// Opens that card again on the rebuilt pill.
     pub fn reopen(&mut self, id: ActivityId) {
         self.focus(id);
+    }
+
+    /// The display this island is on (its device name).
+    pub fn display(&self) -> &str {
+        &self.display
+    }
+
+    pub fn set_display(&mut self, name: &str) {
+        self.display = name.to_string();
+    }
+
+    /// The display's area.
+    pub fn screen(&self) -> RECT {
+        self.screen
+    }
+
+    /// Becomes (or stops being) the island on the pointer's display.
+    pub fn set_lead(&mut self, lead: bool) {
+        if self.lead != lead {
+            self.lead = lead;
+            self.update_bars();
+        }
+    }
+
+    /// The card open here, for the island the pointer moved to: it opens there, and this
+    /// one folds once it has (`fold_after_hand_off`), so the module never sees it closed.
+    pub fn open_card(&self) -> Option<HandOff> {
+        if self.state != State::Expanded {
+            return None;
+        }
+        Some(HandOff { id: self.front()?.id.clone(), summoned: self.summoned, engaged: self.engaged })
+    }
+
+    /// Opens the card the pointer brought from another display, as it was there.
+    pub fn take_over(&mut self, card: HandOff) {
+        if card.summoned {
+            self.focus(card.id);
+        } else {
+            if self.front().map(|a| &a.id) != Some(&card.id) {
+                self.bring_forward(card.id);
+            }
+            self.set_state(State::Expanded);
+        }
+        if card.engaged {
+            self.engaged = true;
+            self.update_capture();
+            self.redraw_expanded();
+        }
+    }
+
+    /// Folds the card another island took over.
+    pub fn fold_after_hand_off(&mut self) {
+        self.engaged = false;
+        self.set_state(State::Compact);
     }
 
     fn front(&self) -> Option<&Activity> {
@@ -340,7 +404,7 @@ impl Pill {
         self.front_audio = self.front().and_then(|a| a.audio);
         self.minimal_audio = self.snapshot.activities.get(1).and_then(|a| a.audio);
         let front = self.snapshot.activities.first();
-        self.panel.sync(front.map(|a| &a.id), front.and_then(|a| a.expanded.as_ref()), clipboard_keys::captured(), self.renderer.look().inset());
+        self.panel.sync(front.map(|a| &a.id), front.and_then(|a| a.expanded.as_ref()), clipboard_keys::held_by(self.hwnd), self.renderer.look().inset());
         if new_list && self.panel.query.is_some() {
             // A new step's field starts from the module's text, not what was typed for the
             // last one.
@@ -381,7 +445,7 @@ impl Pill {
             Some((id, priority, expandable)) => {
                 let is_new = previous.as_ref().map(|(old, _)| old) != Some(&id);
                 let was_decision = previous.as_ref().is_some_and(|(_, p)| *p == Priority::Decision);
-                if is_new && priority == Priority::Decision && expandable && !self.hidden {
+                if is_new && priority == Priority::Decision && expandable && !self.hidden && self.lead {
                     // A decision opens itself so it's noticed, then folds back to compact (still
                     // pending) unless the user engages, so it never blocks the top of the screen.
                     self.set_state(State::Expanded);
@@ -426,7 +490,7 @@ impl Pill {
         };
         Interaction {
             query: self.panel.query.as_deref(),
-            keyboard: clipboard_keys::captured(),
+            keyboard: clipboard_keys::held_by(self.hwnd),
             selected: self.panel.selected,
             scroll: self.panel.scroll,
             scrub,
@@ -437,7 +501,7 @@ impl Pill {
             lyric: self.lyric_change.map(|(prev, at)| (prev, music::lyric_ease(at.elapsed().as_secs_f32() * 1000.0 / motion::lyrics::DURATION as f32))),
             level: self.front().and_then(|a| self.levels.value(&a.id, Instant::now())),
             block_scroll: self.block_scroll.min(self.block_max),
-            choice: self.choice_cursor.filter(|_| clipboard_keys::captured()),
+            choice: self.choice_cursor.filter(|_| clipboard_keys::held_by(self.hwnd)),
         }
     }
 

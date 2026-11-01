@@ -115,8 +115,9 @@ impl Pill {
         if !self.shown || self.reduced_motion {
             return (false, false);
         }
-        let front = self.front_bars == Some(true) && self.state != State::Idle;
-        let minimal = self.minimal_bars_live == Some(true) && self.minimal && self.state != State::Expanded;
+        // Only the pointer's island moves its bars (and captures audio): the others rest.
+        let front = self.lead && self.front_bars == Some(true) && self.state != State::Idle;
+        let minimal = self.lead && self.minimal_bars_live == Some(true) && self.minimal && self.state != State::Expanded;
         (front, minimal)
     }
 

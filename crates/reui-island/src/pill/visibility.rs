@@ -219,6 +219,7 @@ impl Pill {
             }
             self.window = w;
             self.monitor = placement.monitor;
+            self.display = placement.name.clone();
             self.screen = crate::place::monitor_rect(placement.monitor).unwrap_or(w);
         }
         self.follow_pending = false;

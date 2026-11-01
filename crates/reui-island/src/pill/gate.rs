@@ -104,7 +104,10 @@ impl Pill {
     /// The foreground changed to `fg`: the rule of the app now in front applies.
     pub(super) fn note_front_app(&mut self, fg: HWND) {
         let front = desktop::front(fg);
-        let exe = if front == desktop::Front::App { app_rules::exe_of(fg) } else { None };
+        // With an island on every display, an app's rule is for the island on its display.
+        let elsewhere = self.monitor_choice == crate::place::MonitorChoice::All
+            && unsafe { windows::Win32::Graphics::Gdi::MonitorFromWindow(fg, windows::Win32::Graphics::Gdi::MONITOR_DEFAULTTONEAREST) } != self.monitor;
+        let exe = if front == desktop::Front::App && !elsewhere { app_rules::exe_of(fg) } else { None };
         self.set_front_app(front, exe);
     }
 

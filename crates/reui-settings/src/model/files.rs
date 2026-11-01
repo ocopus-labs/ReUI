@@ -242,6 +242,8 @@ pub const KEEP: [&str; 4] = ["removed", "restart", "day", "week"];
 /// `monitor` values besides a display's device name (`\\.\DISPLAY2`).
 pub const MONITOR_PRIMARY: &str = "primary";
 pub const MONITOR_CURSOR: &str = "cursor";
+/// An island on every display (docs/PRD-all-displays.md).
+pub const MONITOR_ALL: &str = "all";
 
 pub struct Files {
     docs: Vec<Doc>,

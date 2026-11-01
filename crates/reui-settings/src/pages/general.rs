@@ -6,7 +6,7 @@ use serde_json::Value;
 use super::{button, flag, footed, group, head, Effect, Page};
 use crate::ui::icons;
 use reui_design::tokens::color::system as palette;
-use crate::model::files::{File, CAPTURES, HOVER_DELAYS, MONITOR_CURSOR, MONITOR_PRIMARY, OPEN_ON, REVEAL_ZONE, VISIBILITY};
+use crate::model::files::{File, CAPTURES, HOVER_DELAYS, MONITOR_ALL, MONITOR_CURSOR, MONITOR_PRIMARY, OPEN_ON, REVEAL_ZONE, VISIBILITY};
 use crate::start_menu::{self, StartMenu};
 use crate::state::State;
 use crate::system::{self, Startup};
@@ -109,6 +109,7 @@ fn monitor_label(value: &str) -> String {
     match value {
         MONITOR_PRIMARY => "Main display".into(),
         MONITOR_CURSOR => "Where the pointer is".into(),
+        MONITOR_ALL => "All displays".into(),
         device => system::monitor_label(device),
     }
 }
@@ -116,7 +117,7 @@ fn monitor_label(value: &str) -> String {
 /// The choices: main display, where the pointer is, then each display (and the saved one,
 /// if it isn't connected now).
 fn monitor_choices(state: &State) -> Vec<String> {
-    let mut list = vec![MONITOR_PRIMARY.to_string(), MONITOR_CURSOR.to_string()];
+    let mut list = vec![MONITOR_PRIMARY.to_string(), MONITOR_CURSOR.to_string(), MONITOR_ALL.to_string()];
     list.extend(state.monitors.iter().map(|(device, _)| device.clone()));
     let current = state.files.monitor();
     if !list.contains(&current) {
@@ -208,12 +209,14 @@ mod tests {
         state.monitors = vec![(r"\\.\DISPLAY1".into(), "Display 1".into()), (r"\\.\DISPLAY2".into(), "Display 2".into())];
         act(&mut state, &Target::new("monitor", 0), Act::Choose(1));
         assert_eq!(state.files.monitor(), "cursor");
-        act(&mut state, &Target::new("monitor", 0), Act::Choose(3));
+        act(&mut state, &Target::new("monitor", 0), Act::Choose(2));
+        assert_eq!((state.files.monitor().as_str(), monitor_label(&state.files.monitor()).as_str()), ("all", "All displays"));
+        act(&mut state, &Target::new("monitor", 0), Act::Choose(4));
         assert_eq!(state.files.monitor(), r"\\.\DISPLAY2");
         assert_eq!(monitor_label(&state.files.monitor()), "Display 2");
         // Unplugged: still listed, so the menu shows what's saved.
         state.monitors.clear();
-        assert_eq!(monitor_choices(&state), ["primary", "cursor", r"\\.\DISPLAY2"]);
+        assert_eq!(monitor_choices(&state), ["primary", "cursor", "all", r"\\.\DISPLAY2"]);
         act(&mut state, &Target::new("open_on", 0), Act::Choose(1));
         act(&mut state, &Target::new("hover_delay", 0), Act::Choose(0));
         assert_eq!((state.files.open_on(), state.files.hover_delay()), (1, 0));

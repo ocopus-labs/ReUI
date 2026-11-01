@@ -1,6 +1,6 @@
 # PRD: The island on all displays
 
-Status: decided (§9), M1 next · Owner: Rohit · Extends Settings → General → Display ([PRD-behaviour.md](PRD-behaviour.md)) · Nov 1, 2026
+Status: M1–M2 built; M3 (costs, plug and unplug checks, mixed scaling) next · Owner: Rohit · Extends Settings → General → Display ([PRD-behaviour.md](PRD-behaviour.md)) · Nov 1, 2026
 
 **References:**
 - **macOS notch apps** (NotchNook, boring.notch, Atoll) offer "show on all displays" or "show on the display with the menu bar" / "the active display". Users with an external monitor and a closed or open laptop lid ask for the island on the screen they look at; users with two equal monitors ask for it on both (boring.notch's multi-display setting).
