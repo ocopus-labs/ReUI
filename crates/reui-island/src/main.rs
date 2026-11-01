@@ -88,7 +88,9 @@ fn animations_enabled() -> bool {
 }
 
 thread_local! {
-    static PILL: RefCell<Option<Pill>> = const { RefCell::new(None) };
+    /// One island per window (docs/PRD-all-displays.md): today one; "All displays" adds a
+    /// window per display. The first owns the hub link and the tray icon.
+    static PILLS: RefCell<Vec<Pill>> = const { RefCell::new(Vec::new()) };
     static TASKBAR_CREATED: Cell<u32> = const { Cell::new(0) };
     /// Location changes of the foreground app's windows (a browser video going fullscreen
     /// keeps its window), re-registered for each new foreground process.
@@ -122,7 +124,7 @@ fn look_for(settings: &Settings) -> Look {
 /// app mode, the Windows accent changed and is in use).
 fn colors_changed(hwnd: HWND) {
     let mut current = None;
-    with_pill(|pill| current = Some(*pill.look().0));
+    with_pill(hwnd, |pill| current = Some(*pill.look().0));
     if current.is_some_and(|look| look != look_for(&Settings::load())) {
         place(hwnd, true);
     }
@@ -134,7 +136,7 @@ fn colors_changed(hwnd: HWND) {
 fn place(hwnd: HWND, relook: bool) {
     let mut choice = MonitorChoice::default();
     let mut look = Look::default();
-    with_pill(|pill| {
+    with_pill(hwnd, |pill| {
         choice = pill.monitor_choice().clone();
         look = *pill.look().0;
     });
@@ -144,7 +146,7 @@ fn place(hwnd: HWND, relook: bool) {
     let Some(placement) = place::current(&choice, &look) else { return };
     let mut moved = !relook;
     if moved {
-        with_pill(|pill| moved = pill.move_to(&placement));
+        with_pill(hwnd, |pill| moved = pill.move_to(&placement));
     }
     if !moved {
         rebuild(hwnd, &placement);
@@ -155,7 +157,7 @@ fn place(hwnd: HWND, relook: bool) {
 /// shows up on it (a new activity, a card a hotkey opens).
 fn follow_cursor(hwnd: HWND) {
     let mut follow = false;
-    with_pill(|pill| follow = *pill.monitor_choice() == MonitorChoice::Cursor && pill.can_move());
+    with_pill(hwnd, |pill| follow = *pill.monitor_choice() == MonitorChoice::Cursor && pill.can_move());
     if follow {
         place(hwnd, false);
     }
@@ -166,7 +168,12 @@ fn follow_cursor(hwnd: HWND) {
 /// new device and fonts cost), the window is resized, and the new one picks up where it
 /// left off.
 fn rebuild(hwnd: HWND, placement: &Placement) {
-    let Some(mut old) = PILL.with(|cell| cell.try_borrow_mut().ok().and_then(|mut slot| slot.take())) else { return };
+    let taken = PILLS.with(|cell| {
+        let mut pills = cell.try_borrow_mut().ok()?;
+        let at = pills.iter().position(|p| p.hwnd() == hwnd)?;
+        Some((at, pills.remove(at)))
+    });
+    let Some((at, mut old)) = taken else { return };
     eprintln!("island: rebuilding for scale {}", placement.scale);
     let reopen = old.reopen_after_move();
     let (to_hub, events, snapshot) = old.take_link();
@@ -189,7 +196,11 @@ fn rebuild(hwnd: HWND, placement: &Placement) {
             if let Some(id) = reopen {
                 pill.reopen(id);
             }
-            PILL.with(|cell| *cell.borrow_mut() = Some(pill));
+            PILLS.with(|cell| {
+                let mut pills = cell.borrow_mut();
+                let at = at.min(pills.len());
+                pills.insert(at, pill);
+            });
         }
         Err(e) => {
             // Without a pill there's nothing to show; the hub starts a fresh island.
@@ -199,10 +210,10 @@ fn rebuild(hwnd: HWND, placement: &Placement) {
     }
 }
 
-fn press_drag(lparam: LPARAM) -> bool {
+fn press_drag(hwnd: HWND, lparam: LPARAM) -> bool {
     let (x, y) = client_point(lparam);
     let mut pressed = false;
-    with_pill(|pill| pressed = pill.press_drag(x, y));
+    with_pill(hwnd, |pill| pressed = pill.press_drag(x, y));
     pressed
 }
 
@@ -210,13 +221,24 @@ fn client_point(lparam: LPARAM) -> (f32, f32) {
     ((lparam.0 & 0xffff) as i16 as f32, ((lparam.0 >> 16) & 0xffff) as i16 as f32)
 }
 
-/// Run `f` on the pill unless it's already borrowed (re-entrant window messages).
-fn with_pill(f: impl FnOnce(&mut Pill)) {
-    PILL.with(|cell| {
-        if let Ok(mut slot) = cell.try_borrow_mut() {
-            if let Some(pill) = slot.as_mut() {
+/// Run `f` on the island of window `hwnd` unless the islands are already borrowed
+/// (re-entrant window messages).
+fn with_pill(hwnd: HWND, f: impl FnOnce(&mut Pill)) {
+    PILLS.with(|cell| {
+        if let Ok(mut pills) = cell.try_borrow_mut() {
+            if let Some(pill) = pills.iter_mut().find(|p| p.hwnd() == hwnd) {
                 f(pill);
             }
+        }
+    });
+}
+
+/// Run `f` on every island (the mouse hook, the foreground app, settings): each decides
+/// for itself what it means on its display.
+fn each_pill(mut f: impl FnMut(&mut Pill)) {
+    PILLS.with(|cell| {
+        if let Ok(mut pills) = cell.try_borrow_mut() {
+            pills.iter_mut().for_each(&mut f);
         }
     });
 }
@@ -225,13 +247,13 @@ unsafe extern "system" fn mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) 
     if code >= 0 {
         let pt = (*(lparam.0 as *const MSLLHOOKSTRUCT)).pt;
         match wparam.0 as u32 {
-            WM_MOUSEMOVE => with_pill(|pill| pill.on_mouse_move(pt)),
-            WM_LBUTTONDOWN => with_pill(|pill| pill.on_mouse_down(pt, drag_guard::LEFT)),
-            WM_RBUTTONDOWN => with_pill(|pill| pill.on_mouse_down(pt, drag_guard::RIGHT)),
-            WM_MBUTTONDOWN => with_pill(|pill| pill.on_mouse_down(pt, drag_guard::MIDDLE)),
-            WM_LBUTTONUP => with_pill(|pill| pill.on_mouse_up(pt, drag_guard::LEFT)),
-            WM_RBUTTONUP => with_pill(|pill| pill.on_mouse_up(pt, drag_guard::RIGHT)),
-            WM_MBUTTONUP => with_pill(|pill| pill.on_mouse_up(pt, drag_guard::MIDDLE)),
+            WM_MOUSEMOVE => each_pill(|pill| pill.on_mouse_move(pt)),
+            WM_LBUTTONDOWN => each_pill(|pill| pill.on_mouse_down(pt, drag_guard::LEFT)),
+            WM_RBUTTONDOWN => each_pill(|pill| pill.on_mouse_down(pt, drag_guard::RIGHT)),
+            WM_MBUTTONDOWN => each_pill(|pill| pill.on_mouse_down(pt, drag_guard::MIDDLE)),
+            WM_LBUTTONUP => each_pill(|pill| pill.on_mouse_up(pt, drag_guard::LEFT)),
+            WM_RBUTTONUP => each_pill(|pill| pill.on_mouse_up(pt, drag_guard::RIGHT)),
+            WM_MBUTTONUP => each_pill(|pill| pill.on_mouse_up(pt, drag_guard::MIDDLE)),
             _ => {}
         }
     }
@@ -239,7 +261,7 @@ unsafe extern "system" fn mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) 
 }
 
 unsafe extern "system" fn foreground_hook(_: HWINEVENTHOOK, _: u32, hwnd: HWND, _: i32, _: i32, _: u32, _: u32) {
-    with_pill(|pill| pill.on_foreground(hwnd));
+    each_pill(|pill| pill.on_foreground(hwnd));
     watch_location(hwnd);
     recheck_fullscreen_soon();
 }
@@ -266,7 +288,7 @@ fn watch_location(fg: HWND) {
 unsafe extern "system" fn location_hook(_: HWINEVENTHOOK, _: u32, hwnd: HWND, object: i32, child: i32, _: u32, _: u32) {
     // The window itself (not its caret or a control), and only the one in front.
     if object == OBJID_WINDOW.0 && child == CHILDID_SELF as i32 && hwnd == GetForegroundWindow() {
-        with_pill(|pill| pill.recheck_fullscreen());
+        each_pill(|pill| pill.recheck_fullscreen());
         recheck_fullscreen_soon();
     }
 }
@@ -275,7 +297,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
     match msg {
         ipc::WM_HUB => {
             follow_cursor(hwnd);
-            with_pill(|pill| pill.drain_hub());
+            with_pill(hwnd, |pill| pill.drain_hub());
             LRESULT(0)
         }
         place::WM_PLACE => {
@@ -318,27 +340,27 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         #[cfg(debug_assertions)]
         WM_TEST_POINTER => {
             let (x, y) = client_point(lparam);
-            with_pill(|pill| pill.on_mouse_move(POINT { x: x as i32, y: y as i32 }));
+            with_pill(hwnd, |pill| pill.on_mouse_move(POINT { x: x as i32, y: y as i32 }));
             LRESULT(0)
         }
         #[cfg(debug_assertions)]
         WM_TEST_DROP => {
-            with_pill(|pill| pill.test_drag(wparam.0));
+            with_pill(hwnd, |pill| pill.test_drag(wparam.0));
             LRESULT(0)
         }
         #[cfg(debug_assertions)]
         WM_TEST_FOREGROUND => {
-            with_pill(|pill| pill.test_front_app(wparam.0 as u32));
+            with_pill(hwnd, |pill| pill.test_front_app(wparam.0 as u32));
             LRESULT(0)
         }
         #[cfg(debug_assertions)]
         WM_TEST_QUIET => {
             let (x, y) = client_point(lparam);
-            with_pill(|pill| pill.test_quiet(x, y, wparam.0));
+            with_pill(hwnd, |pill| pill.test_quiet(x, y, wparam.0));
             LRESULT(0)
         }
         clipboard_keys::WM_KEYS => {
-            with_pill(|pill| pill.on_keys());
+            with_pill(hwnd, |pill| pill.on_keys());
             LRESULT(0)
         }
         // A press on a bar in the open card drags it, with the mouse captured so the drag
@@ -347,14 +369,14 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         // pill) is watched with the mouse captured; moving past the drag distance starts
         // Windows' drag, outside the pill's borrow (the island's own drop target and
         // timers run during it).
-        WM_LBUTTONDOWN if press_drag(lparam) => {
+        WM_LBUTTONDOWN if press_drag(hwnd, lparam) => {
             SetCapture(hwnd);
             LRESULT(0)
         }
         WM_MOUSEMOVE => {
             let (x, y) = client_point(lparam);
             let mut out = None;
-            with_pill(|pill| out = pill.drag_out_due(x, y));
+            with_pill(hwnd, |pill| out = pill.drag_out_due(x, y));
             if let Some(drag) = out {
                 _ = ReleaseCapture();
                 dragdrop::drag_out(hwnd, &drag);
@@ -364,7 +386,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         WM_LBUTTONDOWN => {
             let (x, y) = client_point(lparam);
             let mut dragging = false;
-            with_pill(|pill| dragging = pill.on_press(x, y));
+            with_pill(hwnd, |pill| dragging = pill.on_press(x, y));
             if dragging {
                 SetCapture(hwnd);
             }
@@ -373,7 +395,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         WM_LBUTTONUP => {
             let (x, y) = client_point(lparam);
             let mut pressed = false;
-            with_pill(|pill| pressed = pill.release_press());
+            with_pill(hwnd, |pill| pressed = pill.release_press());
             if pressed {
                 _ = ReleaseCapture();
             }
@@ -381,7 +403,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             // The island never has focus, so Alt is read from the hardware state.
             let alt = GetAsyncKeyState(VK_MENU.0 as i32) as u16 & 0x8000 != 0;
             let (mut dragged, mut menu) = (false, None);
-            with_pill(|pill| {
+            with_pill(hwnd, |pill| {
                 dragged = pill.on_release(x, y);
                 if !dragged {
                     menu = pill.click_menu(x, y);
@@ -392,19 +414,19 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             } else if let Some(entries) = menu {
                 menus::card_menu(hwnd, entries);
             } else {
-                with_pill(|pill| pill.on_click(x, y, shift, alt));
+                with_pill(hwnd, |pill| pill.on_click(x, y, shift, alt));
             }
             LRESULT(0)
         }
         WM_CAPTURECHANGED => {
-            with_pill(|pill| pill.on_capture_lost());
+            with_pill(hwnd, |pill| pill.on_capture_lost());
             LRESULT(0)
         }
         WM_MOUSEWHEEL | WM_MOUSEHWHEEL => {
             let delta = ((wparam.0 >> 16) & 0xffff) as i16;
             // Wheel messages carry screen coordinates.
             let (x, y) = client_point(lparam);
-            with_pill(|pill| pill.on_wheel(delta, msg == WM_MOUSEHWHEEL, POINT { x: x as i32, y: y as i32 }));
+            with_pill(hwnd, |pill| pill.on_wheel(delta, msg == WM_MOUSEHWHEEL, POINT { x: x as i32, y: y as i32 }));
             LRESULT(0)
         }
         WM_RBUTTONUP => {
@@ -427,7 +449,7 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         }
         WM_TIMER if wparam.0 == TIMER_FULLSCREEN => {
             _ = KillTimer(Some(hwnd), TIMER_FULLSCREEN);
-            with_pill(|pill| pill.recheck_fullscreen());
+            each_pill(|pill| pill.recheck_fullscreen());
             LRESULT(0)
         }
         // The pointer settled on another display ("cursor" mode).
@@ -444,11 +466,11 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         WM_TIMER if wparam.0 == TIMER_SETTINGS => {
             _ = KillTimer(Some(hwnd), TIMER_SETTINGS);
             let settings = Settings::load();
-            with_pill(|pill| pill.apply_settings(settings));
+            each_pill(|pill| pill.apply_settings(settings.clone()));
             LRESULT(0)
         }
         WM_TIMER => {
-            with_pill(|pill| pill.on_timer(wparam.0));
+            with_pill(hwnd, |pill| pill.on_timer(wparam.0));
             LRESULT(0)
         }
         WM_DESTROY => {
@@ -513,12 +535,12 @@ fn main() -> Result<()> {
     let mut pill = Pill::new(hwnd, scale, window, monitor, !animations_enabled(), settings.visibility, settings.appearance, look, link.to_hub, link.events, None)?;
     pill.apply_settings(settings);
     settings::watch(hwnd);
-    PILL.with(|cell| *cell.borrow_mut() = Some(pill));
+    PILLS.with(|cell| cell.borrow_mut().push(pill));
     // Things dragged onto the island go to the file shelf (its drop target answers only
     // near the island, `pill/drop.rs`).
-    dragdrop::register(hwnd, Box::new(|event| {
+    dragdrop::register(hwnd, Box::new(move |event| {
         let mut taken = false;
-        with_pill(|pill| taken = pill.on_drop_event(event));
+        with_pill(hwnd, |pill| taken = pill.on_drop_event(event));
         taken
     }));
     unsafe { _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE) };
@@ -552,6 +574,6 @@ fn main() -> Result<()> {
             _ = UnhookWinEvent(hook);
         }
     }
-    PILL.with(|cell| cell.borrow_mut().take());
+    PILLS.with(|cell| cell.borrow_mut().clear());
     Ok(())
 }

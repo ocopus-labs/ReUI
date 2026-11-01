@@ -13,17 +13,17 @@ use crate::{tray, with_pill};
 /// quieted (`quiet.rs`).
 pub fn open_menu(hwnd: HWND, moment: Vec<MenuEntry>) {
     let (mut paused, mut hidden) = (false, false);
-    with_pill(|pill| (paused, hidden) = (pill.paused(), pill.hidden_by_user()));
+    with_pill(hwnd, |pill| (paused, hidden) = (pill.paused(), pill.hidden_by_user()));
     let labels: Vec<&str> = moment.iter().map(|(label, ..)| label.as_str()).collect();
-    with_pill(|pill| pill.menu_opened());
+    with_pill(hwnd, |pill| pill.menu_opened());
     let (picked, previous) = tray::menu(hwnd, paused, hidden, &labels);
-    with_pill(|pill| pill.menu_closed(previous));
+    with_pill(hwnd, |pill| pill.menu_closed(previous));
     match picked {
-        Some(tray::Command::Moment(i)) => with_pill(|pill| pill.quiet_pick(&moment[i].1)),
+        Some(tray::Command::Moment(i)) => with_pill(hwnd, |pill| pill.quiet_pick(&moment[i].1)),
         Some(tray::Command::Settings) => tray::open_settings(),
-        Some(tray::Command::TogglePause) => with_pill(|pill| pill.set_paused(!paused)),
-        Some(tray::Command::ToggleHidden) => with_pill(|pill| pill.toggle_hidden()),
-        Some(tray::Command::Module(module, action)) => with_pill(|pill| pill.command(module, &action)),
+        Some(tray::Command::TogglePause) => with_pill(hwnd, |pill| pill.set_paused(!paused)),
+        Some(tray::Command::ToggleHidden) => with_pill(hwnd, |pill| pill.toggle_hidden()),
+        Some(tray::Command::Module(module, action)) => with_pill(hwnd, |pill| pill.command(module, &action)),
         Some(tray::Command::Quit) => unsafe { _ = DestroyWindow(hwnd) },
         None => {}
     }
@@ -33,7 +33,7 @@ pub fn open_menu(hwnd: HWND, moment: Vec<MenuEntry>) {
 /// (led by the moment's quiet entries when it has them).
 pub fn right_click(hwnd: HWND, x: f32, y: f32) {
     let (mut entries, mut moment) = (None, Vec::new());
-    with_pill(|pill| {
+    with_pill(hwnd, |pill| {
         entries = pill.card_menu(x, y);
         if entries.is_none() {
             moment = pill.moment_menu(x, y);
@@ -50,10 +50,10 @@ pub fn card_menu(hwnd: HWND, entries: Vec<MenuEntry>) {
     if entries.is_empty() {
         return;
     }
-    with_pill(|pill| pill.menu_opened());
+    with_pill(hwnd, |pill| pill.menu_opened());
     let items: Vec<(&str, bool)> = entries.iter().map(|(label, _, _, checked)| (label.as_str(), *checked)).collect();
     let (picked, previous) = tray::item_menu(hwnd, &items);
-    with_pill(|pill| {
+    with_pill(hwnd, |pill| {
         pill.menu_closed(previous);
         if let Some(i) = picked {
             let (_, action, closes, _) = &entries[i];

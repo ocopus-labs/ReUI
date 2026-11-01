@@ -164,7 +164,9 @@ modules/
 ## `reui-island/src`
 
 ```
-main.rs            window class, message loop, mouse/foreground hooks
+main.rs            window class, message loop, mouse/foreground hooks; the islands, one per
+                   window (`with_pill(hwnd)` for a window's messages, `each_pill` for hooks
+                   and settings; docs/PRD-all-displays.md)
 ipc.rs             pipe client
 settings.rs        visibility modes, pause, the look's keys, watching settings.json
 menus.rs           the island's menu and a card's menus, opened outside the pill's borrow
