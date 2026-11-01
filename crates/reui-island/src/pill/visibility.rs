@@ -214,8 +214,16 @@ impl Pill {
         }
         if placement.window != self.window || placement.monitor != self.monitor {
             let w = placement.window;
+            let other_display = placement.monitor != self.monitor;
+            if other_display {
+                // Out of sight before the window jumps, so it doesn't flash at full size.
+                self.hidden_pose();
+            }
             unsafe {
                 _ = SetWindowPos(self.hwnd, Some(HWND_TOPMOST), w.left, w.top, w.right - w.left, w.bottom - w.top, SWP_NOACTIVATE | SWP_NOOWNERZORDER);
+            }
+            if other_display {
+                self.appear();
             }
             self.window = w;
             self.monitor = placement.monitor;
@@ -300,6 +308,32 @@ impl Pill {
         self.update_capture();
         self.update_clock_tick();
         self.sync_switcher();
+    }
+
+    /// Arrived on another display ("Where the pointer is"): emerges from its top edge as it
+    /// does when it shows, rather than popping up at full size. Nothing to do while hidden
+    /// (it emerges when it next shows) or with Windows' animation effects off.
+    pub fn appear(&mut self) {
+        if !self.shown || self.reduced_motion {
+            return;
+        }
+        self.hidden_pose();
+        self.intent.appeared_at = Some(std::time::Instant::now());
+        self.animate_presence(true);
+    }
+
+    /// Where the presence animation starts from: retracted into the top edge, transparent.
+    fn hidden_pose(&self) {
+        if !self.shown || self.reduced_motion {
+            return;
+        }
+        for property in [h!("Opacity"), h!("Scale"), h!("Offset")] {
+            _ = self.root.StopAnimation(property);
+        }
+        let from = motion::show::FROM_SCALE;
+        _ = self.root.SetOpacity(0.0);
+        _ = self.root.SetScale(Vector3::new(from, from, 1.0));
+        _ = self.root.SetOffset(Vector3::new(0.0, -motion::show::RISE * self.scale, 0.0));
     }
 
     /// Emerges from the top edge (slide down, scale up with a little overshoot, fade in) or

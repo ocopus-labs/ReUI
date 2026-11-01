@@ -278,6 +278,7 @@ fn rebuild(hwnd: HWND, placement: &Placement) {
     eprintln!("island: rebuilding for scale {}", placement.scale);
     let reopen = old.reopen_after_move();
     let lead = LEAD.get() == hwnd.0 as isize;
+    let other_display = old.display() != placement.name;
     old.give_back_open(true);
     let snapshot = old.take_snapshot();
     let places = old.places();
@@ -300,6 +301,10 @@ fn rebuild(hwnd: HWND, placement: &Placement) {
             pill.recheck_fullscreen();
             if let Some(id) = reopen {
                 pill.reopen(id);
+            }
+            // Rebuilt on another display (one at another scale): it emerges there too.
+            if other_display {
+                pill.appear();
             }
             PILLS.with_borrow_mut(|pills| {
                 let at = at.min(pills.len());
