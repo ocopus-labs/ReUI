@@ -39,7 +39,7 @@ The hub starts the island plus every module. `--no-agents`, `--no-media`, `--no-
 
 `pwsh -File tools/perf-sample.ps1 [-Seconds 60] [-NoBuild]` measures the README's Performance table: it builds release, runs the hub and island sandboxed (`REUI_CONFIG_DIR` in `%TEMP%`, the modules that react to the user's own input off) through three scenes (at rest, music playing with the card closed, the System stats card open) and prints CPU (share of the whole machine), mean private memory, and how busy the rest of the machine was meanwhile.
 
-`pwsh -File tools/windows-update-state.ps1 -Name <step>` saves what Windows Update says about restarts (every value under its registry keys, read-only, no admin) to `%TEMP%eui-wu-state\<step>.json`; `-Diff a,b` shows what changed between two. It's how [PRD-update-restart.md](PRD-update-restart.md) M1 finds where a scheduled restart's time is kept.
+`pwsh -File tools/windows-update-state.ps1 -Name <step>` saves what Windows Update says about restarts (every value under its registry keys, read-only, no admin) to `%TEMP%\reui-wu-state\<step>.json`; `-Diff a,b` shows what changed between two. It's how [PRD-update-restart.md](PRD-update-restart.md) M1 finds where a scheduled restart's time is kept.
 
 ## Settings' flags
 
