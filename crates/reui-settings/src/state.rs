@@ -24,6 +24,10 @@ pub struct State {
     pub agent_last: [Option<u64>; 3],
     /// What the last Connect / Disconnect said, per agent.
     pub agent_notes: [Option<(String, Tone)>; 3],
+    /// Whether each shell has ReUI's hook for long commands (`model::shells`), and what the
+    /// last Connect / Disconnect said.
+    pub shells: [bool; 2],
+    pub shell_notes: [Option<(String, Tone)>; 2],
     /// A write that failed for a reason other than an invalid file.
     pub write_error: Option<String>,
     /// The hotkey recorder is listening, for this file's shortcut.
@@ -67,6 +71,8 @@ impl State {
             agent_installed: [false; 3],
             agent_last: [None; 3],
             agent_notes: Default::default(),
+            shells: [false; 2],
+            shell_notes: Default::default(),
             write_error: None,
             recording: None,
             hotkey_note: None,
@@ -94,6 +100,7 @@ impl State {
         self.agents = Agent::ALL.map(|a| a.status(&self.paths));
         self.agent_installed = Agent::ALL.map(|a| a.installed(&self.paths));
         self.agent_last = Agent::ALL.map(|a| a.last_event(&self.paths));
+        self.shells = crate::model::shells::Shell::ALL.map(|s| s.connected(&self.paths));
         self.stats.sample();
     }
 

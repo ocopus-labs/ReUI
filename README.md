@@ -103,7 +103,7 @@ Your next meeting comes to the island in its last ten minutes, a ring counting d
 
 <img src="docs/images/agents.png" width="576" alt="Claude Code asking permission to run npm test, with Deny, Always and Allow">
 
-Claude Code, Codex and OpenCode show in the island only when they need you: a permission to allow or deny, a question, a plan or an MCP server's form, a turn that failed. Answer from the island and stay in your editor, or jump straight to the agent's terminal. Each card says which session is asking, shows the full command or the changed lines, and hides anything that looks like a secret. A card never takes your keyboard by itself, so a stray Enter can't allow anything. Connect an agent in Settings → Coding agents.
+Claude Code, Codex and OpenCode show in the island only when they need you: a permission to allow or deny, a question, a plan or an MCP server's form, a turn that failed. Answer from the island and stay in your editor, or jump straight to the agent's terminal. Each card says which session is asking, shows the full command or the changed lines, and hides anything that looks like a secret. A card never takes your keyboard by itself, so a stray Enter can't allow anything. Connect an agent in Settings → Coding agents. Connect PowerShell or Git Bash there too, and a build or test run that took more than 10 seconds tells you when it's done or failed, if you've moved to another window.
 
 ### Out of your way
 

@@ -196,6 +196,11 @@ pub fn send_test(bridge: &Path, agent: Agent, paths: &Paths) -> Result<String, S
     bridge_command(bridge, &["test", agent.arg()], paths)
 }
 
+/// Runs `reui-bridge install|uninstall powershell|bash`: a shell's hook for long commands.
+pub fn run_shell(bridge: &Path, shell: super::shells::Shell, connect: bool, paths: &Paths) -> Result<String, String> {
+    bridge_command(bridge, &[if connect { "install" } else { "uninstall" }, shell.arg()], paths)
+}
+
 fn bridge_command(bridge: &Path, args: &[&str], paths: &Paths) -> Result<String, String> {
     const CREATE_NO_WINDOW: u32 = 0x0800_0000;
     let mut command = Command::new(bridge);

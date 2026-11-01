@@ -20,7 +20,7 @@ const NOT_TERMINALS: [&str; 2] = ["explorer.exe", "dllhost.exe"];
 
 /// Where a session's terminal can be found.
 #[derive(Clone, Debug, Default, PartialEq)]
-pub(super) struct Origin {
+pub(crate) struct Origin {
     /// The bridge's ancestors, nearest first.
     pub parents: Vec<u32>,
     /// A visible console window the bridge shared (0: none).
@@ -29,7 +29,7 @@ pub(super) struct Origin {
 
 impl Origin {
     /// From a hook event, when the bridge sent its chain.
-    pub(super) fn of(event: &Value) -> Option<Self> {
+    pub(crate) fn of(event: &Value) -> Option<Self> {
         let parents: Vec<u32> = event.get("reui_parents")?.as_array()?.iter().filter_map(Value::as_u64).filter_map(|p| u32::try_from(p).ok()).collect();
         let console = event.get("reui_console").and_then(Value::as_i64).unwrap_or(0) as isize;
         (!parents.is_empty() || console != 0).then_some(Self { parents, console })
@@ -39,7 +39,7 @@ impl Origin {
 /// The window to bring forward: the first of `parents` with a window in `windows` ((hwnd,
 /// pid, exe), front first), skipping the Shell; else the console window when it's still
 /// there. Pure.
-pub(super) fn pick(origin: &Origin, windows: &[(isize, u32, Option<String>)]) -> Option<isize> {
+pub(crate) fn pick(origin: &Origin, windows: &[(isize, u32, Option<String>)]) -> Option<isize> {
     let terminal = |(_, _, exe): &&(isize, u32, Option<String>)| exe.as_deref().is_none_or(|e| !NOT_TERMINALS.contains(&e));
     origin
         .parents
@@ -48,8 +48,18 @@ pub(super) fn pick(origin: &Origin, windows: &[(isize, u32, Option<String>)]) ->
         .or_else(|| windows.iter().any(|(hwnd, ..)| *hwnd == origin.console && origin.console != 0).then_some(origin.console))
 }
 
+/// Whether the session's terminal is the window in front (you're already looking at it).
+/// Blocking (window enumeration).
+pub(crate) fn in_front(origin: &Origin) -> bool {
+    use crate::modules::media::player;
+
+    let front = unsafe { windows::Win32::UI::WindowsAndMessaging::GetForegroundWindow() }.0 as isize;
+    let windows: Vec<(isize, u32, Option<String>)> = player::app_windows().into_iter().map(|(hwnd, pid)| (hwnd.0 as isize, pid, player::exe_name(pid))).collect();
+    front != 0 && pick(origin, &windows) == Some(front)
+}
+
 /// Brings the session's terminal forward. Blocking (window enumeration); best effort.
-pub(super) fn open(origin: &Origin) {
+pub(crate) fn open(origin: &Origin) {
     use windows::Win32::Foundation::HWND;
 
     use crate::modules::media::player;

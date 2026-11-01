@@ -25,7 +25,7 @@ reui-settings.exe  the Settings window, opened from the tray; single instance
 | `reui-design` | `design/tokens.json` compiled into constants at build time (plus a `Palette` per theme); `look.rs` turns the Appearance settings into a `Look` (palette, radii, insets, the concentric maths) for the island and Settings' previews alike; `layout/` is the island's geometry over that `Look` (compact pill and bubble, the expanded header, every row, the card row, gauges and their sparklines, each card's width and height, the view switcher), pure and tested, which both lay out with; `icon.rs` turns `design/logo/reui.ico` into the icon resource every program's `build.rs` links in; `devices.rs` holds the device drawings' bytes (`design/assets/devices/`), one copy for the hub (which sends them) and Settings' Devices preview |
 | `reui-hub` | Feature modules and the hub that orders their activities |
 | `reui-island` | The island window: Windows.UI.Composition + Direct2D/DirectWrite |
-| `reui-bridge` | Hook entry point for coding agents (`main.rs`; `parents.rs`: its parent process chain, sent for "Open terminal", and the name of the program that ran it; `activity.rs`: `reui-bridge activity`, a script's live activity), the hook installer (`install.rs`), and the OpenCode plugin it installs (`opencode-plugin.js`, tested by `tools/opencode-plugin-test.mjs`) |
+| `reui-bridge` | Hook entry point for coding agents (`main.rs`; `parents.rs`: its parent process chain, sent for "Open terminal", and the name of the program that ran it; `activity.rs`: `reui-bridge activity`, a script's live activity; `finished.rs`: `reui-bridge finished`, a long terminal command), the hook installer (`install.rs`; `shells.rs`: PowerShell's and Bash's hook for long commands), and the OpenCode plugin it installs (`opencode-plugin.js`, tested by `tools/opencode-plugin-test.mjs`) |
 | `reui-settings` | The Settings window: Direct2D/DirectWrite in the island's design language, every setting in one place |
 
 ## `reui-hub/src`
@@ -106,6 +106,10 @@ modules/
                    hour and day, repeats' next time, on a given local clock; pure), list
                    (fire, snooze, done on the wall clock; pure), card (preview, the next
                    three, the fired card)
+  commands/        long terminal commands (docs/PRD-terminal-commands.md): a shell's hook runs
+                   `reui-bridge finished`; finished (the report and its card; pure, tested),
+                   mod (shown unless that terminal is in front, one card per terminal, Open
+                   terminal through agent/terminal.rs, gone after a while)
   activities/      live activities from scripts (`reui-bridge activity`): request (an
                    update's JSON read and checked; pure), board (merge, per-source caps,
                    linger, stale end, the pace of publishes; fake-clock tests), view,
@@ -268,7 +272,8 @@ pages/             one file per page (calendar.rs: links sealed with model/calen
                    welcome.rs is the three-step welcome (first run, Replay the tour);
                    quiet.rs is General's App rules and Snoozed groups
 model/             settings files (read, change a key, atomic write, keep unknown keys,
-                   never write an invalid file), hotkeys, coding agents (status, test)
+                   never write an invalid file), hotkeys, coding agents (status, test),
+                   shells (whether PowerShell / Bash have the long-command hook)
 updates/           GitHub releases: release.rs (JSON, checksums, notes; pure), net.rs
                    (WinHTTP GET/download, CNG SHA-256), mod.rs (check, download + verify,
                    run the setup, update.json, What's new), install.rs (--install-update:

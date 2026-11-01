@@ -54,7 +54,8 @@ mod queue;
 mod schema;
 mod settings;
 mod status;
-mod terminal;
+/// Also the terminal commands module's (`modules/commands`).
+pub(crate) mod terminal;
 mod usage;
 mod view;
 

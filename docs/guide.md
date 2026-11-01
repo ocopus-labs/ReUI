@@ -194,6 +194,8 @@ If Settings → Coding agents says Claude Code's questions need newer hooks, pre
 
 Settings → Coding agents → **Show sessions** brings back what they're working on ("While working"), and **Finished turns** adds a short moment when a turn ends.
 
+**Long terminal commands:** Settings → Coding agents → **Terminals** → Connect **PowerShell** or **Git Bash**. After that, a command that took 10 seconds or more (a build, a test run, an install) puts a card in the island when it finishes, if you've moved to another window meanwhile: ✓ **Done** or ✕ **Failed**, the command, its exit code and how long it took, and **Open terminal** to go back. A newer command in the same terminal replaces the card; a finished one goes after 5 minutes, a failed one after 30. Nothing shows for a terminal you're looking at. Connect adds a few lines to the end of your PowerShell profile (`Documents\PowerShell\profile.ps1`, and Windows PowerShell's `profile.ps1` if you already have one) or `~/.bashrc`; Disconnect takes exactly those out. New terminal windows pick it up. If you use a prompt theme (Oh My Posh, Starship), keep its line above ReUI's in the profile.
+
 Connect an agent in Settings → Coding agents (it shows the file that changes; Disconnect removes exactly what was added). Each agent's row says whether it's connected and when ReUI last heard from it; **Send test** makes the island confirm the connection. Codex asks you to trust new hooks once: run `/hooks` in Codex. OpenCode picks the plugin up on its next start; when ReUI updates, it updates the plugin too (restart OpenCode to load it).
 
 ## Updates

@@ -7,6 +7,7 @@ pub mod agent;
 pub mod calendar;
 mod audio;
 pub mod clipboard;
+pub mod commands;
 pub mod demo;
 pub mod destinations;
 pub mod devices;

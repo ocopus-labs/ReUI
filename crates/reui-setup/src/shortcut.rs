@@ -10,7 +10,7 @@ use windows::Win32::System::Com::StructuredStorage::PROPVARIANT;
 use windows::Win32::System::Com::{CoCreateInstance, CoInitializeEx, CoTaskMemAlloc, CoTaskMemFree, IPersistFile, CLSCTX_INPROC_SERVER, COINIT_APARTMENTTHREADED};
 use windows::Win32::System::Variant::VT_LPWSTR;
 use windows::Win32::UI::Shell::PropertiesSystem::IPropertyStore;
-use windows::Win32::UI::Shell::{FOLDERID_Programs, FOLDERID_SendTo, IShellLinkW, SHGetKnownFolderPath, ShellLink, KF_FLAG_DEFAULT};
+use windows::Win32::UI::Shell::{FOLDERID_Documents, FOLDERID_Programs, FOLDERID_SendTo, IShellLinkW, SHGetKnownFolderPath, ShellLink, KF_FLAG_DEFAULT};
 
 fn com() {
     // S_FALSE (already initialised) and RPC_E_CHANGED_MODE are both fine for our use.
@@ -20,6 +20,11 @@ fn com() {
 /// The current user's Start menu Programs folder.
 pub fn programs_folder() -> Option<PathBuf> {
     known_folder(&FOLDERID_Programs)
+}
+
+/// The current user's Documents folder (PowerShell's profiles).
+pub fn documents_folder() -> Option<PathBuf> {
+    known_folder(&FOLDERID_Documents)
 }
 
 /// The current user's Send to folder (`shell:sendto`).

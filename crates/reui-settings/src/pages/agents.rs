@@ -1,13 +1,15 @@
 //! Coding agents: per agent, its status (connected, when ReUI last heard from it, or that
 //! it isn't on this PC), Connect / Disconnect with the file that changes, and a test event;
 //! then what the island shows of sessions (`coding.json`), and live activities from
-//! scripts (`activities.json`), which come through the same bridge.
+//! scripts (`activities.json`), which come through the same bridge, and terminals: a card
+//! when a long command finishes (`model::shells`, docs/PRD-terminal-commands.md).
 
 use serde_json::Value;
 
-use super::{button, file_error, flag, group, intro, Effect, Page};
+use super::{button, file_error, flag, footed, group, intro, Effect, Page};
 use crate::model::agents::{self, Agent, Status};
 use crate::model::files::{File, SHOW_SESSIONS};
+use crate::model::shells::Shell;
 use crate::state::State;
 use crate::ui::{icons, Act, Block, Icon, Part, Role, Row, Target, Tone};
 
@@ -53,6 +55,24 @@ pub fn build(state: &State) -> Vec<Block> {
     blocks.push(group("In the island", vec![sessions, finished]));
     blocks.extend(file_error(state, File::Activities));
     blocks.push(group("Scripts", vec![flag(state, File::Activities, "enabled", "Activities from scripts", "reui-bridge activity shows a build, a backup or a download in the island")]));
+    let terminals = Shell::ALL
+        .iter()
+        .enumerate()
+        .map(|(i, &shell)| {
+            let file = state.paths.short(&shell.file(&state.paths));
+            let row = Row::new(&format!("shell:{}", shell.arg()), shell.name()).icon(icons::gray(icons::CODE));
+            let row = match state.shells[i] {
+                true => row.detail(format!("Connected · {file}")).tone(Tone::Positive).part(button("Disconnect", Role::Secondary)),
+                false => row.detail(format!("Adds a few lines to {file}")).part(button("Connect", Role::Secondary)),
+            };
+            let row = match &state.shell_notes[i] {
+                Some((note, tone)) => Row { detail: Some(note.clone()), tone: *tone, ..row },
+                None => row,
+            };
+            if bridge { row } else { Row { detail: Some("reui-bridge.exe isn't next to Settings".into()), tone: Tone::Warning, ..row.enabled(false) } }
+        })
+        .collect();
+    blocks.push(footed("Terminals", terminals, "A card when a command that took 10 seconds or more finishes while you're in another window."));
     blocks
 }
 
@@ -60,6 +80,23 @@ pub fn act(state: &mut State, target: &Target, act: Act) -> Effect {
     if let ("sessions", &Act::Choose(i)) = (target.row.as_str(), &act) {
         if let Some(value) = SHOW_SESSIONS.get(i) {
             state.set(File::Coding, "show_sessions", Value::String((*value).into()));
+        }
+        return Effect::None;
+    }
+    if let Some(arg) = target.row.strip_prefix("shell:") {
+        let Some(i) = Shell::ALL.iter().position(|s| s.arg() == arg) else { return Effect::None };
+        if act == Act::Press {
+            let shell = Shell::ALL[i];
+            let connect = !state.shells[i];
+            state.shell_notes[i] = match agents::bridge(&state.paths) {
+                None => Some(("reui-bridge.exe isn't next to Settings".to_string(), Tone::Warning)),
+                Some(bridge) => match agents::run_shell(&bridge, shell, connect, &state.paths) {
+                    Ok(_) if connect => Some(("Connected · new windows pick it up".to_string(), Tone::Positive)),
+                    Ok(_) => None,
+                    Err(e) => Some((e, Tone::Negative)),
+                },
+            };
+            state.shells[i] = shell.connected(&state.paths);
         }
         return Effect::None;
     }

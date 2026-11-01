@@ -53,6 +53,7 @@ A module declares it once, for all its activities (`ModuleContext::declare_priva
 | Clipboard | whatever was copied, in the panel and the toast |
 | Notifications | other apps' messages |
 | Shelf | held text, links and file names |
+| Terminal commands | a command line can hold a host, a path or a token |
 
 Not private: Now Playing (the song is on screen anyway), timers, reminders (short, typed by you; revisit if asked), calendar (a meeting's title, revisit if asked), devices, volume, stats, privacy indicators, downloads, screenshots, updates, demo, onboarding.
 

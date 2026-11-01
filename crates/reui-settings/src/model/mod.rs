@@ -6,3 +6,4 @@ pub mod calendar;
 pub mod doc;
 pub mod files;
 pub mod hotkey;
+pub mod shells;
