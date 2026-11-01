@@ -61,7 +61,7 @@ Windows decides to restart for updates. The warning is a toast that's easy to mi
 
 ### 4.2 Buttons
 
-- **Restart now** restarts the PC the way Start → Restart does (`ExitWindowsEx(EWX_REBOOT)` with the "planned, OS upgrade" reason; any user may). Pending updates are applied as the PC restarts (to verify in M2, §6). It asks once: the button turns into **Restart · sure?** for 3 s, so a stray click on a small pill can't close everything (*D1*).
+- **Restart now** does what Start → **Update and restart** does: `InitiateShutdownW` with `SHUTDOWN_RESTART | SHUTDOWN_INSTALL_UPDATES` (documented: "installs pending updates before restarting") and the "planned, OS upgrade" reason, after enabling `SeShutdownPrivilege`, which every interactive user holds. A plain `ExitWindowsEx` reboot is the separate **Restart** entry, which may leave the updates waiting. It asks once: the button turns into **Restart · sure?** for 3 s, so a stray click on a small pill can't close everything (*D1*).
 - **Schedule** opens `ms-settings:windowsupdate`, where "Schedule the restart" and "Pause updates" are, and dismisses the card.
 - Right-click → the usual quiet options (off, snooze for an hour) as for other moments.
 
@@ -75,7 +75,7 @@ Settings → General → **Windows Update restart**: on (default) / off. Nothing
   - `watch.rs`: the OS side on its own thread (`reui-wu-watch`). It waits on `RegNotifyChangeKeyValue` events for `…\Auto Update` and `…\WindowsUpdate\UX` (subtrees), re-armed before each read, plus a stop event. Each wake reads the few values in §References into a `State { needed, scheduled: Option<i64 ms>, predicted: Option<(i64, i64)>, active: (u8, u8) }` and sends it only when it changed.
   - `plan.rs`: pure logic with a fake clock and tests. From a `State` and now, it gives what to show and when to wake next (the brief, the 60- and 10-minute alerts, retract). The module sleeps on that one deadline: one timer, no tick.
   - `view.rs`: the views (meaning only: glyph, text, clock, buttons).
-  - `restart.rs`: enables `SeShutdownPrivilege` and calls `ExitWindowsEx`.
+  - `restart.rs`: enables `SeShutdownPrivilege` and calls `InitiateShutdownW` (restart, install updates).
   - `mod.rs`: the loop: watcher states, plan deadlines, actions.
 - **Protocol:** nothing new. Text, glyph, a counting-down `Clock`, buttons.
 - **Flag:** `--no-update-restart`.
@@ -85,7 +85,7 @@ Settings → General → **Windows Update restart**: on (default) / off. Nothing
 
 | | What | Done when |
 |---|---|---|
-| **M1** | **Spike:** find the scheduled restart's value. A script, `tools/windows-update-state.ps1`, dumps every value under the Windows Update keys to JSON. Run it before updates install, once they wait for a restart, after picking a time in "Schedule the restart", and as the restart nears. Diff the dumps. Also: does a plain `ExitWindowsEx` reboot apply the staged updates? | The values are known and written down here (§7), or the countdown is dropped and only "Restart needed" ships |
+| **M1** | **Spike:** find the scheduled restart's value. `tools/windows-update-state.ps1` saves every value under the Windows Update keys to JSON (read-only, no admin; `-Diff a,b` compares two). Run it once updates wait for a restart, after picking a time in "Schedule the restart", and as the restart nears, and diff each against the baseline (taken Nov 1, 2026 with nothing pending: 567 values). | The values are known and written down here (§7), or the countdown is dropped and only "Restart needed" ships |
 | **M2** | Watcher, plan, views, Restart now (with its confirm) and Schedule; the setting and the flag | Tests for `plan.rs`; on a PC with a pending restart, the brief shows once and Restart now restarts and applies the updates; 0 CPU at rest |
 | **M3** | The 60- and 10-minute alerts with the countdown | A scheduled restart shows the countdown in the island at T−60 and T−10, through Focus, and the card retracts if the restart is cancelled |
 
@@ -94,8 +94,8 @@ Each milestone is its own PR; `docs/guide.md`, the README feature list, `ARCHITE
 ## 7. Open questions and decisions
 
 - **Q1 (M1): where's the scheduled time?** Candidates: a value Windows adds to `UX\StateVariables` or `Orchestrator` once a restart is scheduled, against the smart scheduler's predicted window (which exists even when nothing is pending, so on its own it can't mean "scheduled").
-- **Q2 (M1):** does `ExitWindowsEx` apply staged updates the way "Update and restart" does? If not, Restart now opens Windows' own page instead.
-- **D1: confirm Restart now?** Proposal: yes, a second press within 3 s. Restarting closes every app.
-- **D2: after the brief, where does it stay?** Proposal: a line in the tray menu ("Restart for updates…") until the restart, with nothing in the resting pill. The alternative is a lasting minimal glyph beside the pill.
-- **D3: through a full-screen app?** Proposal: the 10-minute alert, yes; it's the last chance to save. The 60-minute one, no.
-- **D4: on by default?** Proposal: yes. It's silent unless a restart is coming.
+- **Q2, answered:** "Update and restart" is documented: `InitiateShutdownW`'s `SHUTDOWN_INSTALL_UPDATES` flag. Still to see once on a real pending restart (M2).
+- **D1: confirm Restart now?** Yes (proposal, in until Rohit says otherwise): a second press within 3 s. Restarting closes every app.
+- **D2: after the brief, where does it stay?** The proposal is a line in the tray menu ("Restart for updates…") until the restart, with nothing in the resting pill; the alternative is a lasting minimal glyph beside the pill. A tray line needs something new: modules can't add tray entries today (ReUI's own "Install update" entry is built into the tray). Until D2 is answered, M2 shows the brief once and M3's alerts do the rest.
+- **D3: through a full-screen app?** Yes for the 10-minute alert (proposal); it's the last chance to save. The 60-minute one, no.
+- **D4: on by default?** Yes (proposal). It's silent unless a restart is coming.

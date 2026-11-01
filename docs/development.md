@@ -39,6 +39,8 @@ The hub starts the island plus every module. `--no-agents`, `--no-media`, `--no-
 
 `pwsh -File tools/perf-sample.ps1 [-Seconds 60] [-NoBuild]` measures the README's Performance table: it builds release, runs the hub and island sandboxed (`REUI_CONFIG_DIR` in `%TEMP%`, the modules that react to the user's own input off) through three scenes (at rest, music playing with the card closed, the System stats card open) and prints CPU (share of the whole machine), mean private memory, and how busy the rest of the machine was meanwhile.
 
+`pwsh -File tools/windows-update-state.ps1 -Name <step>` saves what Windows Update says about restarts (every value under its registry keys, read-only, no admin) to `%TEMP%eui-wu-state\<step>.json`; `-Diff a,b` shows what changed between two. It's how [PRD-update-restart.md](PRD-update-restart.md) M1 finds where a scheduled restart's time is kept.
+
 ## Settings' flags
 
 `reui-settings.exe --page <name>` opens on a page (general, now, clipboard, osd, devices, downloads, coding, privacy, about); `--welcome` opens the three welcome steps; `--perf` logs frame times. `--shots <dir>` saves every page as a PNG without showing the window; add `--backdrop-color #RRGGBB` to put that colour on the island stages instead of your wallpaper, and `--stages` to save only the stages, each alone at 200 % (`stage-<moment>[-light|-notch].png`). `pwsh -File tools\readme-images.ps1` renders the README's pictures that way, sandboxed, into `docs/images`.
