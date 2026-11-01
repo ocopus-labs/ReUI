@@ -330,6 +330,7 @@ From the first r/SideProject post (Oct 31, 2026). One commenter each, so the ran
    - **Problem:** Windows schedules a restart and the warning is easy to miss; open work is lost.
    - **Approach:** to research: whether the pending-reboot state and its scheduled time can be read without polling (the Update Orchestrator's registry state and scheduled task, or `IUpdateSession`), and whether a restart can be postponed without admin. Show only when a restart is scheduled within the next few hours, as an alert, with **Restart now** and, if possible, **Later**.
    - **Effort:** M (unknown until researched).
+   - **Researched (Nov 1, 2026):** the restart-needed flag, active hours and Windows' predicted restart window are readable and watchable (`RegNotifyChangeKeyValue`) without admin; postponing isn't, so the card hands off to Windows' own Schedule page. Plan in [PRD-update-restart.md](PRD-update-restart.md).
 4. **A keyboard-only round trip**
    - **Problem:** open the island, read an item, act on it, close it and be back in the exact app and control you were in, without touching the mouse. "Predictable focus and an obvious Escape path would matter more to me than another indicator."
    - **Today:** cards opened by their shortcut (Win+Alt+V, Win+Ctrl+T, Win+Alt+S) take keys without taking focus, so Enter pastes where the caret was and Esc backs out. Missing: a shortcut that opens the island itself, and a keyboard way into a coding agent's card, which needs a click first (so a stray Enter in an editor can't allow anything).
