@@ -4,7 +4,7 @@
 
 use reui_design::tokens::motion;
 use reui_protocol::{
-    ActivityId, ClientMsg, ItemKey, Row, ACTION_COLLAPSED, ACTION_EXPANDED, ACTION_SEARCH, ACTION_SUBMIT,
+    ActivityId, ClientMsg, ItemKey, Priority, Row, ACTION_COLLAPSED, ACTION_EXPANDED, ACTION_SEARCH, ACTION_SUBMIT,
     ACTION_UNDO,
 };
 use windows::Win32::UI::WindowsAndMessaging::*;
@@ -48,6 +48,52 @@ impl Pill {
         }
     }
 
+    /// The island's open shortcut (docs/PRD-keyboard-island.md): what's waiting opens with
+    /// the keyboard on it. A decision first (as if clicked: Enter answers, Esc gives the
+    /// keys back); else the card in front, summoned as its own hotkey would; with nothing
+    /// in front, the row of places, walked with the arrows. Pressed again while the island
+    /// has the keyboard, it lets go as Esc would.
+    pub(super) fn open_from_shortcut(&mut self) {
+        if self.hidden {
+            return;
+        }
+        if clipboard_keys::captured() && (self.engaged || self.summoned || self.state == State::Places) {
+            return self.let_go();
+        }
+        let decision = self.snapshot.activities.iter().find(|a| a.priority == Priority::Decision && a.expanded.as_ref().is_some_and(choices::wants_keys)).map(|a| a.id.clone());
+        if let Some(id) = decision {
+            if self.front().map(|a| &a.id) != Some(&id) {
+                // As the switcher's waiting dot does: the place gives way to it.
+                self.summoned = false;
+                self.bring_forward(id);
+            }
+            self.set_state(State::Expanded);
+            // After the state: bringing it forward forgets an older card's keyboard.
+            self.engaged = true;
+            self.update_capture();
+            self.redraw_expanded();
+            return;
+        }
+        match self.front().filter(|a| a.expanded.is_some()).map(|a| a.id.clone()) {
+            Some(id) => self.focus(id),
+            None if self.idle() && !self.paused && !self.hidden_by_user => self.open_places_from_keyboard(),
+            None => {}
+        }
+    }
+
+    /// The open shortcut pressed again: as Esc.
+    fn let_go(&mut self) {
+        match self.state {
+            State::Places => self.set_state(State::Compact),
+            _ if self.summoned => self.set_state(State::Compact),
+            _ => {
+                self.engaged = false;
+                self.update_capture();
+                self.redraw_expanded();
+            }
+        }
+    }
+
     /// Closes a summoned card when the user clearly moved on.
     pub(super) fn dismiss_summoned(&mut self) {
         if self.summoned && self.state == State::Expanded {
@@ -75,16 +121,25 @@ impl Pill {
     /// field, a choice list) and was asked to: opened by its hotkey, or clicked. The hook is
     /// gone the moment that stops being true.
     pub(super) fn update_capture(&mut self) {
-        // The idle pill's row of places reads Esc alone, to close it.
+        // The idle pill's row of places reads Esc alone to close it, and the arrows and
+        // Enter too when the island's shortcut opened it. A summoned card with nothing to
+        // type into or pick still reads Esc, so Esc always closes what a shortcut opened.
         let places = self.state == State::Places && self.shown;
-        clipboard_keys::escape_only(places);
-        let want = places || self.state == State::Expanded && self.shown && (self.summoned || self.engaged) && self.front_view().is_some_and(choices::wants_keys);
+        let open = self.state == State::Expanded && self.shown && (self.summoned || self.engaged);
+        let keys = open && self.front_view().is_some_and(choices::wants_keys);
+        let escape = places || open && self.summoned && !keys;
+        clipboard_keys::limit(match () {
+            _ if places && self.idle.keyboard => clipboard_keys::Limit::Navigation,
+            _ if escape => clipboard_keys::Limit::Escape,
+            _ => clipboard_keys::Limit::All,
+        });
+        let want = escape || keys;
         if want == clipboard_keys::captured() {
             return;
         }
         if want {
             clipboard_keys::capture(self.hwnd);
-            if !clipboard_keys::captured() || places {
+            if !clipboard_keys::captured() || !keys {
                 return;
             }
             self.panel.query = Some(self.panel.module_query().unwrap_or_default().to_string());
@@ -133,7 +188,7 @@ impl Pill {
 
     fn on_key(&mut self, key: Key) {
         if self.state == State::Places {
-            return self.places_key();
+            return self.places_key(key);
         }
         if let Key::View(step) = key {
             return self.step_place(step);
@@ -141,7 +196,13 @@ impl Pill {
         if self.on_answer_key(key) {
             return;
         }
-        let Some(query) = self.panel.query.as_mut() else { return };
+        let Some(query) = self.panel.query.as_mut() else {
+            // A summoned card with no field (stats, music): Esc closes it.
+            if key == Key::Escape && self.summoned {
+                self.set_state(State::Compact);
+            }
+            return;
+        };
         let edited = match key {
             Key::Type(c) => {
                 query.push(c);

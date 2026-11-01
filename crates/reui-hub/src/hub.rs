@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
-use reui_protocol::{Activity, ActivityId, CompactView, Destination, Dropped, Element, ExpandedView, ImageId, Priority, Quiet, Rgb, Snapshot};
+use reui_protocol::{Activity, ActivityId, CompactView, Destination, Dropped, Element, ExpandedView, HubMsg, ImageId, Priority, Quiet, Rgb, Snapshot};
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
 
 /// How an activity presents itself; see the protocol for each presentation.
@@ -84,8 +84,9 @@ pub struct Hub {
     focus: broadcast::Sender<ActivityId>,
     /// The places surfaces may switch between (see `modules::destinations`).
     destinations: Arc<watch::Sender<Arc<Vec<Destination>>>>,
-    /// "Hide or show the island" requests (the hide shortcut); the island keeps the state.
-    hide: broadcast::Sender<()>,
+    /// Requests for the island itself, relayed as they are: `ToggleHidden` (the hide
+    /// shortcut; the island keeps the state) and `OpenIsland` (its open shortcut).
+    island: broadcast::Sender<HubMsg>,
 }
 
 impl Hub {
@@ -93,13 +94,13 @@ impl Hub {
         let (snapshots, _) = watch::channel(Arc::new(Snapshot::default()));
         let (focus, _) = broadcast::channel(8);
         let (destinations, _) = watch::channel(Arc::new(Vec::new()));
-        let (hide, _) = broadcast::channel(4);
-        Self { state: Arc::default(), snapshots: Arc::new(snapshots), focus, destinations: Arc::new(destinations), hide }
+        let (island, _) = broadcast::channel(4);
+        Self { state: Arc::default(), snapshots: Arc::new(snapshots), focus, destinations: Arc::new(destinations), island }
     }
 
-    /// Requests to hide or show the island, for the surfaces to relay.
-    pub fn subscribe_hide(&self) -> broadcast::Receiver<()> {
-        self.hide.subscribe()
+    /// Requests for the island (hide or show it, open it), for the surfaces to relay.
+    pub fn subscribe_island(&self) -> broadcast::Receiver<HubMsg> {
+        self.island.subscribe()
     }
 
     /// Latest snapshot plus change notifications. `watch` keeps only the newest value,
@@ -329,7 +330,12 @@ impl ModuleContext {
 
     /// Asks the island to hide until asked again, or to show again if it's hidden.
     pub fn toggle_hidden(&self) {
-        _ = self.hub.hide.send(());
+        _ = self.hub.island.send(HubMsg::ToggleHidden);
+    }
+
+    /// Asks the island to open what's waiting with the keyboard on it (its open shortcut).
+    pub fn open_island(&self) {
+        _ = self.hub.island.send(HubMsg::OpenIsland);
     }
 
     /// Sends another module a command, as the tray and the Settings window do (`reload`,

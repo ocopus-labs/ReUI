@@ -3,6 +3,7 @@
 //! clipboard shortcut, start with Windows. Finishing it any way (Done, Open Settings, the
 //! window's ✕) writes `welcomed: true` into `onboarding.json`, keeping its other keys.
 
+use crate::model::files::Shortcut;
 use serde_json::{json, Value};
 
 use super::{button, flag, group, Effect, Page};
@@ -52,7 +53,7 @@ pub fn build(page: Page, state: &State) -> Vec<Block> {
             blocks.push(next());
         }
         Page::WelcomeShortcut => {
-            blocks.push(group("", vec![super::shortcut::row(state, File::Clipboard, "")]));
+            blocks.push(group("", vec![super::shortcut::row(state, Shortcut::Clipboard, "")]));
             blocks.push(next());
         }
         _ => {
@@ -77,7 +78,7 @@ pub fn act(page: Page, state: &mut State, target: &Target, act: Act) -> Effect {
             let steps = Page::WELCOME;
             return Effect::Navigate(steps[(page.index() + 1).min(steps.len() - 1)]);
         }
-        ("hotkey", _, Act::Press) => return Effect::Record(File::Clipboard),
+        ("hotkey", _, Act::Press) => return Effect::Record(Shortcut::Clipboard),
         ("startup", _, Act::Press) => {
             let result = match state.startup {
                 Startup::DisabledInTaskManager => {

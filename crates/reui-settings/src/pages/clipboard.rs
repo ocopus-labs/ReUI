@@ -1,6 +1,7 @@
 //! Clipboard (`clipboard.json`): the history hotkey, how long history is kept, link
 //! previews, apps never recorded, and clearing it.
 
+use crate::model::files::Shortcut;
 use serde_json::Value;
 
 use super::{button, enable, flag, group, head, shortcut, Effect, Page};
@@ -18,7 +19,7 @@ pub fn build(state: &State) -> Vec<Block> {
     enable(&mut blocks, state, File::Clipboard, "Clipboard history");
     let ok = state.files.doc(File::Clipboard).error().is_none();
 
-    let hotkey_row = shortcut::row(state, File::Clipboard, "Opens clipboard history");
+    let hotkey_row = shortcut::row(state, Shortcut::Clipboard, "Opens clipboard history");
     let retention = Row::new("retention", "Keep history").detail("Pinned items are kept forever").part(Part::Dropdown { label: days(state.files.retention_days()) }).enabled(ok);
     let toast = flag(state, File::Clipboard, "copy_toast", "Copy confirmation", "A glimpse of what you copied in the island");
     blocks.push(group("History", vec![hotkey_row, retention, flag(state, File::Clipboard, "link_previews", "Link previews", "Fetches the title and image of copied links from their sites"), toast]));
@@ -76,7 +77,7 @@ pub fn menu(state: &mut State, target: &Target) -> Option<(Vec<String>, Option<u
 pub fn act(state: &mut State, target: &Target, act: Act) -> Effect {
     let row = target.row.as_str();
     match (row, target.part, act) {
-        ("hotkey", _, Act::Press) => return Effect::Record(File::Clipboard),
+        ("hotkey", _, Act::Press) => return Effect::Record(Shortcut::Clipboard),
         ("retention", _, Act::Choose(i)) => {
             if let Some(&d) = choices(state.files.retention_days()).get(i) {
                 state.set(File::Clipboard, "retention_days", Value::from(d));

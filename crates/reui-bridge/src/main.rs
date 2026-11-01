@@ -22,8 +22,9 @@
 //! `reui-bridge timer <length and label>` starts a timer (`10m tea`, `1h30`, `focus`,
 //! `stopwatch`), the same text the island's timer field takes, for scripts and agents; with
 //! nothing after it, it opens that field. `reui-bridge stats` opens the system stats card;
-//! `reui-bridge hide` hides the island until asked again, or shows it (its shortcut's path).
-//! Both exit 1 if ReUI isn't running.
+//! `reui-bridge hide` hides the island until asked again, or shows it (its shortcut's path);
+//! `reui-bridge open` opens what's waiting with the keyboard on it, as the island's open
+//! shortcut does. Each exits 1 if ReUI isn't running.
 //!
 //! `reui-bridge shelf <files…>` holds files on the island's shelf as one card (Explorer's Send to
 //! uses `reui-hub --shelf` instead: no console window). Exits 1 if ReUI isn't running.
@@ -84,6 +85,13 @@ fn main() {
                 1
             }
         },
+        Some("open") => match command("island", "open") {
+            Ok(()) => 0,
+            Err(e) => {
+                eprintln!("reui-bridge: {e}");
+                1
+            }
+        },
         Some("hide") => match command("island", "toggle-hidden") {
             Ok(()) => 0,
             Err(e) => {
@@ -117,7 +125,7 @@ fn main() {
             0
         }
         None => {
-            eprintln!("usage: reui-bridge <agent>  |  reui-bridge install|uninstall <agent> [--scope user|project|local] [--project DIR]  |  reui-bridge test <agent>  |  reui-bridge timer <length> [label]  |  reui-bridge stats  |  reui-bridge hide  |  reui-bridge shelf <file>...  |  reui-bridge activity <id> --title <text> [--detail <text>] [--progress 0.42] [--state running|done|failed] [--glyph <name>] [--done-after 5s] [--keep] [--end]  |  reui-bridge activity --json");
+            eprintln!("usage: reui-bridge <agent>  |  reui-bridge install|uninstall <agent> [--scope user|project|local] [--project DIR]  |  reui-bridge test <agent>  |  reui-bridge timer <length> [label]  |  reui-bridge stats  |  reui-bridge hide  |  reui-bridge open  |  reui-bridge shelf <file>...  |  reui-bridge activity <id> --title <text> [--detail <text>] [--progress 0.42] [--state running|done|failed] [--glyph <name>] [--done-after 5s] [--keep] [--end]  |  reui-bridge activity --json");
             0
         }
     };

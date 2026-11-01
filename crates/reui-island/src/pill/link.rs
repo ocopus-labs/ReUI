@@ -46,10 +46,12 @@ impl Pill {
         let mut focus = None;
         let mut places = None;
         let mut toggles = 0;
+        let mut opens = 0;
         while let Ok(event) = self.events.try_recv() {
             match event {
                 Event::Connected => eprintln!("island: connected to hub"),
                 Event::ToggleHidden => toggles += 1,
+                Event::OpenIsland => opens += 1,
                 Event::Focus(id) => focus = Some(id),
                 Event::Destinations(list) => places = Some(list),
                 // Kept encoded; the pill decodes what a snapshot shows (below).
@@ -94,6 +96,9 @@ impl Pill {
         // Pressed twice before we got to it: back where it was.
         if toggles % 2 == 1 {
             self.toggle_hidden();
+        }
+        if opens % 2 == 1 {
+            self.open_from_shortcut();
         }
     }
 }

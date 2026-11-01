@@ -2,6 +2,7 @@
 //! long it rings, reminders' sound, and focus sessions (lengths, auto-start, Do Not
 //! Disturb).
 
+use crate::model::files::Shortcut;
 use serde_json::Value;
 
 use super::{button, enable, flag, group, head, shortcut, Effect, Page};
@@ -29,7 +30,7 @@ pub fn build(state: &State) -> Vec<Block> {
     let f = &state.files;
 
     let start = Row::new("start", "Timer field").detail("A length, a time to be reminded, focus or stopwatch").icon(icons::timers()).part(button("Open", Role::Secondary)).enabled(ok);
-    blocks.push(group("", vec![shortcut::row(state, File::Timers, "Opens the timer field"), start]));
+    blocks.push(group("", vec![shortcut::row(state, Shortcut::Timers, "Opens the timer field"), start]));
 
     let sound = f.timer_sound();
     let sound_row = Row::new("sound", "Sound").part(Part::Dropdown { label: sound_name(&sound) }).part(button("Play", Role::Secondary)).enabled(ok);
@@ -112,7 +113,7 @@ pub fn menu(state: &mut State, target: &Target) -> Option<(Vec<String>, Option<u
 
 pub fn act(state: &mut State, target: &Target, act: Act) -> Effect {
     match (target.row.as_str(), target.part, act) {
-        ("hotkey", _, Act::Press) => return Effect::Record(File::Timers),
+        ("hotkey", _, Act::Press) => return Effect::Record(Shortcut::Timers),
         ("start", _, Act::Press) => state.tell_hub("timers", "launcher"),
         ("sound", 0, Act::Choose(i)) => {
             if let Some(name) = SOUNDS.get(i) {
