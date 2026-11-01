@@ -1,5 +1,6 @@
 //! Install and upgrade: one flow. Stop ReUI, put the new files in place atomically, then
-//! the Start entry, the Apps & features entry and start-with-Windows, then launch it.
+//! the Start entry, Send to → ReUI shelf, the Apps & features entry and start-with-Windows,
+//! then launch it.
 //! User data (`%APPDATA%\ReUI`) is never touched.
 
 use std::path::{Path, PathBuf};
@@ -38,7 +39,12 @@ pub fn install(layout: &Layout, files: &[File], setup_exe: &Path, options: Optio
     replace_all(dir, &staged)?;
 
     let hub = layout.exe(HUB_EXE);
-    crate::shortcut::create(&layout.shortcut(), &hub, APP, APP_USER_MODEL_ID).map_err(|e| format!("Couldn't create the Start menu entry: {e}"))?;
+    crate::shortcut::create(&layout.shortcut(), &hub, "", APP, APP_USER_MODEL_ID).map_err(|e| format!("Couldn't create the Start menu entry: {e}"))?;
+    // Explorer's Send to → ReUI shelf runs the hub, which has no console, with the files
+    // after `--shelf` (docs/PRD-send-to-shelf.md). Not worth failing an install over.
+    if let Err(e) = crate::shortcut::create(&layout.send_to_shortcut(), &hub, "--shelf", "Hold on ReUI's shelf", APP_USER_MODEL_ID) {
+        eprintln!("setup: couldn't add Send to → ReUI shelf: {e}");
+    }
     let size = total_size(files) + setup_bytes.as_ref().map_or(0, |b| b.len() as u64);
     registry::write_uninstall_entry(layout, size, &hub).map_err(|e| format!("Couldn't register ReUI in Apps & features: {e}"))?;
 

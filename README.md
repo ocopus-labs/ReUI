@@ -50,7 +50,7 @@ Whatever plays on your PC shows in the pill: Spotify, a browser, VLC, Media Play
 
 ### Shelf
 
-Drag files, an image, a link or some text to the top of the screen and the island holds them. Collect things from different folders and apps, then drag them back out into a mail, a chat or an upload page, one at a time or all at once. Files never move: the shelf only remembers where they are, and nothing leaves your PC.
+Drag files, an image, a link or some text to the top of the screen and the island holds them. Collect things from different folders and apps, then drag them back out into a mail, a chat or an upload page, one at a time or all at once. Or send them from Explorer's right-click menu: Send to → ReUI shelf. Files never move: the shelf only remembers where they are, and nothing leaves your PC.
 
 ### Volume and brightness
 

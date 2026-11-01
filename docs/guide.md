@@ -89,6 +89,8 @@ Drag files, folders, an image from a web page, a link or some text to the top of
 
 A file that was moved or deleted since says **Missing**. Settings → Shelf → **Keep held things**: until you remove them (the default), until ReUI restarts, a day or a week. Copies ReUI made itself never take more than 512 MB; the oldest go first.
 
+From Explorer without dragging: select files, right-click → **Send to** → **ReUI shelf** (on Windows 11, under **Show more options**, or Shift+right-click). They're held as one card and the shelf opens to show them. Scripts can do the same with `reui-bridge shelf <files>`.
+
 Windows doesn't allow drag and drop between an app run as administrator and one that isn't, so a drop from (or into) an elevated app does nothing.
 
 ## Volume and brightness
