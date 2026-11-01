@@ -151,11 +151,11 @@ fn place(hwnd: HWND, relook: bool) {
     }
 }
 
-/// In "cursor" mode, an island at rest moves to the pointer's display before what the hub
-/// sent shows up on it (a new activity, a card a hotkey opens).
+/// In "cursor" mode, the island moves to the pointer's display before what the hub sent
+/// shows up on it (a new activity, a card a hotkey opens).
 fn follow_cursor(hwnd: HWND) {
     let mut follow = false;
-    with_pill(|pill| follow = *pill.monitor_choice() == MonitorChoice::Cursor && pill.at_rest());
+    with_pill(|pill| follow = *pill.monitor_choice() == MonitorChoice::Cursor && pill.can_move());
     if follow {
         place(hwnd, false);
     }
@@ -168,6 +168,7 @@ fn follow_cursor(hwnd: HWND) {
 fn rebuild(hwnd: HWND, placement: &Placement) {
     let Some(mut old) = PILL.with(|cell| cell.try_borrow_mut().ok().and_then(|mut slot| slot.take())) else { return };
     eprintln!("island: rebuilding for scale {}", placement.scale);
+    let reopen = old.reopen_after_move();
     let (to_hub, events, snapshot) = old.take_link();
     let places = old.places();
     let gpu = old.into_gpu();
@@ -185,6 +186,9 @@ fn rebuild(hwnd: HWND, placement: &Placement) {
             pill.apply_settings(settings);
             pill.restore(snapshot, places);
             pill.recheck_fullscreen();
+            if let Some(id) = reopen {
+                pill.reopen(id);
+            }
             PILL.with(|cell| *cell.borrow_mut() = Some(pill));
         }
         Err(e) => {
@@ -424,6 +428,12 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         WM_TIMER if wparam.0 == TIMER_FULLSCREEN => {
             _ = KillTimer(Some(hwnd), TIMER_FULLSCREEN);
             with_pill(|pill| pill.recheck_fullscreen());
+            LRESULT(0)
+        }
+        // The pointer settled on another display ("cursor" mode).
+        WM_TIMER if wparam.0 == place::TIMER_FOLLOW => {
+            _ = KillTimer(Some(hwnd), wparam.0);
+            place(hwnd, false);
             LRESULT(0)
         }
         WM_TIMER if wparam.0 == TIMER_PLACE || wparam.0 == TIMER_PLACE_LATE => {

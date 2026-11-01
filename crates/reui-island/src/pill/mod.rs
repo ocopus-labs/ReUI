@@ -245,20 +245,33 @@ pub struct Pill {
 }
 
 impl Pill {
-    /// Nothing the user is in the middle of: no card open or peeking, the pointer not on
-    /// it, no drag, no menu, no row of places, no drop target. Only then may the island
-    /// move to another display under them.
-    pub fn at_rest(&self) -> bool {
-        matches!(self.state, State::Idle | State::Compact) && !self.hovered && !self.inside && self.drag.is_none() && !self.menu_open && !self.summoned
+    /// Whether the island may move to another display now. In every state (an open card,
+    /// a waiting request, a summoned panel go along with the pointer), except while a bar in
+    /// the card is being dragged or a menu is up: both belong to where they were opened.
+    pub fn can_move(&self) -> bool {
+        self.drag.is_none() && !self.menu_open
     }
 
     /// In "cursor" mode, asks for a move to the pointer's display when it's on another one
-    /// and the island is at rest (`place::should_follow`); `main.rs` moves it.
+    /// (`place::should_follow`). The move waits for the pointer to stay there a moment
+    /// (`place::FOLLOW_DWELL_MS`), so sweeping across a display on the way somewhere else
+    /// doesn't drag the island along; `main.rs` moves it then.
     pub(super) fn follow_pointer(&mut self, pointer: POINT) {
-        if !self.follow_pending && crate::place::should_follow(&self.monitor_choice, self.at_rest(), &self.screen, pointer) {
+        if !self.follow_pending && crate::place::should_follow(&self.monitor_choice, self.can_move(), &self.screen, pointer) {
             self.follow_pending = true;
-            unsafe { _ = PostMessageW(Some(self.hwnd), crate::place::WM_PLACE, WPARAM(0), LPARAM(0)) };
+            unsafe { SetTimer(Some(self.hwnd), crate::place::TIMER_FOLLOW, crate::place::FOLLOW_DWELL_MS, None) };
         }
+    }
+
+    /// The summoned card to open again after a move rebuilt the pill (a display at
+    /// another scale), so a panel in use goes along instead of closing.
+    pub fn reopen_after_move(&self) -> Option<ActivityId> {
+        (self.summoned && self.state == State::Expanded).then(|| self.pinned.clone()).flatten()
+    }
+
+    /// Opens that card again on the rebuilt pill.
+    pub fn reopen(&mut self, id: ActivityId) {
+        self.focus(id);
     }
 
     fn front(&self) -> Option<&Activity> {
@@ -503,8 +516,8 @@ impl Pill {
         self.sync_open();
         self.update_capture();
         self.sync_switcher();
-        // A card that closed while the pointer was on another display: the island goes
-        // there now that it's at rest ("cursor" mode).
+        // A menu or a drag held the island while the pointer went to another display: it
+        // goes there now ("cursor" mode).
         if matches!(state, State::Idle | State::Compact) {
             let mut pointer = POINT::default();
             if unsafe { GetCursorPos(&mut pointer) }.is_ok() {

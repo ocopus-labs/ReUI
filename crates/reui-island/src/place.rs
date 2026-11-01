@@ -1,8 +1,8 @@
 //! Where the island sits: which display (the `monitor` setting) and the window rectangle
 //! at that display's top centre, at its DPI. Re-run after resume, display and DPI changes,
 //! Explorer restarts and work-area changes (see `main.rs`), and, in "cursor" mode, whenever
-//! the pointer is on another display while the island is at rest ([`should_follow`]): when
-//! the pointer crosses over, when a card closes, when the hub sends something.
+//! the pointer settles on another display ([`should_follow`]), whatever the island is
+//! showing: an open card goes along.
 
 use windows::core::BOOL;
 use windows::Win32::Foundation::{LPARAM, POINT, RECT};
@@ -16,6 +16,11 @@ use reui_design::tokens::island;
 use reui_design::layout::switcher;
 
 use crate::render::{expanded_surface, COMPACT_MAX_WIDTH};
+
+/// The window timer for following the pointer to another display ("cursor" mode), and
+/// how long the pointer stays there first. Outside the pill's own timers (1–30).
+pub const TIMER_FOLLOW: usize = 104;
+pub const FOLLOW_DWELL_MS: u32 = 150;
 
 /// Posted to the island window to re-place it now (the `monitor` setting changed).
 pub const WM_PLACE: u32 = windows::Win32::UI::WindowsAndMessaging::WM_APP + 5;
@@ -82,11 +87,10 @@ pub fn choose(choice: &MonitorChoice, screens: &[Screen], cursor: POINT) -> Opti
 }
 
 /// Whether an island on the display `screen` should move to the pointer's: only in
-/// "cursor" mode, only while it's at rest (nothing open, hovered, dragged or showing a
-/// menu: never pulled out from under the user), and only once the pointer is off that
-/// display. Pure.
-pub fn should_follow(choice: &MonitorChoice, at_rest: bool, screen: &RECT, pointer: POINT) -> bool {
-    *choice == MonitorChoice::Cursor && at_rest && !contains(screen, pointer)
+/// "cursor" mode, only when it can move (`Pill::can_move`: not mid-drag, no menu up), and
+/// only once the pointer is off that display. Pure.
+pub fn should_follow(choice: &MonitorChoice, can_move: bool, screen: &RECT, pointer: POINT) -> bool {
+    *choice == MonitorChoice::Cursor && can_move && !contains(screen, pointer)
 }
 
 /// A display's whole area.
@@ -166,13 +170,13 @@ mod tests {
     }
 
     #[test]
-    fn the_island_follows_the_pointer_only_at_rest_and_only_off_its_display() {
+    fn the_island_follows_the_pointer_off_its_display_unless_held() {
         let left = RECT { left: -1920, top: 0, right: 0, bottom: 1080 };
         let on_right = POINT { x: 500, y: 300 };
         let on_left = POINT { x: -500, y: 300 };
         assert!(should_follow(&MonitorChoice::Cursor, true, &left, on_right));
         assert!(!should_follow(&MonitorChoice::Cursor, true, &left, on_left), "already there");
-        assert!(!should_follow(&MonitorChoice::Cursor, false, &left, on_right), "open, hovered or dragged: it stays");
+        assert!(!should_follow(&MonitorChoice::Cursor, false, &left, on_right), "a bar being dragged, a menu: it stays");
         assert!(!should_follow(&MonitorChoice::Primary, true, &left, on_right));
         assert!(!should_follow(&MonitorChoice::Named(r"\\.\DISPLAY2".into()), true, &left, on_right));
     }
