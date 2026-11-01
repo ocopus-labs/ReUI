@@ -91,6 +91,10 @@ pub struct Pill {
     appearance: Appearance,
     window: RECT,
     monitor: HMONITOR,
+    /// The display's area, to notice the pointer leaving it ("cursor" mode).
+    screen: RECT,
+    /// A move to the pointer's display was asked for and hasn't happened yet.
+    follow_pending: bool,
     reduced_motion: bool,
     /// The lyric line last drawn, and the one before it with when it changed (while the
     /// column slides up).
@@ -241,6 +245,22 @@ pub struct Pill {
 }
 
 impl Pill {
+    /// Nothing the user is in the middle of: no card open or peeking, the pointer not on
+    /// it, no drag, no menu, no row of places, no drop target. Only then may the island
+    /// move to another display under them.
+    pub fn at_rest(&self) -> bool {
+        matches!(self.state, State::Idle | State::Compact) && !self.hovered && !self.inside && self.drag.is_none() && !self.menu_open && !self.summoned
+    }
+
+    /// In "cursor" mode, asks for a move to the pointer's display when it's on another one
+    /// and the island is at rest (`place::should_follow`); `main.rs` moves it.
+    pub(super) fn follow_pointer(&mut self, pointer: POINT) {
+        if !self.follow_pending && crate::place::should_follow(&self.monitor_choice, self.at_rest(), &self.screen, pointer) {
+            self.follow_pending = true;
+            unsafe { _ = PostMessageW(Some(self.hwnd), crate::place::WM_PLACE, WPARAM(0), LPARAM(0)) };
+        }
+    }
+
     fn front(&self) -> Option<&Activity> {
         self.snapshot.activities.first()
     }
@@ -483,6 +503,14 @@ impl Pill {
         self.sync_open();
         self.update_capture();
         self.sync_switcher();
+        // A card that closed while the pointer was on another display: the island goes
+        // there now that it's at rest ("cursor" mode).
+        if matches!(state, State::Idle | State::Compact) {
+            let mut pointer = POINT::default();
+            if unsafe { GetCursorPos(&mut pointer) }.is_ok() {
+                self.follow_pointer(pointer);
+            }
+        }
     }
 
     /// Moves the keyboard cursor to choice `i`, scrolling the list to show it.

@@ -151,11 +151,11 @@ fn place(hwnd: HWND, relook: bool) {
     }
 }
 
-/// In "cursor" mode, an idle island moves to the pointer's display before an activity
-/// shows up on it.
+/// In "cursor" mode, an island at rest moves to the pointer's display before what the hub
+/// sent shows up on it (a new activity, a card a hotkey opens).
 fn follow_cursor(hwnd: HWND) {
     let mut follow = false;
-    with_pill(|pill| follow = *pill.monitor_choice() == MonitorChoice::Cursor && pill.idle());
+    with_pill(|pill| follow = *pill.monitor_choice() == MonitorChoice::Cursor && pill.at_rest());
     if follow {
         place(hwnd, false);
     }

@@ -214,7 +214,9 @@ impl Pill {
             }
             self.window = w;
             self.monitor = placement.monitor;
+            self.screen = crate::place::monitor_rect(placement.monitor).unwrap_or(w);
         }
+        self.follow_pending = false;
         self.raise();
         self.update_fullscreen(unsafe { GetForegroundWindow() });
         true

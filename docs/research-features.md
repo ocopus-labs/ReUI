@@ -340,6 +340,7 @@ From the first r/SideProject post (Oct 31, 2026). One commenter each, so the ran
    - **Today:** per-monitor DPI v2 and a display setting exist, but PLAN.md phase 0b still lists multi-monitor and DPI changes as open; none of it has been tried on real mixed-scaling hardware.
    - **Approach:** a test pass on two real displays, with a checklist in docs/development.md: sharp text and the right pill size on each, click-through and the hover strip in the right place, the open card not crossing onto the other display, the reveal edge on the island's display only. Fix what fails.
    - **Effort:** S to test, unknown to fix.
+   - **Found (Nov 1, 2026, two displays):** in *Where the pointer is* mode the island only moved when an activity appeared on an idle island, so with music playing it never left its display, and in the hidden modes the top-edge reveal only worked over that display. Fixed: it follows the pointer's display whenever it's at rest. Mixed scaling still untested.
 
 ### 5e. A sweep of Windows APIs (Oct 31, 2026)
 
