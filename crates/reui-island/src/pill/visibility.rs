@@ -195,6 +195,11 @@ impl Pill {
         (&self.look, &self.appearance)
     }
 
+    /// The window this island draws in.
+    pub fn hwnd(&self) -> HWND {
+        self.hwnd
+    }
+
     /// The `monitor` setting.
     pub fn monitor_choice(&self) -> &MonitorChoice {
         &self.monitor_choice
