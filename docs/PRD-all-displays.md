@@ -1,6 +1,6 @@
 # PRD: The island on all displays
 
-Status: M1–M2 built; M3 (costs, plug and unplug checks, mixed scaling) next · Owner: Rohit · Extends Settings → General → Display ([PRD-behaviour.md](PRD-behaviour.md)) · Nov 1, 2026
+Status: M1–M3 built; mixed scaling still to check on real hardware (§10) · Owner: Rohit · Extends Settings → General → Display ([PRD-behaviour.md](PRD-behaviour.md)) · Nov 1, 2026
 
 **References:**
 - **macOS notch apps** (NotchNook, boring.notch, Atoll) offer "show on all displays" or "show on the display with the menu bar" / "the active display". Users with an external monitor and a closed or open laptop lid ask for the island on the screen they look at; users with two equal monitors ask for it on both (boring.notch's multi-display setting).
@@ -147,3 +147,18 @@ With two or more displays, the island is on one of them. "Where the pointer is" 
 1. **Open cards only where the pointer is.** A decision, or any card that opens by itself, opens on the pointer's display; the others show its pill, and the open card follows the pointer (§5.4).
 2. **"Where the pointer is" stays a separate choice** from All displays: some people want one island.
 3. **App rules apply to the app's display** only (§5.5).
+
+## 10. Measured (Nov 1, 2026, this PC: 1920×1080 primary + 1280×768, both 100 %)
+
+| | Result |
+|---|---|
+| Private memory at rest, one display (Main display) | 59.9 MB |
+| Private memory at rest, All displays, two islands | 59.4–62.5 MB: an extra display costs ~0–3 MB (target < 15 MB). Before sharing the device (M2) it was 79 MB |
+| CPU at rest over 10 s | 0 ms, with one island and with two |
+| Unplug (Windows → PC screen only) | the second island goes within the settle delay; the first stays |
+| Plug back (Extend) | the second island comes back on its display |
+| Quit (tray) with two islands | clean exit: the hub logs "quit by the user" and quits too |
+| Mixed scaling | not yet tried: needs one display set to 125 % or 150 % |
+
+What made the difference: every island now shares the process's compositor, D3D/D2D device, factories and decoded images (`render::Device`, `pill::setup::shared`). An island only adds its own window target, surfaces and fonts. The shared objects are released before `main` returns (`pill::release_shared`); left to thread-local teardown they went after the dispatcher queue, and the island exited with an error the hub read as a crash.
+

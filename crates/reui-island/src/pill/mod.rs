@@ -52,6 +52,7 @@ mod visuals;
 use self::timers::*;
 pub use self::visibility::WM_LOOK;
 pub use self::link::drain;
+pub use self::setup::release_shared;
 
 /// A press on a bar in the open card, followed with the mouse captured until release.
 enum Drag {

@@ -60,10 +60,12 @@ impl Pill {
                 renderer.retarget(s, look)?;
                 (compositor, target, renderer)
             }
+            // Another island (another display): the process's compositor and device, its own
+            // window target, surfaces and fonts.
             None => {
-                let compositor = Compositor::new()?;
+                let (compositor, device) = shared()?;
                 let target = unsafe { compositor.cast::<ICompositorDesktopInterop>()?.CreateDesktopWindowTarget(hwnd, true)? };
-                let renderer = Renderer::new(&compositor, s, look)?;
+                let renderer = Renderer::new(&device, s, look)?;
                 (compositor, target, renderer)
             }
         };
@@ -427,6 +429,30 @@ impl Pill {
     pub fn into_gpu(self) -> Gpu {
         Gpu { compositor: self.compositor, target: self._target, renderer: self.renderer }
     }
+}
+
+thread_local! {
+    static SHARED: std::cell::RefCell<Option<(Compositor, crate::render::Device)>> = const { std::cell::RefCell::new(None) };
+}
+
+/// Lets go of the shared compositor and device while the dispatcher queue is still alive
+/// (`main` calls it on the way out): left to thread-local teardown they'd go after it, and
+/// the process would end with an error the hub reads as a crash.
+pub fn release_shared() {
+    SHARED.with_borrow_mut(|shared| *shared = None);
+}
+
+/// The compositor and graphics device every island draws with, made by the first.
+fn shared() -> Result<(Compositor, crate::render::Device)> {
+    SHARED.with_borrow_mut(|shared| {
+        if let Some(pair) = shared.as_ref() {
+            return Ok(pair.clone());
+        }
+        let compositor = Compositor::new()?;
+        let device = crate::render::Device::new(&compositor)?;
+        *shared = Some((compositor.clone(), device.clone()));
+        Ok((compositor, device))
+    })
 }
 
 /// The resting pill's size: a notch at rest is narrower and only about a menu bar tall.

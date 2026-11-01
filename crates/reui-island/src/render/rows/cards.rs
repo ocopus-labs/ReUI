@@ -49,7 +49,7 @@ impl Renderer {
                 let mut on_media = false;
                 match &item.preview {
                     Preview::Image(id) => {
-                        if matches!(self.images.get(id), Some(Decoded::Bitmap(_))) {
+                        if matches!(self.image(id), Some(Decoded::Bitmap(_))) {
                             // Behind transparent images, so the card keeps its shape.
                             well(self.pal().fill_tertiary)?;
                             self.cover(rt, *id, &shape)?;
@@ -97,7 +97,7 @@ impl Renderer {
                     Preview::Link { host, path, title, image, .. } => {
                         well(card_fill)?;
                         let mut text_top = body.1;
-                        if let Some(id) = image.filter(|id| matches!(self.images.get(id), Some(Decoded::Bitmap(_)))) {
+                        if let Some(id) = image.filter(|id| matches!(self.image(id), Some(Decoded::Bitmap(_)))) {
                             // The page image across the top, rounded only where the card is.
                             let media_b = y + ch * component::card::MEDIA;
                             unsafe { rt.PushAxisAlignedClip(&self.rect(l, y, r, media_b), D2D1_ANTIALIAS_MODE_ALIASED) };
@@ -208,7 +208,7 @@ impl Renderer {
         let (ink, quiet) = if on_media { (color::label::PRIMARY, color::label::PRIMARY.with_alpha(0.75)) } else { (self.pal().label_secondary, self.pal().label_tertiary) };
         let mut x = l + pad;
         let right = l + w - pad;
-        if let Some(id) = item.icon.filter(|id| matches!(self.images.get(id), Some(Decoded::Bitmap(_)))) {
+        if let Some(id) = item.icon.filter(|id| matches!(self.image(id), Some(Decoded::Bitmap(_)))) {
             let r = icon * 0.25 * self.scale;
             let shape = D2D1_ROUNDED_RECT { rect: self.rect(x, mid - icon / 2.0, x + icon, mid + icon / 2.0), radiusX: r, radiusY: r };
             self.cover(rt, id, &shape)?;

@@ -314,7 +314,10 @@ fn rebuild(hwnd: HWND, placement: &Placement) {
     }
 }
 
-/// Every island goes (the process is quitting).
+/// Every island goes (the process is quitting), then what they shared.
 pub fn clear() {
     PILLS.with_borrow_mut(|pills| pills.clear());
+    TO_HUB.with_borrow_mut(|t| *t = None);
+    EVENTS.with_borrow_mut(|e| *e = None);
+    pill::release_shared();
 }
