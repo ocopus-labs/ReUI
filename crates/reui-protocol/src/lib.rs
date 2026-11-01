@@ -214,6 +214,10 @@ pub enum ButtonRole {
 pub enum ButtonContent {
     Glyph(char),
     Text(String),
+    /// A glyph before a word ("🗑 Clear").
+    Labelled(char, String),
+    /// A number on its own (how many cards match), read-only when its action is empty.
+    Count(u32),
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
@@ -322,7 +326,8 @@ pub enum ItemKey {
     CtrlP,
 }
 
-/// A filter tab over a row of cards ("Links 12").
+/// A filter tab over a row of cards ("Links 12"), or an icon filter in a
+/// [`Row::Search`]'s `filters`.
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct Tab {
     pub label: String,
@@ -330,6 +335,11 @@ pub struct Tab {
     pub selected: bool,
     /// Sent back when the tab is chosen.
     pub action: String,
+    /// Shown instead of the label and count (the label still names it).
+    pub glyph: Option<char>,
+    /// Choices a click on the tab offers once it's selected (which collection an "All"
+    /// filter covers); a click on an unselected tab still sends `action`.
+    pub menu: Vec<MenuOption>,
 }
 
 /// A full-width row under the expanded header.
@@ -352,7 +362,9 @@ pub enum Row {
     /// current one. `buttons` sit at its right end (icon buttons). `placeholder` shows
     /// while it's empty ("Search" when `None`), `glyph` replaces the magnifier. Enter with
     /// no card to choose sends [`ACTION_SUBMIT`] (after the module has seen the text).
-    Search { query: String, buttons: Vec<Button>, placeholder: Option<String>, glyph: Option<char> },
+    /// `filters` sit before the field, on the same line: icon tabs over the cards under
+    /// it (Tab / Shift+Tab move between them as between [`Row::Tabs`]).
+    Search { query: String, buttons: Vec<Button>, placeholder: Option<String>, glyph: Option<char>, filters: Vec<Tab> },
     /// Filter tabs; Tab / Shift+Tab move between them.
     Tabs(Vec<Tab>),
     /// One quiet line, for when there's nothing else to show ("No matches").
@@ -540,6 +552,15 @@ impl Row {
         let elapsed = (now_unix_ms.saturating_sub(at_unix_ms) as f64 * f64::from(rate.max(0.0))) as u64;
         let advanced = if playing { position_ms + elapsed } else { position_ms };
         advanced.min(length_ms)
+    }
+
+    /// The filter tabs among `rows`: a [`Row::Tabs`], or a search field's `filters`.
+    pub fn tabs(rows: &[Row]) -> Option<&[Tab]> {
+        rows.iter().find_map(|r| match r {
+            Row::Tabs(tabs) => Some(tabs.as_slice()),
+            Row::Search { filters, .. } if !filters.is_empty() => Some(filters.as_slice()),
+            _ => None,
+        })
     }
 }
 

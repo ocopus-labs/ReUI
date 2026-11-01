@@ -2,7 +2,7 @@
 
 
 use reui_design::layout::{header, rows};
-use reui_design::tokens::{icon, opacity};
+use reui_design::tokens::{icon, opacity, space};
 use reui_design::Color;
 use reui_protocol::{Button, ButtonContent, ButtonRole, Pager};
 use windows::core::Result;
@@ -49,9 +49,34 @@ impl Renderer {
                 let line = self.fonts.button.style.line_height;
                 self.text(rt, t, &self.fonts.button, x, y + (h - line) / 2.0, w, Align::Center, ink)?;
             }
+            ButtonContent::Labelled(g, t) => {
+                let (size, line) = (self.fonts.icon_button.style.size, self.fonts.button.style.line_height);
+                let tw = self.text_width(t, &self.fonts.button)?;
+                let left = x + (w - (size + space::XS + tw)) / 2.0;
+                self.text(rt, &g.to_string(), &self.fonts.icon_button, left, y + (h - size) / 2.0, size, Align::Center, ink)?;
+                self.text(rt, t, &self.fonts.button, left + size + space::XS, y + (h - line) / 2.0, tw + 1.0, Align::Start, ink)?;
+            }
+            ButtonContent::Count(n) => {
+                let line = self.fonts.button.style.line_height;
+                self.text(rt, &n.to_string(), &self.fonts.button, x, y + (h - line) / 2.0, w, Align::Center, ink)?;
+            }
         }
-        hits.push(Hit::new(x, y, x + w, y + h, &button.action));
+        // A count without an action only says something.
+        if !button.action.is_empty() {
+            hits.push(Hit::new(x, y, x + w, y + h, &button.action));
+        }
         Ok(())
+    }
+
+    /// How wide a button's text is (a labelled one's glyph and gap included); `None` for a
+    /// glyph alone, which is square.
+    pub(in crate::render) fn content_width(&self, content: &ButtonContent) -> Result<Option<f32>> {
+        Ok(match content {
+            ButtonContent::Glyph(_) => None,
+            ButtonContent::Text(t) => Some(self.text_width(t, &self.fonts.button)?),
+            ButtonContent::Labelled(_, t) => Some(self.fonts.icon_button.style.size + space::XS + self.text_width(t, &self.fonts.button)?),
+            ButtonContent::Count(n) => Some(self.text_width(&n.to_string(), &self.fonts.button)?),
+        })
     }
 
     /// "‹ 1/2 ›" ending at `right`, centred on `mid`: quiet tabular text between two chevron
@@ -75,7 +100,7 @@ impl Renderer {
     }
 
     /// (fill, ink)
-    fn button_colors(&self, role: ButtonRole, accent: Color) -> (Option<Color>, Color) {
+    pub(in crate::render) fn button_colors(&self, role: ButtonRole, accent: Color) -> (Option<Color>, Color) {
         let p = self.pal();
         match role {
             ButtonRole::Primary => (Some(p.label_primary), p.label_on_accent),

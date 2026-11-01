@@ -224,3 +224,18 @@ fn an_agenda_lines_titles_up_and_keeps_the_where_to_its_share() {
     assert_eq!(none, 0.0);
     assert!((title + alone - (w - l.inset())).abs() < 0.01, "no where: the title takes the line");
 }
+
+#[test]
+fn icon_filters_sit_before_the_field() {
+    use super::rows::Filters;
+    use crate::tokens::component::search;
+    let none = Filters::new(20.0, 0);
+    assert_eq!((none.width(), none.field_left()), (0.0, 20.0));
+    let six = Filters::new(20.0, 6);
+    // Chips touch neither the capsule's ends nor each other, and the field follows the gap.
+    assert_eq!(six.chip_left(0), 20.0 + search::FILTER_INSET);
+    let last_right = six.chip_left(5) + Filters::chip();
+    assert_eq!(last_right + search::FILTER_INSET, 20.0 + six.width());
+    assert_eq!(six.field_left(), 20.0 + six.width() + search::FILTER_GAP);
+    assert_eq!(Filters::chip() + 2.0 * search::FILTER_INSET, search::HEIGHT);
+}

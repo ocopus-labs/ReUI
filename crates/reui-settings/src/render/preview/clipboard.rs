@@ -1,12 +1,14 @@
 //! Clipboard: the notch panel as it opens (`reui-hub/src/modules/clipboard/panel.rs`, drawn
-//! by `reui-island/src/render/rows/{search,tabs,cards}.rs`): the search field, the tabs,
-//! then the row of cards, four and a half across, the half card fading out at the edge.
+//! by `reui-island/src/render/rows/{search,cards}.rs`): the toolbar (type filters, the
+//! search field, the count, Clear, settings), then the row of cards, four and a half
+//! across, the half card fading out at the edge.
 //! The cards are what a clipboard holds without pictures: notes, a link, a colour, code.
 //! On a stage too narrow for the panel at the look's size, the toast a copy shows instead
 //! (`toast.rs`): the copy glyph and the text's first words, side by side.
 
-use reui_design::layout::cards::{tab_width, CardRow};
-use reui_design::layout::{compact, rows};
+use reui_design::layout::cards::CardRow;
+use reui_design::layout::rows::{self, Filters};
+use reui_design::layout::compact;
 use reui_design::look::{concentric, Look};
 use reui_design::tokens::{color, component, icon, island, space, typography};
 use reui_design::Color;
@@ -26,7 +28,12 @@ const CODE: char = '\u{E943}';
 const COPY: char = '\u{E8C8}';
 /// What the toast shows of the copied text (`toast.rs` cuts it at 24 characters).
 const GLIMPSE: &str = "Move the review to 3 PM…";
-const TABS: [(&str, &str, bool); 2] = [("History", "24", true), ("Pinned", "3", false)];
+/// The type filters (`panel.rs`): All (the history clock, chosen), text, links, images,
+/// files, colours.
+const FILTERS: [char; 6] = ['\u{E81C}', '\u{E8D2}', '\u{E71B}', '\u{EB9F}', '\u{E8A5}', '\u{E790}'];
+const CLEAR: char = '\u{E74D}';
+const SETTINGS: char = '\u{E713}';
+const COUNT: &str = "24";
 
 enum Face {
     /// Several lines: the first as a title, the rest quieter.
@@ -53,34 +60,50 @@ pub fn draw(p: &Painter, look: &Look) -> Result<()> {
     let pal = &look.palette;
     let inset = look.inset();
     let capsule = |h: f32| look.capsule(h, radius, inset);
-    let [search_y, tabs_y, cards_y] = stage::panel_rows(look);
-    // Search: the field across the panel, its glyph and placeholder.
+    let [search_y, cards_y] = stage::panel_rows(look);
+    // The toolbar, right to left as the island lays it out: the bare gear, Clear, the
+    // count; then the filters from the left, and the field between.
     let (sh, pad) = (component::search::HEIGHT, component::search::PADDING);
     let y = search_y;
-    p.fill(Rect::new(inset, y, w - inset, y + sh), capsule(sh), pal.fill_quaternary)?;
-    let g = icon::SEARCH;
-    glyph(p, SEARCH, g, inset + pad, y + (sh - g) / 2.0, pal.label_secondary)?;
-    let lh = typography::DETAIL.line_height;
-    line(p, "Search", IslandFont::Detail, rows::search_text_left(look), y + (sh - lh) / 2.0, 200.0, Align::Start, pal.label_tertiary)?;
-    // Tabs: the selected one filled, each with its count.
-    let y = tabs_y;
-    let th = component::tabs::HEIGHT;
-    let tpad = component::tabs::PADDING;
-    let mut x = inset;
-    let tab_lh = typography::TAB.line_height;
-    for (label, count, selected) in TABS {
-        let lw = p.measure(label, Font::Island(IslandFont::Tab));
-        let cw = p.measure(count, Font::Island(IslandFont::Tab));
-        let tw = tab_width(lw, cw);
-        let (ink, quiet) = if selected { (pal.label_primary, pal.label_secondary) } else { (pal.label_secondary, pal.label_tertiary) };
-        if selected {
-            p.fill(Rect::at(x, y, tw, th), capsule(th), pal.fill_secondary)?;
-        }
-        let top = y + (th - tab_lh) / 2.0;
-        line(p, label, IslandFont::Tab, x + tpad, top, lw + 1.0, Align::Start, ink)?;
-        p.figures(count, Font::Island(IslandFont::Tab), Rect::at(x + tw - tpad - cw, top, cw + 1.0, tab_lh), Align::Start, quiet)?;
-        x += tw + component::tabs::GAP;
+    let button_lh = typography::BUTTON.line_height;
+    let mut right = w - inset;
+    let gear = sh * 0.75;
+    right -= gear;
+    glyph(p, SETTINGS, icon::BUTTON, right + (gear - icon::BUTTON) / 2.0, y + (sh - icon::BUTTON) / 2.0, pal.label_primary)?;
+    right -= component::search::BUTTON_GAP;
+    let clear_text = p.measure("Clear", Font::Island(IslandFont::Button));
+    let clear_w = rows::search_button(Some(icon::BUTTON + space::XS + clear_text));
+    right -= clear_w;
+    p.fill(Rect::at(right, y, clear_w, sh), capsule(sh), pal.fill_secondary)?;
+    glyph(p, CLEAR, icon::BUTTON, right + pad, y + (sh - icon::BUTTON) / 2.0, pal.label_primary)?;
+    line(p, "Clear", IslandFont::Button, right + pad + icon::BUTTON + space::XS, y + (sh - button_lh) / 2.0, clear_text + 1.0, Align::Start, pal.label_primary)?;
+    right -= component::search::BUTTON_GAP;
+    let count_w = rows::search_button(Some(p.measure(COUNT, Font::Island(IslandFont::Button))));
+    right -= count_w;
+    p.fill(Rect::at(right, y, count_w, sh), capsule(sh), pal.fill_secondary)?;
+    line(p, COUNT, IslandFont::Button, right, y + (sh - button_lh) / 2.0, count_w, Align::Center, pal.label_primary)?;
+    right -= component::search::BUTTON_GAP;
+    let group = Filters::new(inset, FILTERS.len());
+    p.fill(Rect::at(inset, y, group.width(), sh), capsule(sh), pal.fill_quaternary)?;
+    let (chip, g) = (Filters::chip(), icon::SEARCH);
+    let chip_top = y + component::search::FILTER_INSET;
+    for (i, &filter) in FILTERS.iter().enumerate() {
+        let l = group.chip_left(i);
+        // The chosen one, as a primary button: the label's ink as the fill.
+        let ink = if i == 0 {
+            p.fill(Rect::at(l, chip_top, chip, chip), chip / 2.0, pal.label_primary)?;
+            pal.label_on_accent
+        } else {
+            pal.label_secondary
+        };
+        glyph(p, filter, g, l + (chip - g) / 2.0, chip_top + (chip - g) / 2.0, ink)?;
     }
+    let field = group.field_left();
+    p.fill(Rect::new(field, y, right, y + sh), capsule(sh), pal.fill_quaternary)?;
+    glyph(p, SEARCH, g, field + pad, y + (sh - g) / 2.0, pal.label_secondary)?;
+    let lh = typography::DETAIL.line_height;
+    let text_left = rows::search_text_after(field);
+    line(p, "Search history\u{2026}", IslandFont::Detail, text_left, y + (sh - lh) / 2.0, (right - pad - text_left).max(0.0), Align::Start, pal.label_tertiary)?;
     // Cards: four and a half across, clipped at the inset, fading out at the right.
     let y = cards_y;
     let row = CardRow::new(w, CARDS.len(), inset);

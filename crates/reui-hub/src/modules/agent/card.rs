@@ -33,7 +33,7 @@ pub(super) fn card(moment: &Moment, context: Context, position: (usize, usize), 
     let act = |verb: &str| format!("{id}:{verb}");
     let text = |verb: &str, label: &str, role| Button { action: act(verb), content: ButtonContent::Text(label.into()), role };
     let accent = |g| Element::Glyph { glyph: g, tone: Tone::Accent };
-    let field = |placeholder: String| Row::Search { query: moment.text.clone(), buttons: Vec::new(), placeholder: Some(placeholder), glyph: Some(GLYPH_ANSWER) };
+    let field = |placeholder: String| Row::Search { query: moment.text.clone(), buttons: Vec::new(), placeholder: Some(placeholder), glyph: Some(GLYPH_ANSWER), filters: Vec::new() };
     let (index, count) = position;
     let mut pager = (count > 1).then(|| Pager { index: index as u32, count: count as u32, prev: PAGE_PREV.into(), next: PAGE_NEXT.into() });
     let answerable = moment.answerable();
@@ -225,7 +225,7 @@ mod tests {
 
     fn buttons(view: &ExpandedView) -> Vec<(String, String)> {
         let Some(Row::Buttons(b)) = view.rows.last() else { panic!("no buttons") };
-        b.iter().map(|b| (b.action.clone(), match &b.content { ButtonContent::Text(t) => t.clone(), ButtonContent::Glyph(g) => g.to_string() })).collect()
+        b.iter().map(|b| (b.action.clone(), match &b.content { ButtonContent::Text(t) | ButtonContent::Labelled(_, t) => t.clone(), ButtonContent::Glyph(g) => g.to_string(), ButtonContent::Count(n) => n.to_string() })).collect()
     }
 
     #[test]

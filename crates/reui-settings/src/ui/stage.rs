@@ -79,11 +79,11 @@ pub fn context_height() -> f32 {
     header::context_height(component::art::COMPACT)
 }
 
-/// The clipboard panel's rows from the top: search, tabs, then the cards (no header).
-pub fn panel_rows(look: &Look) -> [f32; 3] {
+/// The clipboard panel's rows from the top: the toolbar, then the cards (no header).
+pub fn panel_rows(look: &Look) -> [f32; 2] {
     let mut y = look.inset();
-    let mut tops = [0.0; 3];
-    for (i, h) in [component::search::HEIGHT, component::tabs::HEIGHT, component::card::HEIGHT].into_iter().enumerate() {
+    let mut tops = [0.0; 2];
+    for (i, h) in [component::search::HEIGHT, component::card::HEIGHT].into_iter().enumerate() {
         y += row_gap(look, i, true);
         tops[i] = y;
         y += h;
@@ -101,7 +101,7 @@ pub fn size(moment: Moment, look: &Look) -> (f32, f32) {
         Moment::Toast => (island::idle::WIDTH, island::HEIGHT),
         Moment::Clipboard => {
             let card = Card::Wide;
-            let bottom = panel_rows(look)[2] + component::card::HEIGHT;
+            let bottom = panel_rows(look)[1] + component::card::HEIGHT;
             (card.width(), card.height(look, bottom + card.bottom(look, false)))
         }
         _ => card(moment, look).map_or((0.0, 0.0), |c| (c.card.width(), c.height)),
@@ -156,7 +156,7 @@ mod tests {
     #[test]
     fn each_moment_is_its_cards_size() {
         let l = Look::default();
-        assert_eq!(size(Moment::Clipboard, &l), (560.0, 20.0 + 32.0 + 12.0 + 28.0 + 12.0 + 116.0 + 20.0));
+        assert_eq!(size(Moment::Clipboard, &l), (560.0, 20.0 + 32.0 + 12.0 + 116.0 + 20.0));
         assert_eq!(size(Moment::Meter, &l), (200.0, island::HEIGHT));
         assert_eq!(size(Moment::Timer, &l).0, 420.0);
         assert_eq!(size(Moment::Permission, &l).0, 480.0);
