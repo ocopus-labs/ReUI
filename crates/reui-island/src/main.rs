@@ -7,6 +7,7 @@
 
 mod desktop;
 mod app_rules;
+mod capture;
 mod drag_guard;
 mod dragdrop;
 mod features;

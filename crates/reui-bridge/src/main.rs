@@ -26,6 +26,9 @@
 //! `reui-bridge open` opens what's waiting with the keyboard on it, as the island's open
 //! shortcut does. Each exits 1 if ReUI isn't running.
 //!
+//! `reui-bridge shelf <files…>` holds files on the island's shelf as one card (Explorer's Send to
+//! uses `reui-hub --shelf` instead: no console window). Exits 1 if ReUI isn't running.
+//!
 //! `reui-bridge activity <id> --title … [--progress …] [--state …]` shows a script's live
 //! activity, `--end` takes it away, `--json` reads one update per line from stdin
 //! (`activity.rs`); a reminder is `reui-bridge timer call mom at 6`. Exits 1 if ReUI isn't
@@ -103,6 +106,13 @@ fn main() {
                 1
             }
         },
+        Some("shelf") => match shelf(&args[1..]) {
+            Ok(()) => 0,
+            Err(e) => {
+                eprintln!("reui-bridge: {e}");
+                1
+            }
+        },
         Some("activity") => match activity(&args[1..]) {
             Ok(()) => 0,
             Err(e) => {
@@ -115,7 +125,7 @@ fn main() {
             0
         }
         None => {
-            eprintln!("usage: reui-bridge <agent>  |  reui-bridge install|uninstall <agent> [--scope user|project|local] [--project DIR]  |  reui-bridge test <agent>  |  reui-bridge timer <length> [label]  |  reui-bridge stats  |  reui-bridge hide  |  reui-bridge open  |  reui-bridge activity <id> --title <text> [--detail <text>] [--progress 0.42] [--state running|done|failed] [--glyph <name>] [--done-after 5s] [--keep] [--end]  |  reui-bridge activity --json");
+            eprintln!("usage: reui-bridge <agent>  |  reui-bridge install|uninstall <agent> [--scope user|project|local] [--project DIR]  |  reui-bridge test <agent>  |  reui-bridge timer <length> [label]  |  reui-bridge stats  |  reui-bridge hide  |  reui-bridge open  |  reui-bridge shelf <file>...  |  reui-bridge activity <id> --title <text> [--detail <text>] [--progress 0.42] [--state running|done|failed] [--glyph <name>] [--done-after 5s] [--keep] [--end]  |  reui-bridge activity --json");
             0
         }
     };
@@ -198,6 +208,26 @@ fn timer(text: &str) -> Result<(), String> {
     command("timers", &action)
 }
 
+/// `reui-bridge shelf <paths…>`: holds the files on the island's shelf as one card, as a
+/// drop of them would (docs/PRD-send-to-shelf.md). Relative paths are from the current
+/// folder; ones that don't exist are left out, and none left is an error.
+fn shelf(args: &[String]) -> Result<(), String> {
+    let paths = shelf_paths(args, |p| p.exists());
+    if paths.is_empty() {
+        return Err(if args.is_empty() { "nothing to put on the shelf".into() } else { "none of those files exist".into() });
+    }
+    command("shelf", &reui_protocol::shelf_add(&paths))
+}
+
+fn shelf_paths(args: &[String], exists: impl Fn(&std::path::Path) -> bool) -> Vec<String> {
+    args.iter()
+        .filter(|a| !a.trim().is_empty())
+        .filter_map(|a| std::path::absolute(a.trim()).ok())
+        .filter(|p| exists(p))
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect()
+}
+
 /// `reui-bridge activity …`: one update from the arguments, or (`--json`) one per line of
 /// stdin. The source is the program that ran the bridge unless `--source` names one.
 fn activity(args: &[String]) -> Result<(), String> {
@@ -258,6 +288,16 @@ async fn connect() -> Option<tokio::net::windows::named_pipe::NamedPipeClient> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn shelf_paths_are_full_and_only_what_exists() {
+        let args: Vec<String> = vec![r"C:\a.txt".into(), "".into(), r"C:\gone.txt".into(), "rel.txt".into()];
+        let paths = shelf_paths(&args, |p| !p.to_string_lossy().contains("gone"));
+        assert_eq!(paths.len(), 2);
+        assert_eq!(paths[0], r"C:\a.txt");
+        assert!(std::path::Path::new(&paths[1]).is_absolute() && paths[1].ends_with("rel.txt"));
+        assert!(shelf(&[]).is_err());
+    }
 
     #[test]
     fn the_test_event_is_named_and_never_waits() {

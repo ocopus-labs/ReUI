@@ -214,7 +214,7 @@ Its thesis: users aren't asking for more widgets but for an island that doesn't 
 | 16 | Stocks, crypto, sports scores | One ask (windhawk #4194, stocks) | Poor: network, filler | — | — |
 | 17 | Keyboard-layout HUD | No asks found. ModernFlyouts #584 is the opposite, a bug where the volume flyout popped on a layout switch | — | — | S |
 | 18 | App switcher, launcher, emoji / colour picker, calculator, converter, translator, dictionary | Few asks (Atoll #643; devcode90's Quick Lookup; Atoll's colour picker) | Windows or PowerToys cover them (Alt+Tab, Win+., Run, Color Picker) | — | — |
-| — | Windows Update status, printer progress, VPN status, battery health, world clocks, network speed | **No user asks found.** VPN shows up only as exuupery commenters wanting more clients toggled; network speed only as an Atoll stats tile | — | — | — |
+| — | Windows Update status, printer progress, VPN status, battery health, world clocks, network speed | **No user asks found** (one since launch for a Windows Update restart countdown, see 5d). VPN shows up only as exuupery commenters wanting more clients toggled; network speed only as an Atoll stats tile | — | — | — |
 
 ---
 
@@ -310,7 +310,94 @@ These come first because the most-reacted items on every tracker are behaviour a
 - **Virtual pets, teleprompter, Liquid Glass.** These are novelty or visual. The pet is in Dynamic Edge and windhawk #6664; the teleprompter is boring.notch #351. The UI is a placeholder until the design pass.
 - **App switcher, launcher, emoji or colour picker, calculator, converter, translator.** Windows and PowerToys already do these well (Alt+Tab, Win+., Run, Color Picker), and asks are rare.
 - **Teams/Zoom-specific call APIs.** Teams' local API was retired in 2026; build system-level mute (#2) instead.
-- **Windows Update, printer, VPN, battery-health, network-speed widgets.** No demand found.
+- **Printer, VPN, battery-health, network-speed widgets.** No demand found. (A Windows Update *restart countdown* is the exception now: 5d.)
+
+### 5d. Asked for after launch
+
+From the first r/SideProject post (Oct 31, 2026). One commenter each, so the ranking above still stands; these are cheap enough to take anyway.
+
+1. **The working folder on a permission card**
+   - **Problem:** the card names the project but not where it is, so two sessions in folders with the same name look alike, and a command that is safe in one folder isn't in another. "Approving from a small pill makes it easy to say yes to something I didn't read."
+   - **Today:** the top line shows only the folder's last part (`project_name` in `modules/agent/events.rs` cuts the agent's `cwd` down to it). The command shows in full and scrolls, edits show as a diff, and a card that arrives by itself never takes the keyboard.
+   - **Approach:** the full path in the card's detail (not the pill), shortened from the middle when long, home folder as `~`. Protocol: one more text element; no new kind.
+   - **Effort:** S.
+2. **A long terminal command finishing, with its exit code and how long it took**
+   - **Problem:** you start a build or test run, switch away, and don't know it's done or that it failed.
+   - **Today:** a script can say so itself (`reui-bridge activity … --state done|failed`), but nothing is automatic.
+   - **Approach:** an opt-in shell hook installed by Settings (PowerShell `prompt` wrapper, bash/zsh `PROMPT_COMMAND`/`precmd`) that calls `reui-bridge` only when a command ran longer than a threshold (default 10 s) and its terminal isn't in front. The card: the command, exit code as tone (done or failed), elapsed time, and a button to bring the terminal forward. Same fail-open rules as the agent hooks; uninstall removes exactly what was added.
+   - **Effort:** M.
+3. **Windows Update restart countdown**
+   - **Problem:** Windows schedules a restart and the warning is easy to miss; open work is lost.
+   - **Approach:** to research: whether the pending-reboot state and its scheduled time can be read without polling (the Update Orchestrator's registry state and scheduled task, or `IUpdateSession`), and whether a restart can be postponed without admin. Show only when a restart is scheduled within the next few hours, as an alert, with **Restart now** and, if possible, **Later**.
+   - **Effort:** M (unknown until researched).
+4. **A keyboard-only round trip**
+   - **Problem:** open the island, read an item, act on it, close it and be back in the exact app and control you were in, without touching the mouse. "Predictable focus and an obvious Escape path would matter more to me than another indicator."
+   - **Today:** cards opened by their shortcut (Win+Alt+V, Win+Ctrl+T, Win+Alt+S) take keys without taking focus, so Enter pastes where the caret was and Esc backs out. Missing: a shortcut that opens the island itself, and a keyboard way into a coding agent's card, which needs a click first (so a stray Enter in an editor can't allow anything).
+   - **Approach:** one shortcut (Settings → General) that opens whatever is waiting, a decision first, and gives that card the keyboard; pressed with nothing waiting, it opens the row of views. Esc always closes and hands the keys back to the app that had them. Test it as a round trip in the editor, the terminal, a browser field and an elevated app.
+   - **Effort:** S–M.
+5. **Multi-monitor with mixed scaling, tested**
+   - **Problem:** two displays at different scaling (say 100 % and 150 %), moving the island between them, plugging a display in or out, changing scaling while it runs.
+   - **Today:** per-monitor DPI v2 and a display setting exist, but PLAN.md phase 0b still lists multi-monitor and DPI changes as open; none of it has been tried on real mixed-scaling hardware.
+   - **Approach:** a test pass on two real displays, with a checklist in docs/development.md: sharp text and the right pill size on each, click-through and the hover strip in the right place, the open card not crossing onto the other display, the reveal edge on the island's display only. Fix what fails.
+   - **Effort:** S to test, unknown to fix.
+
+### 5e. A sweep of Windows APIs (Oct 31, 2026)
+
+Rohit's list of what Windows exposes to Rust through `windows-rs`, checked against the code. Most of it is already built; what's new is ranked below.
+
+**Already built**
+
+| API or idea | In ReUI |
+|---|---|
+| Other apps' notifications (`UserNotificationListener`) | Prototype module, off by default. Works unpackaged except the change event; WNF count as the trigger ([PRD-notifications.md](PRD-notifications.md)) |
+| Mic and camera in use (ConsentStore) | Built, plus screen capture and location (`modules/privacy`) |
+| Fullscreen hide (`SHQueryUserNotificationState`) | Built, including borderless games and browser video |
+| Do Not Disturb through WNF | Read and toggled (`timers/dnd.rs`) |
+| Next meeting with Join | ICS links and Windows' store; Microsoft Graph is calendar M2 |
+| Lock, unlock and power events | `system_events/window.rs` |
+| Per-app volume, output switching, visualizer | Now Playing and the volume mixer |
+| Volume and brightness HUD | System OSD |
+| Offline OCR (`Windows.Media.Ocr`) | Copied images are searchable by their text (`clipboard/ocr.rs`) |
+| Per-process GPU ("GPU Engine" counters) | Partly: the stats card names the busiest engine |
+| Bluetooth battery | Devices |
+| Caps and Num Lock | System OSD M4 |
+| Command and diff preview on a permission | Agent moments: full command, diff, deny with a message |
+| Jump to the agent's window | Agent moments' Open terminal |
+| Windows' accent colour; tint from album art | Appearance → Accent (Windows accent or ReUI blue); Now Playing's tinted card |
+| Display and DPI changes; follow the cursor across monitors | `WM_DISPLAYCHANGE` and `WM_DPICHANGED` in the island; Monitor: primary, cursor or a chosen display. Real mixed-scaling hardware is untested (§5d #5) |
+
+**New, in order**
+
+1. **Hidden from screen shares** (`SetWindowDisplayAffinity(WDA_EXCLUDEFROMCAPTURE)`, Windows 10 2004+)
+   - **Problem:** a permission card, a clipboard item or a notification shows up in a Teams call or a recording.
+   - **Approach:** the island excludes itself from capture while a card that can hold private text is open (agent moments, clipboard, notifications), and only then: a person sharing their screen still sees the island, the people watching don't. The privacy module already knows when the screen is being captured, so the island can also stay closed then. A setting: *While sharing: hide private cards* (default) / *hide the island* / *show everything*. The affinity is per window and can be switched at any time; it covers capture through Windows (Teams, Zoom, OBS, Snipping Tool), not a camera pointed at the screen. Leave it off for `--demo` so recordings of ReUI still work.
+   - **Effort:** S.
+2. **Send to → ReUI shelf from Explorer**
+   - **Problem:** putting a file on the shelf means dragging it to the top of the screen.
+   - **Approach:** a shortcut in `shell:sendto` that runs a new `reui-bridge shelf <paths>` (the bridge has `timer`, `stats` and `activity` today), created and removed by the installer. No COM context-menu handler; packaged handlers would need package identity.
+   - **Effort:** S.
+3. **Edit a command before allowing it**
+   - **Problem:** a command is almost right (wrong folder, a missing flag) and the only answers are allow or deny.
+   - **Approach:** to verify per agent: whether the permission hook accepts changed input (Claude Code's `updatedInput`, Codex, OpenCode). The edit opens the command as text in the card; allowing sends the edited version.
+   - **Effort:** M, after a spike per agent.
+4. **A live view of the agent's terminal on its card**
+   - **Problem:** the card shows the request but not what the agent was doing before it.
+   - **Approach:** `DwmRegisterThumbnail` of the terminal window, only while the card is open (DWM work only then, nothing at rest). Spike first: it may be too many pixels for a small card.
+   - **Effort:** M.
+5. **Wi-Fi and VPN changes**
+   - Event-driven (`INetworkListManager`, `NotifyIpInterfaceChange`, WlanApi), but §4 found almost no demand. Last.
+
+**Don't build**
+
+- **Windows Hello before risky agent actions** (`UserConsentVerifier`). The point of the island is answering an agent without leaving your work; Hello takes focus, puts a system dialog in front and adds a scan to the moments where speed matters, so people would turn it off. Reading before approving is handled by the working folder on the card (§5d #1) and the click a card needs before it takes the keyboard.
+- **Mica or acrylic backdrop** (`DWMWA_SYSTEMBACKDROP_TYPE`): glass was dropped on Oct 29, 2026 ([PRD-appearance.md](PRD-appearance.md) §2). The island is drawn by Composition inside a transparent window, so a DWM backdrop would fill the window's rectangle, not the pill.
+- **Explorer selection through UI Automation:** costly, close to polling, and actions that appear unasked go against staying out of the way.
+- **Screen recording through `Windows.Graphics.Capture`:** a second capture tool beside Snipping Tool; the screen dot already shows recording.
+- **Spoken replies to agents** (`SpeechRecognizer`): weak offline recognition, and Windows has voice typing (Win+H).
+- **Windows AI APIs:** need package identity and Copilot+ hardware, and built-in AI is against the direction (§5c).
+- **ETW per-process disk and network:** kernel providers mostly need admin; too heavy for a glance card.
+- **Key-press visualizer:** a keyboard hook that shows every key reads as a keylogger, for a niche use.
+- **Virtual desktop indicator, Explorer copy progress:** undocumented (only `IVirtualDesktopManager` is official) or not exposed.
 
 ---
 

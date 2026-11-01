@@ -281,6 +281,29 @@ pub enum Dropped {
     Data { name: String, bytes: Vec<u8> },
 }
 
+/// The shelf's command that holds files sent from outside the island (Explorer's Send to,
+/// `reui-bridge shelf`; docs/PRD-send-to-shelf.md): `add` and one full path per line.
+/// Windows file names can't hold a line break, so a line is always one path.
+pub fn shelf_add(paths: &[String]) -> String {
+    let mut action = String::from(SHELF_ADD);
+    for path in paths {
+        action.push('\n');
+        action.push_str(path);
+    }
+    action
+}
+
+/// The paths of a [`shelf_add`] command; `None` for any other action.
+pub fn parse_shelf_add(action: &str) -> Option<Vec<String>> {
+    let rest = action.strip_prefix(SHELF_ADD)?;
+    if !(rest.is_empty() || rest.starts_with(['\n', '\r'])) {
+        return None;
+    }
+    Some(rest.split('\n').map(|p| p.trim_end_matches('\r')).filter(|p| !p.trim().is_empty()).map(str::to_owned).collect())
+}
+
+const SHELF_ADD: &str = "add";
+
 #[derive(Serialize, Deserialize, Debug, Clone, PartialEq)]
 pub struct ItemAction {
     /// Menu label ("Paste as plain text").
@@ -579,6 +602,10 @@ pub struct Activity {
     /// How the user may quiet this kind of moment from the moment itself (a brief or an
     /// alert; never a decision). `None`: it can't be.
     pub quiet: Option<Quiet>,
+    /// It may carry text the user wouldn't show to others (a copied item, an agent's
+    /// request, a notification). The surface keeps it out of screen shares and recordings
+    /// while it's in front, as the user chose (docs/PRD-share-privacy.md).
+    pub private: bool,
 }
 
 /// A kind of moment the user may quiet where it shows (docs/PRD-behaviour.md §4.4): turn
@@ -792,6 +819,7 @@ mod tests {
                 minimal: Element::Ring(0.4),
                 audio: None,
                 quiet: None,
+                private: false,
                 expanded: Some(ExpandedView {
                     leading: Element::Ring(0.4),
                     eyebrow: Some("Timer".into()),
@@ -850,5 +878,15 @@ mod tests {
     #[test]
     fn priority_orders_decisions_first() {
         assert!(Priority::Decision > Priority::Alert && Priority::Alert > Priority::Ongoing && Priority::Ongoing > Priority::Passive);
+    }
+
+    #[test]
+    fn sent_paths_survive_the_shelf_command() {
+        let paths = vec![r"C:\Users\me\Report final.pdf".to_string(), r"\\nas\share\a;b,c.txt".to_string()];
+        assert_eq!(parse_shelf_add(&shelf_add(&paths)), Some(paths));
+        assert_eq!(parse_shelf_add("add"), Some(Vec::new()));
+        assert_eq!(parse_shelf_add("add\r\nC:\\a\r\n\r\n"), Some(vec![r"C:\a".to_string()]));
+        assert_eq!(parse_shelf_add("added"), None);
+        assert_eq!(parse_shelf_add("open"), None);
     }
 }

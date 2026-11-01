@@ -40,6 +40,8 @@ island.rs          launches and supervises reui-island
 bridge_sync.rs     keeps the installed reui-bridge (and an installed OpenCode plugin) in step
                    with this build
 paths.rs           %APPDATA% / %LOCALAPPDATA% / home, or REUI_CONFIG_DIR's sandbox (own pipe and lock)
+send_to.rs         --shelf <paths>: Explorer's Send to → ReUI shelf, handed to the running hub
+                   or held by this one's shelf (pure parts tested)
 modules/
   mod.rs           Module trait, start, supervise (restart on error/panic)
   audio/           shared Core Audio: devices, volume, outputs, per-app volume, change events,
@@ -62,7 +64,9 @@ modules/
                    (state + queue, views, system: fullscreen/pause, agent processes, Connect);
                    other modules report moments with `onboarding::note`
   agent/           Claude Code / Codex / OpenCode: sessions tracked, published only when
-                   they need you; events (a hook event into sessions and moments), queue
+                   they need you; events (a hook event into sessions and moments), folder
+                   (the working folder the strip names: `~`, shortened in the middle; pure,
+                   tested), queue
                    (the moments in line, paged as one card; the async and blocking
                    PreToolUse duplicates made one), moments (a permission, question, plan,
                    MCP form or link: steps, answers, the field; Codex questions read-only),
@@ -170,6 +174,8 @@ desktop.rs         whether the desktop (not an app) is in front, for "Always sho
 intent.rs          reading the pointer: open on click or hover, the hover delay, the reveal
                    zone, when a just-appeared pill may take a click
 app_rules.rs       per-app rules: which applies to the app in front, its executable's name
+capture.rs         screen shares and recordings: the `captures` setting, and leaving them
+                   (WDA_EXCLUDEFROMCAPTURE) while a private card is in front
 quiet.rs           quieting a moment from itself: its menu, snoozes, writing a module's setting off
 drag_guard.rs      no hover intent while a drag from elsewhere passes over
 dragdrop/          OLE drag and drop for the file shelf: target.rs (the island's IDropTarget:
@@ -295,6 +301,7 @@ stats.rs           idle cost: CPU and private memory of ReUI's processes
 | `%LOCALAPPDATA%\ReUI\bin\reui-bridge.exe` | the installed hook bridge |
 | `%LOCALAPPDATA%\ReUI\agents.json` | each coding agent's last hook event (hub's agent module, ≤ 1 write / 10 s per agent; Settings' status line) |
 | `%LOCALAPPDATA%\ReUI\update.json` | the last update check and what it found (Settings), the last version run, `updated_from`, and the version "Later" put off with `snoozed_until` (hub's updates module); the island's tray reads it when its menu opens |
+| `%APPDATA%\Microsoft\Windows\SendTo\ReUI shelf.lnk` | Send to → ReUI shelf (`reui-hub.exe --shelf`), added by the installer, removed by uninstall |
 | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` value `ReUI` | start with Windows (the Settings window's toggle) |
 
 ## Conventions

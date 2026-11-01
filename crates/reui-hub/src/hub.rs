@@ -126,7 +126,7 @@ impl Hub {
         state.routes.insert(module.to_string(), tx);
         self.rebuild_destinations(&state);
         drop(state);
-        ModuleContext { module, hub: self.clone(), inputs, quiet: None }
+        ModuleContext { module, hub: self.clone(), inputs, quiet: None, private: false }
     }
 
     pub fn image(&self, id: ImageId) -> Option<Arc<Vec<u8>>> {
@@ -289,6 +289,8 @@ pub struct ModuleContext {
     inputs: mpsc::UnboundedReceiver<ModuleInput>,
     /// Which of the module's moments the user may quiet, and with which setting.
     quiet: Option<QuietFor>,
+    /// Its activities may carry private text (`Activity::private`).
+    private: bool,
 }
 
 /// A module's answer to "which setting turns this moment off?", by its key and priority.
@@ -299,7 +301,7 @@ impl ModuleContext {
         let id = ActivityId { module: self.module.to_string(), key: key.to_string() };
         let View { accent, compact, minimal, expanded, audio } = view;
         let quiet = quiet_for(self.quiet, key, priority);
-        self.hub.publish(Activity { id, priority, accent, compact, minimal, expanded, audio, quiet });
+        self.hub.publish(Activity { id, priority, accent, compact, minimal, expanded, audio, quiet, private: self.private });
     }
 
     /// Declares which of this module's briefs and alerts the user may quiet from the moment
@@ -307,6 +309,13 @@ impl ModuleContext {
     /// of its settings each kind of moment maps to; the hub attaches it to each activity.
     pub fn declare_quiet(&mut self, quiet: QuietFor) {
         self.quiet = Some(quiet);
+    }
+
+    /// Declares that this module's activities may show text the user wouldn't share (a
+    /// copied item, an agent's request), once, before publishing: the surface keeps them
+    /// out of screen shares and recordings (docs/PRD-share-privacy.md).
+    pub fn declare_private(&mut self) {
+        self.private = true;
     }
 
     /// Registers encoded image bytes (PNG, JPEG, ...) for use as `Art::Image`.
