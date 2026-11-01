@@ -297,7 +297,7 @@ impl Pill {
                 (i < count).then(|| self.items()[i].action.clone())
             }
             Key::Tab(d) => self.front_view().and_then(|v| {
-                let tabs = v.rows.iter().find_map(|r| if let Row::Tabs(t) = r { Some(t) } else { None })?;
+                let tabs = Row::tabs(&v.rows)?;
                 let at = tabs.iter().position(|t| t.selected).unwrap_or(0) as i32;
                 let next = (at + d).rem_euclid(tabs.len().max(1) as i32) as usize;
                 tabs.get(next).filter(|t| !t.selected).map(|t| t.action.clone())

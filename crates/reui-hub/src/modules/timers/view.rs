@@ -60,7 +60,7 @@ pub fn launcher(query: &str, parsed: &Parsed, placeholder: &str, presets: &[u32]
             detail: hint.map(str::to_string).or(detail),
             trailing: Element::Empty,
             rows: vec![
-                Row::Search { query: query.into(), buttons: vec![], placeholder: Some(placeholder.into()), glyph: Some(GLYPH_TIMER) },
+                Row::Search { query: query.into(), buttons: vec![], placeholder: Some(placeholder.into()), glyph: Some(GLYPH_TIMER), filters: vec![] },
                 Row::Buttons(presets.iter().map(|m| text(&format!("preset:{m}"), &format!("{m} min"), ButtonRole::Secondary)).collect()),
             ],
             context: None, size: CardSize::Regular,

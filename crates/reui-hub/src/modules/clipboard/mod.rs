@@ -16,8 +16,9 @@
 //! setting is off. Images get their text recognised ([`ocr`]) right after capture,
 //! and older ones a few at a time while the window is open.
 //!
-//! Island actions on the toast: `open` (or `expanded`) opens the window; tray commands:
-//! `open`, `pause`, `resume`, `clear`; from the Settings window: `reload`.
+//! Island actions on the toast: `open` (or `expanded`) opens the window; on the panel:
+//! `clear` (undoable) and `settings`; tray commands: `open`, `pause`, `resume`, `clear`;
+//! from the Settings window: `reload`.
 //!
 //! Files: `os/` (the Windows side), `store/` (the history), `window.rs` (the window's
 //! messages), `view.rs` and `panel.rs` (what it shows), `toast.rs` (the island), `stack.rs`
@@ -99,6 +100,14 @@ impl Module for ClipboardHistory {
     }
 }
 
+/// Settings on its Clipboard page (beside the hub, as the welcome is).
+fn open_settings() {
+    let Ok(exe) = std::env::current_exe() else { return };
+    if let Err(e) = std::process::Command::new(exe.with_file_name("reui-settings.exe")).args(["--page", "clipboard"]).spawn() {
+        eprintln!("clipboard: can't open Settings: {e}");
+    }
+}
+
 /// The copy toast can be turned off from itself (`copy_toast`); "Press Ctrl+V" (an alert on
 /// the same key) is an instruction the user needs, so it can't.
 fn quiet(key: &str, priority: Priority) -> Option<Quiet> {
@@ -112,6 +121,8 @@ enum Action {
     Pause,
     Resume,
     Clear,
+    /// The panel's gear: Settings on its Clipboard page.
+    Settings,
     /// The Settings window wrote clipboard.json. The hotkey is registered at start, so a
     /// new one takes effect when the hub restarts.
     Reload,
@@ -124,6 +135,7 @@ impl Action {
             "pause" => Action::Pause,
             "resume" => Action::Resume,
             "clear" => Action::Clear,
+            "settings" => Action::Settings,
             "reload" => Action::Reload,
             _ => return None,
         })
@@ -345,8 +357,17 @@ impl App {
             Action::Reload => self.settings = Settings::load(),
             Action::Clear => {
                 self.finish_undo().await;
-                self.db.call(|s| s.clear()).await;
+                let now = now_ms();
+                let cleared = self.db.call(move |s| s.clear(now)).await.unwrap_or_default();
+                // Undone like a delete, from the panel's Undo while it lasts.
+                if !cleared.is_empty() {
+                    self.undo = Some((Undo::Deleted(cleared), Instant::now() + UNDO));
+                }
                 self.send_state().await;
+            }
+            Action::Settings => {
+                self.close_window();
+                open_settings();
             }
         }
     }

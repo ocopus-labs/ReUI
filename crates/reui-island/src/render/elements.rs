@@ -50,12 +50,13 @@ impl Renderer {
             Element::Button(button) => match (&button.content, slot) {
                 // Elsewhere a button is only what it shows.
                 (ButtonContent::Glyph(g), Slot::Compact | Slot::Minimal) => return self.measure(&Element::Glyph { glyph: *g, tone: Tone::Secondary }, slot),
-                (ButtonContent::Text(t), Slot::Compact | Slot::Minimal) => return self.measure(&Element::Text { text: t.clone(), tone: Tone::Secondary }, slot),
+                (ButtonContent::Text(t) | ButtonContent::Labelled(_, t), Slot::Compact | Slot::Minimal) => return self.measure(&Element::Text { text: t.clone(), tone: Tone::Secondary }, slot),
+                (ButtonContent::Count(n), Slot::Compact | Slot::Minimal) => return self.measure(&Element::Text { text: n.to_string(), tone: Tone::Secondary }, slot),
                 // Bare on the eyebrow's line: only as tall as the glyph, so the header
                 // doesn't grow; its click target is larger (`header::end_button`).
                 (ButtonContent::Glyph(_), _) if button.role == ButtonRole::Plain => (icon::HEADER, icon::HEADER),
                 (ButtonContent::Glyph(_), _) => (component::button::INLINE, component::button::INLINE),
-                (ButtonContent::Text(t), _) => (header::inline_text_width(self.text_width(t, &self.fonts.button)?), component::button::INLINE),
+                (content, _) => (header::inline_text_width(self.content_width(content)?.unwrap_or_default()), component::button::INLINE),
             },
         })
     }
@@ -97,7 +98,8 @@ impl Renderer {
             }
             Element::Button(button) => match (&button.content, slot) {
                 (ButtonContent::Glyph(g), Slot::Compact | Slot::Minimal) => self.element(rt, &Element::Glyph { glyph: *g, tone: Tone::Secondary }, slot, x, mid, align, accent)?,
-                (ButtonContent::Text(t), Slot::Compact | Slot::Minimal) => self.element(rt, &Element::Text { text: t.clone(), tone: Tone::Secondary }, slot, x, mid, align, accent)?,
+                (ButtonContent::Text(t) | ButtonContent::Labelled(_, t), Slot::Compact | Slot::Minimal) => self.element(rt, &Element::Text { text: t.clone(), tone: Tone::Secondary }, slot, x, mid, align, accent)?,
+                (ButtonContent::Count(n), Slot::Compact | Slot::Minimal) => self.element(rt, &Element::Text { text: n.to_string(), tone: Tone::Secondary }, slot, x, mid, align, accent)?,
                 // Quiet like the pager: chrome, not content.
                 (ButtonContent::Glyph(g), _) if button.role == ButtonRole::Plain => self.text(rt, &g.to_string(), &self.fonts.icon_header, left, top, w, Align::Center, self.pal().label_secondary)?,
                 // The header records the click target; this only draws.

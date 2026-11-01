@@ -128,7 +128,7 @@ mod tests {
         let choice = |i: usize| Choice { label: format!("Option {i}"), detail: None, selected: false, action: format!("pick:{i}") };
         let mut rows = vec![Row::Choices { options: (0..3).map(choice).collect(), multi }];
         if field {
-            rows.push(Row::Search { query: String::new(), buttons: vec![], placeholder: None, glyph: None });
+            rows.push(Row::Search { query: String::new(), buttons: vec![], placeholder: None, glyph: None, filters: vec![] });
         }
         rows.push(Row::Buttons(vec![
             Button { action: "back".into(), content: ButtonContent::Text("Back".into()), role: ButtonRole::Secondary },

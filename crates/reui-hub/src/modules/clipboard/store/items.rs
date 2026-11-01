@@ -118,8 +118,11 @@ impl Store {
     }
 
     /// Clear history: everything but pins and collections. Returns how many went.
-    pub fn clear(&self) -> Result<usize> {
-        self.db.execute(&format!("delete from items where not {KEPT}"), [])
+    /// Hides every item that isn't pinned or in a collection, as [`Store::delete`] does, so
+    /// clearing can be undone. Returns those hidden.
+    pub fn clear(&mut self, now: i64) -> Result<Vec<i64>> {
+        let ids: Vec<i64> = self.db.prepare(&format!("select id from items where not {KEPT} and deleted_ms is null"))?.query_map([], |r| r.get(0))?.collect::<Result<_>>()?;
+        self.delete(&ids, now)
     }
 
     /// Retention: unpinned, uncollected items copied before `cutoff_ms`.
@@ -339,8 +342,15 @@ mod tests {
         s.collect(&[collected], c, true).unwrap();
         assert_eq!(s.prune_before(5_000).unwrap(), 1);
         assert!(!ids(&s, "", Scope::History).contains(&old));
-        assert_eq!(s.clear().unwrap(), 1);
+        let cleared = s.clear(9_500).unwrap();
+        assert_eq!(cleared, [new]);
         assert_eq!(ids(&s, "", Scope::History), [collected, pinned]);
+        // Undo brings it back; once purged it's gone.
+        s.restore(&cleared).unwrap();
+        assert!(ids(&s, "", Scope::History).contains(&new));
+        s.clear(9_600).unwrap();
+        s.purge_deleted().unwrap();
+        s.restore(&cleared).unwrap();
         assert!(!ids(&s, "", Scope::History).contains(&new));
         assert_eq!(ids(&s, "", Scope::Pinned), [pinned]);
         assert_eq!(ids(&s, "", Scope::Collection(c)), [collected]);

@@ -52,7 +52,7 @@ Synced lyrics are off until you turn them on (Settings → Now Playing → Synce
 
 ## Clipboard history
 
-Everything you copy (text with its formatting, images, files) is kept on this PC and comes back as rich cards. Copies from password managers and anything that looks like a secret are never saved.
+Everything you copy (text with its formatting, images, files) is kept on this PC and comes back as rich cards. Copies from password managers and anything that looks like a secret are never saved. Along the top: the types to show, the search, how many cards match, Clear, and the settings.
 
 | Shortcut | It does |
 | --- | --- |
@@ -65,7 +65,10 @@ Everything you copy (text with its formatting, images, files) is kept on this PC
 | Alt+1 … Alt+9 | Pastes the 1st … 9th card |
 | Ctrl+P | Pins or unpins |
 | Delete | Deletes (Ctrl+Z brings it back) |
-| Tab | Next tab (History, Pinned, then your collections) |
+| Tab / Shift+Tab | Next / previous type: All, Text (code too), Links, Images, Files, Colors |
+| Click the clock (All) once it's chosen | Chooses what All covers: History, Pinned, or one of your collections |
+| **Clear** at the top | Deletes everything that isn't pinned or in a collection (**Undo** takes its place for 5 seconds) |
+| The gear at the top | Settings → Clipboard |
 | Esc | Clears the search, then closes |
 | Point at a card | Its star (pin or unpin) and bin (delete; Ctrl+Z brings it back) appear in its corner |
 | Right-click a card | Its menu |

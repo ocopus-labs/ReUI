@@ -129,7 +129,53 @@ pub fn search_button(text: Option<f32>) -> f32 {
 
 /// Where the search field's text starts: after the padding, the glyph and a gap.
 pub fn search_text_left(look: &Look) -> f32 {
-    look.inset() + component::search::PADDING + icon::SEARCH + space::SM
+    search_text_after(look.inset())
+}
+
+/// Where the text starts in a search field whose left end is at `field_left`.
+pub fn search_text_after(field_left: f32) -> f32 {
+    field_left + component::search::PADDING + icon::SEARCH + space::SM
+}
+
+/// Icon filters before a search field: `count` circular chips in one capsule as tall as
+/// the field. Chip `i` is `chip` wide from `chip_left(i)`; the field starts at
+/// `field_left`.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Filters {
+    pub left: f32,
+    pub count: usize,
+}
+
+impl Filters {
+    pub fn new(left: f32, count: usize) -> Self {
+        Self { left, count }
+    }
+
+    pub fn chip() -> f32 {
+        component::search::HEIGHT - 2.0 * component::search::FILTER_INSET
+    }
+
+    pub fn chip_left(&self, i: usize) -> f32 {
+        let inset = component::search::FILTER_INSET;
+        self.left + inset + i as f32 * (Self::chip() + inset)
+    }
+
+    /// The capsule's width (nothing without chips).
+    pub fn width(&self) -> f32 {
+        if self.count == 0 {
+            return 0.0;
+        }
+        let inset = component::search::FILTER_INSET;
+        inset + self.count as f32 * (Self::chip() + inset)
+    }
+
+    pub fn field_left(&self) -> f32 {
+        if self.count == 0 {
+            self.left
+        } else {
+            self.left + self.width() + component::search::FILTER_GAP
+        }
+    }
 }
 
 /// A choice list's columns in a card `width` wide: the wells' ends and the text's width

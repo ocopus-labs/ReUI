@@ -39,14 +39,19 @@ struct Content {
 
 fn content(view: Option<&ExpandedView>) -> Content {
     let mut c = Content::default();
-    for row in view.map(|v| v.rows.as_slice()).unwrap_or_default() {
+    let rows = view.map(|v| v.rows.as_slice()).unwrap_or_default();
+    for row in rows {
         match row {
             Row::Items(items) => c.actions = items.iter().map(|i| i.action.clone()).collect(),
             Row::Search { query, .. } => c.filter.0 = Some(query.clone()),
-            Row::Tabs(tabs) => c.filter.1 = tabs.iter().find(|t| t.selected).map(|t| t.action.clone()),
             _ => {}
         }
     }
+    // The tab, and what its menu chose (another collection under the same "All").
+    c.filter.1 = Row::tabs(rows).and_then(|tabs| tabs.iter().find(|t| t.selected)).map(|t| {
+        let chosen = t.menu.iter().find(|o| o.selected).map_or("", |o| o.action.as_str());
+        format!("{}|{chosen}", t.action)
+    });
     c
 }
 
@@ -176,8 +181,8 @@ mod tests {
             detail: None,
             trailing: Element::Empty,
             rows: vec![
-                Row::Search { query: query.into(), buttons: vec![], placeholder: None, glyph: None },
-                Row::Tabs(vec![Tab { label: tab.into(), count: 1, selected: true, action: tab.into() }]),
+                Row::Search { query: query.into(), buttons: vec![], placeholder: None, glyph: None, filters: vec![] },
+                Row::Tabs(vec![Tab { label: tab.into(), count: 1, selected: true, action: tab.into(), glyph: None, menu: vec![] }]),
                 Row::Items(actions.iter().map(|a| item(a)).collect()),
             ],
             context: None, size: CardSize::Wide,

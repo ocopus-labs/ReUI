@@ -46,7 +46,7 @@ impl Store {
                 Scope::Pinned => meta.pinned,
                 Scope::Collection(c) => mine.contains(&c),
             };
-            let kind_ok = query.kind.is_none() || meta.kind == query.kind;
+            let kind_ok = query.kind.is_none_or(|k| k.covers(meta.kind));
             let app_ok = query.app.is_none() || meta.app.as_deref() == query.app.as_deref();
             if kind_ok && app_ok {
                 *scope_counts.entry(Scope::History).or_default() += 1;
@@ -273,7 +273,8 @@ mod tests {
         assert_eq!(of_kind(&s, Kind::Colors), [color]);
         assert_eq!(of_kind(&s, Kind::Files), [files]);
         assert_eq!(of_kind(&s, Kind::Images), [image]);
-        assert_eq!(of_kind(&s, Kind::Text), [plain]);
+        // The text filter covers code too.
+        assert_eq!(of_kind(&s, Kind::Text), [plain, code]);
         assert_eq!(ids(&s, "", Scope::Pinned), [code]);
 
         let f = s.page(&Query { kind: Some(Kind::Files), ..Default::default() }, 60).unwrap().items.remove(0);

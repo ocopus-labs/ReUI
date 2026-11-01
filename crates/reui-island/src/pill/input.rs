@@ -461,11 +461,17 @@ impl Pill {
             return None;
         }
         let (cx, cy) = self.card_point(x, y);
-        if !render::hit_at(&self.hits, cx, cy)?.menu {
+        let hit = render::hit_at(&self.hits, cx, cy)?;
+        if !hit.menu {
             return None;
         }
-        let menu = self.front_view()?.rows.iter().find_map(|r| if let Row::Slider { trailing: Some(menu), .. } = r { Some(menu) } else { None })?;
-        Some(menu.options.iter().map(|o| (o.label.clone(), o.action.clone(), false, o.selected)).collect())
+        let rows = &self.front_view()?.rows;
+        // A chosen filter's menu (which collection), else the slider's (output device).
+        let options = match Row::tabs(rows).and_then(|tabs| tabs.iter().find(|t| t.action == hit.action && !t.menu.is_empty())) {
+            Some(tab) => &tab.menu,
+            None => &rows.iter().find_map(|r| if let Row::Slider { trailing: Some(menu), .. } = r { Some(menu) } else { None })?.options,
+        };
+        Some(options.iter().map(|o| (o.label.clone(), o.action.clone(), false, o.selected)).collect())
     }
 
     /// A card's context menu is up (keys go to it, clicks on it don't dismiss the panel)...

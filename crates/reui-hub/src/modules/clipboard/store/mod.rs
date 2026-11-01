@@ -93,6 +93,12 @@ impl Kind {
         }
     }
 
+    /// Whether a filter for this kind shows an item of `kind`: text covers code too (the
+    /// panel has one filter for both).
+    pub fn covers(self, kind: Option<Kind>) -> bool {
+        kind == Some(self) || (self == Kind::Text && kind == Some(Kind::Code))
+    }
+
     pub fn parse(name: &str) -> Option<Kind> {
         Kind::ALL.into_iter().find(|k| k.name() == name)
     }
@@ -261,6 +267,12 @@ mod tests {
 
     pub(super) fn captured(content: Content) -> Captured {
         Captured { content, source: None, exe: None, icon: None, size: None }
+    }
+
+    #[test]
+    fn the_text_filter_covers_code() {
+        assert!(Kind::Text.covers(Some(Kind::Code)) && Kind::Text.covers(Some(Kind::Text)));
+        assert!(!Kind::Code.covers(Some(Kind::Text)) && !Kind::Links.covers(Some(Kind::Text)) && !Kind::Text.covers(None));
     }
 
     pub(super) fn query(text: &str, scope: Scope) -> Query {
