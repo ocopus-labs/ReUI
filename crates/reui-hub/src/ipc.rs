@@ -92,7 +92,7 @@ async fn serve(pipe: NamedPipeServer, hub: Hub) -> Result<()> {
     let mut snapshots = hub.subscribe();
     let mut focus = hub.subscribe_focus();
     let mut destinations = hub.subscribe_destinations();
-    let mut hide = hub.subscribe_hide();
+    let mut island = hub.subscribe_island();
     let images = hub.clone();
     let sender = tokio::spawn(async move {
         let mut sent = HashSet::new();
@@ -140,9 +140,9 @@ async fn serve(pipe: NamedPipeServer, hub: Hub) -> Result<()> {
                     tokio::time::sleep(MIN_SEND_INTERVAL).await;
                     send_snapshot!();
                 }
-                request = hide.recv() => match request {
-                    Ok(()) => {
-                        if write_frame(&mut writer, &HubMsg::ToggleHidden).await.is_err() {
+                request = island.recv() => match request {
+                    Ok(message) => {
+                        if write_frame(&mut writer, &message).await.is_err() {
                             return;
                         }
                     }
@@ -273,6 +273,7 @@ mod tests {
             minimal: Element::Art(Art::Image(ImageId(*i))),
             audio: None,
             quiet: None,
+            private: false,
             expanded: None,
         };
         Snapshot { activities: ids.iter().map(activity).collect() }

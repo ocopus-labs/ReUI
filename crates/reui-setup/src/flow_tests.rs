@@ -62,6 +62,8 @@ fn install_upgrade_uninstall() {
     assert_eq!(std::fs::read(layout.exe(SETUP_EXE)).unwrap(), b"setup v1");
     // As the files they name: the temp folder may be spelled short (CI's RUNNER~1).
     assert_eq!(std::fs::canonicalize(crate::shortcut::target(&layout.shortcut()).unwrap()).unwrap(), std::fs::canonicalize(layout.exe("reui-hub.exe")).unwrap());
+    assert_eq!(std::fs::canonicalize(crate::shortcut::target(&layout.send_to_shortcut()).unwrap()).unwrap(), std::fs::canonicalize(layout.exe("reui-hub.exe")).unwrap());
+    assert_eq!(crate::shortcut::arguments(&layout.send_to_shortcut()).unwrap(), "--shelf");
     assert!(registry::has_uninstall_entry(&layout));
     assert_eq!(registry::autostart(&layout), Some(quoted(&layout.exe("reui-hub.exe"))));
 
@@ -89,7 +91,7 @@ fn install_upgrade_uninstall() {
     assert!(failures.is_empty(), "{failures:?}");
     assert_eq!(sys.0[1..], ["run reui-hub.exe --restore-flyout", "run reui-bridge.exe uninstall claude", "delete later"]);
     assert!(!layout.install_dir.exists());
-    assert!(!layout.shortcut().exists());
+    assert!(!layout.shortcut().exists() && !layout.send_to_shortcut().exists());
     assert!(!registry::has_uninstall_entry(&layout));
     assert!(!layout.bridge_copy_dir().exists());
     assert!(layout.roaming_data.join("clipboard.json").is_file(), "data kept");

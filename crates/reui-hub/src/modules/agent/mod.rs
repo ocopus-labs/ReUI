@@ -45,6 +45,7 @@ mod answer;
 mod card;
 mod describe;
 mod events;
+mod folder;
 mod form;
 mod link;
 mod moments;
@@ -172,6 +173,9 @@ enum Phase {
 
 struct Session {
     project: String,
+    /// Where the agent is working, as the strip shows it (`~\code\api`): the last `cwd`
+    /// it reported, since a command runs wherever the session is now.
+    folder: Option<String>,
     prompt: Option<String>,
     transcript: Option<PathBuf>,
     phase: Option<Phase>,
@@ -221,6 +225,8 @@ fn quiet(key: &str, priority: Priority) -> Option<Quiet> {
 
 async fn run(profile: &'static Profile, mut ctx: ModuleContext) {
     ctx.declare_quiet(quiet);
+    // Commands, diffs, prompts and folders.
+    ctx.declare_private();
     let mark = match profile.logo {
         Some(svg) => Element::Art(Art::Logo { image: ctx.image(svg.to_vec()), animated: false }),
         None => Element::Art(Art::Glyph(profile.glyph)),

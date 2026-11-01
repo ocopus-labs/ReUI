@@ -92,7 +92,7 @@ A build, a test run, an `npm install`: you start it, switch to the browser or th
   - `model/shells.rs`: connected or not, by the same marker; the paths.
   - Coding agents → **Terminals**: PowerShell and Git Bash, each with Connect / Disconnect, run through the bridge as agents are.
 - **Setup:** uninstall finds hooked shells (`hooked_shells`, with the Documents known folder) and runs `reui-bridge uninstall powershell|bash` while the bridge still exists.
-- **Later:** the module should declare itself private once "Hidden from screen shares" lands (docs/PRD-share-privacy.md), since a command line can hold a host or a token.
+- **Private** (docs/PRD-share-privacy.md): the module declares itself private, since a command line can hold a host or a token, so its cards stay out of screen shares.
 
 ## 7. Milestones
 

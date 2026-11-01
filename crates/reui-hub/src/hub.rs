@@ -4,7 +4,7 @@ use std::collections::{HashMap, HashSet};
 use std::hash::{DefaultHasher, Hash, Hasher};
 use std::sync::{Arc, Mutex};
 
-use reui_protocol::{Activity, ActivityId, CompactView, Destination, Dropped, Element, ExpandedView, ImageId, Priority, Quiet, Rgb, Snapshot};
+use reui_protocol::{Activity, ActivityId, CompactView, Destination, Dropped, Element, ExpandedView, HubMsg, ImageId, Priority, Quiet, Rgb, Snapshot};
 use tokio::sync::{broadcast, mpsc, oneshot, watch};
 
 /// How an activity presents itself; see the protocol for each presentation.
@@ -84,8 +84,9 @@ pub struct Hub {
     focus: broadcast::Sender<ActivityId>,
     /// The places surfaces may switch between (see `modules::destinations`).
     destinations: Arc<watch::Sender<Arc<Vec<Destination>>>>,
-    /// "Hide or show the island" requests (the hide shortcut); the island keeps the state.
-    hide: broadcast::Sender<()>,
+    /// Requests for the island itself, relayed as they are: `ToggleHidden` (the hide
+    /// shortcut; the island keeps the state) and `OpenIsland` (its open shortcut).
+    island: broadcast::Sender<HubMsg>,
 }
 
 impl Hub {
@@ -93,13 +94,13 @@ impl Hub {
         let (snapshots, _) = watch::channel(Arc::new(Snapshot::default()));
         let (focus, _) = broadcast::channel(8);
         let (destinations, _) = watch::channel(Arc::new(Vec::new()));
-        let (hide, _) = broadcast::channel(4);
-        Self { state: Arc::default(), snapshots: Arc::new(snapshots), focus, destinations: Arc::new(destinations), hide }
+        let (island, _) = broadcast::channel(4);
+        Self { state: Arc::default(), snapshots: Arc::new(snapshots), focus, destinations: Arc::new(destinations), island }
     }
 
-    /// Requests to hide or show the island, for the surfaces to relay.
-    pub fn subscribe_hide(&self) -> broadcast::Receiver<()> {
-        self.hide.subscribe()
+    /// Requests for the island (hide or show it, open it), for the surfaces to relay.
+    pub fn subscribe_island(&self) -> broadcast::Receiver<HubMsg> {
+        self.island.subscribe()
     }
 
     /// Latest snapshot plus change notifications. `watch` keeps only the newest value,
@@ -125,7 +126,7 @@ impl Hub {
         state.routes.insert(module.to_string(), tx);
         self.rebuild_destinations(&state);
         drop(state);
-        ModuleContext { module, hub: self.clone(), inputs, quiet: None }
+        ModuleContext { module, hub: self.clone(), inputs, quiet: None, private: false }
     }
 
     pub fn image(&self, id: ImageId) -> Option<Arc<Vec<u8>>> {
@@ -288,6 +289,8 @@ pub struct ModuleContext {
     inputs: mpsc::UnboundedReceiver<ModuleInput>,
     /// Which of the module's moments the user may quiet, and with which setting.
     quiet: Option<QuietFor>,
+    /// Its activities may carry private text (`Activity::private`).
+    private: bool,
 }
 
 /// A module's answer to "which setting turns this moment off?", by its key and priority.
@@ -298,7 +301,7 @@ impl ModuleContext {
         let id = ActivityId { module: self.module.to_string(), key: key.to_string() };
         let View { accent, compact, minimal, expanded, audio } = view;
         let quiet = quiet_for(self.quiet, key, priority);
-        self.hub.publish(Activity { id, priority, accent, compact, minimal, expanded, audio, quiet });
+        self.hub.publish(Activity { id, priority, accent, compact, minimal, expanded, audio, quiet, private: self.private });
     }
 
     /// Declares which of this module's briefs and alerts the user may quiet from the moment
@@ -306,6 +309,13 @@ impl ModuleContext {
     /// of its settings each kind of moment maps to; the hub attaches it to each activity.
     pub fn declare_quiet(&mut self, quiet: QuietFor) {
         self.quiet = Some(quiet);
+    }
+
+    /// Declares that this module's activities may show text the user wouldn't share (a
+    /// copied item, an agent's request), once, before publishing: the surface keeps them
+    /// out of screen shares and recordings (docs/PRD-share-privacy.md).
+    pub fn declare_private(&mut self) {
+        self.private = true;
     }
 
     /// Registers encoded image bytes (PNG, JPEG, ...) for use as `Art::Image`.
@@ -320,7 +330,12 @@ impl ModuleContext {
 
     /// Asks the island to hide until asked again, or to show again if it's hidden.
     pub fn toggle_hidden(&self) {
-        _ = self.hub.hide.send(());
+        _ = self.hub.island.send(HubMsg::ToggleHidden);
+    }
+
+    /// Asks the island to open what's waiting with the keyboard on it (its open shortcut).
+    pub fn open_island(&self) {
+        _ = self.hub.island.send(HubMsg::OpenIsland);
     }
 
     /// Sends another module a command, as the tray and the Settings window do (`reload`,

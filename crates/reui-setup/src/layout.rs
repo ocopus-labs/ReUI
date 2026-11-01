@@ -20,6 +20,8 @@ pub struct Layout {
     pub install_dir: PathBuf,
     /// The Start menu's Programs folder.
     pub start_menu: PathBuf,
+    /// Explorer's Send to folder (`shell:sendto`), for "ReUI shelf".
+    pub send_to: PathBuf,
     /// `%APPDATA%\ReUI`: settings and clipboard history.
     pub roaming_data: PathBuf,
     /// `%LOCALAPPDATA%\ReUI`: caches, logs, the agent bridge copy.
@@ -36,10 +38,12 @@ impl Layout {
         let env = |name: &str| std::env::var_os(name).map(PathBuf::from).ok_or_else(|| format!("%{name}% is not set"));
         let local = env("LOCALAPPDATA")?;
         let roaming = env("APPDATA")?;
+        let send_to = crate::shortcut::send_to_folder().unwrap_or_else(|| roaming.join(r"Microsoft\Windows\SendTo"));
         let start_menu = crate::shortcut::programs_folder().unwrap_or_else(|| roaming.join(r"Microsoft\Windows\Start Menu\Programs"));
         Ok(Self {
             install_dir: local.join("Programs").join(APP),
             start_menu,
+            send_to,
             roaming_data: roaming.join(APP),
             local_data: local.join(APP),
             home: env("USERPROFILE")?,
@@ -52,6 +56,7 @@ impl Layout {
     pub fn under(root: &Path, reg_base: &str) -> Self {
         Self {
             install_dir: root.join(r"Local\Programs").join(APP),
+            send_to: root.join(r"Roaming\Microsoft\Windows\SendTo"),
             start_menu: root.join(r"Roaming\Microsoft\Windows\Start Menu\Programs"),
             roaming_data: root.join("Roaming").join(APP),
             local_data: root.join("Local").join(APP),
@@ -66,6 +71,11 @@ impl Layout {
 
     pub fn shortcut(&self) -> PathBuf {
         self.start_menu.join(format!("{APP}.lnk"))
+    }
+
+    /// Explorer's Send to → ReUI shelf (docs/PRD-send-to-shelf.md).
+    pub fn send_to_shortcut(&self) -> PathBuf {
+        self.send_to.join(format!("{APP} shelf.lnk"))
     }
 
     pub fn run_key(&self) -> String {
@@ -106,12 +116,13 @@ mod tests {
     fn test_layout_stays_inside_its_root() {
         let root = Path::new(r"C:\tmp\reui-test");
         let layout = Layout::under(root, r"Software\ReUI-test-1");
-        for path in [&layout.install_dir, &layout.start_menu, &layout.roaming_data, &layout.local_data, &layout.home] {
+        for path in [&layout.install_dir, &layout.start_menu, &layout.send_to, &layout.roaming_data, &layout.local_data, &layout.home] {
             assert!(is_under(path, root), "{}", path.display());
         }
         assert_eq!(layout.run_key(), r"Software\ReUI-test-1\Run");
         assert_eq!(layout.uninstall_key(), r"Software\ReUI-test-1\Uninstall\ReUI");
         assert_eq!(layout.shortcut().file_name().unwrap(), "ReUI.lnk");
+        assert_eq!(layout.send_to_shortcut().file_name().unwrap(), "ReUI shelf.lnk");
         assert!(is_under(&layout.bridge_copy_dir(), &layout.local_data));
     }
 

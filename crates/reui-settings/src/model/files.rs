@@ -107,11 +107,13 @@ impl File {
                 "show_on_desktop": true,
                 "view_switcher": true,
                 "hide_shortcut": "Win+Alt+I",
+                "open_shortcut": "Win+Alt+N",
                 "idle_clock": false,
                 "open_on": "click",
                 "hover_delay": 250,
                 "reveal_zone": "pill",
                 "monitor": "primary",
+                "captures": "private",
                 "check_updates": true,
                 "whats_new": true,
                 // The look, as reui_design::look::Appearance reads it.
@@ -185,13 +187,38 @@ impl File {
         }
     }
 
-    /// The key of a file's shortcut, for the files that have one.
-    pub fn shortcut_key(self) -> Option<&'static str> {
+}
+
+/// ReUI's own shortcuts, each a key in one settings file.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Shortcut {
+    Clipboard,
+    Timers,
+    Stats,
+    HideIsland,
+    /// Opens what's waiting with the keyboard on it (docs/PRD-keyboard-island.md).
+    OpenIsland,
+}
+
+impl Shortcut {
+    pub const ALL: [Shortcut; 5] = [Shortcut::Clipboard, Shortcut::Timers, Shortcut::Stats, Shortcut::HideIsland, Shortcut::OpenIsland];
+
+    pub fn file(self) -> File {
         match self {
-            File::Clipboard => Some("hotkey"),
-            File::Timers | File::Stats => Some("shortcut"),
-            File::Island => Some("hide_shortcut"),
-            _ => None,
+            Shortcut::Clipboard => File::Clipboard,
+            Shortcut::Timers => File::Timers,
+            Shortcut::Stats => File::Stats,
+            Shortcut::HideIsland | Shortcut::OpenIsland => File::Island,
+        }
+    }
+
+    /// Its key in the file.
+    pub fn key(self) -> &'static str {
+        match self {
+            Shortcut::Clipboard => "hotkey",
+            Shortcut::Timers | Shortcut::Stats => "shortcut",
+            Shortcut::HideIsland => "hide_shortcut",
+            Shortcut::OpenIsland => "open_shortcut",
         }
     }
 }
@@ -201,6 +228,8 @@ pub const VISIBILITY: [&str; 3] = ["always", "when-active", "when-needed"];
 pub const OPEN_ON: [&str; 2] = ["click", "hover"];
 /// `reveal_zone`: how much of the top edge reveals a hidden island (docs/PRD-behaviour.md §4.2).
 pub const REVEAL_ZONE: [&str; 3] = ["off", "pill", "wide"];
+/// `captures` values (docs/PRD-share-privacy.md): what screen shares and recordings see.
+pub const CAPTURES: [&str; 3] = ["private", "island", "everything"];
 /// `app_rules` values (docs/PRD-behaviour.md §4.3): hide the island, or only decisions.
 pub const APP_RULES: [&str; 2] = ["hide", "decisions"];
 /// `hover_delay` choices in ms: Quick, Normal (`motion.delay.hover-intent`), Relaxed.
@@ -265,6 +294,13 @@ impl Files {
         list
     }
 
+    /// Index into [`CAPTURES`]; private cards hidden when missing or unknown, as the island
+    /// reads it.
+    pub fn captures(&self) -> usize {
+        let doc = self.doc(File::Island);
+        doc.str("captures").and_then(|v| CAPTURES.iter().position(|x| *x == v)).unwrap_or(0)
+    }
+
     /// Index into [`REVEAL_ZONE`]; Wide when missing or unknown, as the island reads it.
     pub fn reveal_zone(&self) -> usize {
         let doc = self.doc(File::Island);
@@ -316,10 +352,10 @@ impl Files {
         number(self.doc(File::Media), "retract_after_pause_min")
     }
 
-    /// A file's shortcut ("Win+Alt+V"), or "" for a file without one.
-    pub fn shortcut(&self, file: File) -> String {
-        let Some(key) = file.shortcut_key() else { return String::new() };
-        let doc = self.doc(file);
+    /// A shortcut as its file has it ("Win+Alt+V"); "" when turned off.
+    pub fn shortcut(&self, shortcut: Shortcut) -> String {
+        let key = shortcut.key();
+        let doc = self.doc(shortcut.file());
         doc.str(key).map(str::trim).filter(|s| !s.is_empty()).or_else(|| doc.default(key).and_then(Value::as_str)).unwrap_or_default().to_string()
     }
 
@@ -424,7 +460,7 @@ mod tests {
         let island = f.doc(File::Island);
         assert!(island.bool("hide_in_fullscreen") && island.bool("check_updates") && island.bool("whats_new"));
         assert!(f.doc(File::Media).bool("enabled") && f.doc(File::Clipboard).bool("enabled") && f.doc(File::Devices).bool("enabled"));
-        assert_eq!((f.shortcut(File::Clipboard).as_str(), f.retention_days(), f.scroll_step()), ("Win+Alt+V", 30, 0.02));
+        assert_eq!((f.shortcut(Shortcut::Clipboard).as_str(), f.retention_days(), f.scroll_step()), ("Win+Alt+V", 30, 0.02));
         assert_eq!(f.ignored_apps().len(), 8);
         assert!(f.doc(File::Osd).bool("volume") && !f.doc(File::Osd).bool("lock_keys"));
         assert!(f.doc(File::Devices).bool("airpods") && !f.doc(File::Devices).bool("slow_charger"));
@@ -440,7 +476,7 @@ mod tests {
         std::fs::write(dir.join("settings.json"), r#"{ "visibility": "when-needed", "paused_until": 99, "open_on": "hover", "hover_delay": 600 }"#).unwrap();
         let f = files(&dir);
         assert_eq!((f.visualizer(), f.retract_min()), (1, 0));
-        assert_eq!((f.shortcut(File::Clipboard).as_str(), f.ignored_apps(), f.retention_days()), ("Win+Alt+V", vec!["foo.exe".to_string()], 30));
+        assert_eq!((f.shortcut(Shortcut::Clipboard).as_str(), f.ignored_apps(), f.retention_days()), ("Win+Alt+V", vec!["foo.exe".to_string()], 30));
         assert_eq!(f.scroll_step(), 0.02);
         assert_eq!((f.visibility(), f.paused_until()), (2, Some(99)));
         assert_eq!((f.open_on(), f.hover_delay()), (1, 2), "600 ms reads as Relaxed");

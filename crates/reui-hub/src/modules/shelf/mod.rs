@@ -7,7 +7,8 @@
 //! The island reads a drop and sends it as `ModuleInput::Drop`; it also does the dragging
 //! out, from what each card says it carries. Island actions on a card: `open:<id>`,
 //! `show:<id>`, `copy:<id>`, `remove:<id>`, and `clear`. Commands (tray, view switcher,
-//! Settings): `open`, `clear`, `reload`.
+//! Settings): `open`, `clear`, `reload`, and `add` with paths (`reui_protocol::shelf_add`:
+//! Explorer's Send to and `reui-bridge shelf`, docs/PRD-send-to-shelf.md).
 //!
 //! Files: `store.rs` (what's held, `held.json`, expiry and the cap), `intake.rs` (what a
 //! drop becomes), `card.rs` (what the island shows), `os.rs` (the shell, the clipboard, the
@@ -39,15 +40,21 @@ const KEY: &str = "shelf";
 /// contents can't start a hundred apps.
 const OPEN_AT_MOST: usize = 10;
 
-pub struct FileShelf;
+/// `sent`: files this hub was started with (`reui-hub --shelf …`, Explorer's Send to while
+/// ReUI wasn't running), held once the shelf has loaded.
+pub struct FileShelf {
+    pub sent: Vec<String>,
+}
 
 impl Module for FileShelf {
     fn name(&self) -> &'static str {
         "shelf"
     }
 
-    fn run(self: Box<Self>, ctx: ModuleContext) -> Pin<Box<dyn Future<Output = ()> + Send>> {
-        Box::pin(run(ctx))
+    fn run(self: Box<Self>, mut ctx: ModuleContext) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        // Held text, links and file names.
+        ctx.declare_private();
+        Box::pin(run(ctx, self.sent))
     }
 }
 
@@ -69,7 +76,7 @@ async fn blocking<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> 
     tokio::task::spawn_blocking(f).await.ok()
 }
 
-async fn run(ctx: ModuleContext) {
+async fn run(ctx: ModuleContext, sent: Vec<String>) {
     let root = store::folder();
     let (settings, shelf) = {
         let root = root.clone();
@@ -88,6 +95,9 @@ async fn run(ctx: ModuleContext) {
     }
     state.tidy().await;
     state.publish().await;
+    if !sent.is_empty() {
+        state.take(vec![Dropped::Files(sent)]).await;
+    }
 
     loop {
         match state.ctx.next().await {
@@ -162,6 +172,17 @@ impl State {
                 self.tidy().await;
                 self.publish().await;
                 self.ctx.focus(KEY);
+            }
+            // Files sent from outside the island (Explorer's Send to, `reui-bridge shelf`):
+            // held as one card, as a drop of them would be, and the card opens to say so.
+            ("", other) if reui_protocol::parse_shelf_add(other).is_some() => {
+                let paths = reui_protocol::parse_shelf_add(other).unwrap_or_default();
+                if !paths.is_empty() {
+                    self.take(vec![Dropped::Files(paths)]).await;
+                    self.opened = true;
+                    self.publish().await;
+                    self.ctx.focus(KEY);
+                }
             }
             ("", "reload") => {
                 self.settings = blocking(Settings::load).await.unwrap_or_default();

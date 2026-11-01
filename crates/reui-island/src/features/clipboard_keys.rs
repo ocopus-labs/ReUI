@@ -35,14 +35,35 @@ thread_local! {
     static MASK: Cell<bool> = const { Cell::new(false) };
     /// The view switcher shows, so Ctrl+Tab is ours.
     static VIEWS: Cell<bool> = const { Cell::new(false) };
-    /// Only Esc is ours (the idle pill's row of places): typing goes on to the app.
-    static ESCAPE_ONLY: Cell<bool> = const { Cell::new(false) };
+    /// Which keys are ours (`Limit`).
+    static LIMIT: Cell<Limit> = const { Cell::new(Limit::All) };
 }
 
-/// Whether only Esc is read (the idle pill's row of places, which has nothing to type
-/// into): every other key goes on to the app in front.
-pub fn escape_only(on: bool) {
-    ESCAPE_ONLY.set(on);
+/// Which keys the hook reads; the rest go on to the app in front.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Limit {
+    /// Everything the panel maps (a field, a list).
+    All,
+    /// Esc alone: the row of places opened with a click, a summoned card with nothing to
+    /// type into or pick. Typing still reaches the app.
+    Escape,
+    /// Esc, the arrows, Home, End and Enter: the row of places opened with the island's
+    /// shortcut, walked from the keyboard (docs/PRD-keyboard-island.md).
+    Navigation,
+}
+
+impl Limit {
+    pub fn allows(self, key: &Key) -> bool {
+        match self {
+            Limit::All => true,
+            Limit::Escape => *key == Key::Escape,
+            Limit::Navigation => matches!(key, Key::Escape | Key::Move(_) | Key::First | Key::Last | Key::Activate),
+        }
+    }
+}
+
+pub fn limit(limit: Limit) {
+    LIMIT.set(limit);
 }
 
 pub fn captured() -> bool {
@@ -140,7 +161,7 @@ fn handle(msg: u32, info: &KBDLLHOOKSTRUCT) -> bool {
     let mods = Mods { shift: pressed(VK_SHIFT), ctrl: pressed(VK_CONTROL), alt: pressed(VK_MENU) || info.flags.0 & LLKHF_ALTDOWN.0 != 0 };
     let dead = Cell::new(false);
     let key = map_key(code as u16, mods, || typed(info, mods, &dead)).filter(|k| !matches!(k, Key::View(_)) || VIEWS.get());
-    if ESCAPE_ONLY.get() && key != Some(Key::Escape) {
+    if !key.as_ref().is_some_and(|k| LIMIT.get().allows(k)) && LIMIT.get() != Limit::All {
         return false;
     }
     if key.is_none() && !dead.get() {
@@ -162,4 +183,19 @@ unsafe extern "system" fn hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRE
         return LRESULT(1);
     }
     CallNextHookEx(None, code, wparam, lparam)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn limits_pass_only_their_keys() {
+        assert!(Limit::All.allows(&Key::Type('a')));
+        assert!(Limit::Escape.allows(&Key::Escape) && !Limit::Escape.allows(&Key::Move(1)) && !Limit::Escape.allows(&Key::Activate));
+        for key in [Key::Escape, Key::Move(-1), Key::Move(1), Key::First, Key::Last, Key::Activate] {
+            assert!(Limit::Navigation.allows(&key), "{key:?}");
+        }
+        assert!(!Limit::Navigation.allows(&Key::Type('a')) && !Limit::Navigation.allows(&Key::Tab(1)) && !Limit::Navigation.allows(&Key::Backspace));
+    }
 }

@@ -1,6 +1,7 @@
 //! Everything the pages show and change: the settings files plus what the window learned
 //! this session (startup entry, agents, sizes, idle cost, notes after an action).
 
+use crate::model::files::Shortcut;
 use serde_json::Value;
 
 use crate::model::agents::{Agent, Status};
@@ -30,13 +31,13 @@ pub struct State {
     /// A write that failed for a reason other than an invalid file.
     pub write_error: Option<String>,
     /// The hotkey recorder is listening, for this file's shortcut.
-    pub recording: Option<File>,
+    pub recording: Option<Shortcut>,
     /// What the recorder last said about a file's shortcut ("taken by another app"), or
     /// that a new hotkey waits for a restart.
-    pub hotkey_note: Option<(File, String, Tone)>,
+    pub hotkey_note: Option<(Shortcut, String, Tone)>,
     /// The shortcuts in the files when the window opened: the running hub holds those, so
     /// they never count as taken.
-    pub held_hotkeys: Vec<(File, String)>,
+    pub held_hotkeys: Vec<(Shortcut, String)>,
     /// The ignored-apps field (and the calendar's link field).
     pub field: String,
     /// Why the last link added to the calendar wasn't.
@@ -63,7 +64,7 @@ impl State {
     pub fn new(paths: Paths) -> Self {
         let files = Files::open(&paths);
         let mut state = Self {
-            held_hotkeys: [File::Clipboard, File::Timers, File::Stats, File::Island].map(|f| (f, files.shortcut(f))).to_vec(),
+            held_hotkeys: Shortcut::ALL.map(|s| (s, files.shortcut(s))).to_vec(),
             files,
             startup: Startup::Off,
             agents: [Status::NotConnected; 3],

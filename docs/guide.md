@@ -17,6 +17,7 @@ ReUI puts a dynamic island at the top of your screen: a small black pill that sh
 | Right-click a moment (a copy, the volume, a device connecting, a finished timer or agent turn) | **Don't show these** turns that kind of moment off (turn it back on in its page in Settings); **Snooze for 1 hour** keeps that feature's moments away for an hour (Settings → General → Snoozed → Undo brings them back sooner). Permission requests and questions are never quieted |
 | Push the pointer against the top edge | Shows a hidden island (Settings → General → Show the island: When active / When needed). **Reveal from the top edge** chooses how much of the edge does it: Off, only above the pill (the default), or Wide. Around the pill, and in the strip above it, clicks reach the window underneath |
 | Click a glyph under an open card | Goes to that view: Clipboard, Shelf, Timers, Calendar, Devices, System stats, and Now Playing while something plays. The wheel over the glyphs steps through them; Ctrl+Tab / Ctrl+Shift+Tab does too while the card has the keyboard (clipboard history, the timer field). Off in Settings → General → View switcher |
+| **Win+Alt+N** | Opens what's waiting, with the keyboard on it: a permission request or question first (Enter answers, as after a click), else the card in front (Esc closes it), else the row of places (← / → pick one, Enter opens it). Your app keeps its focus throughout, so Esc, or Win+Alt+N again, puts you back exactly where you were typing. Change it in Settings → General → Open the island |
 | Click the dot beside the glyphs | A permission request or question arrived while you were in a view: the dot (in its colour) says it's waiting, and a click brings it forward |
 
 The island hides while a game, video or presentation fills the screen (Settings → General → Hide in full screen), and can sit on your main display, the display the pointer is on, or one display you choose (Settings → General → Display). In "When active" and "When needed" it still shows in full whenever the desktop is in front (you clicked the wallpaper or pressed Win+D), and keeps out of the way inside apps (Settings → General → Always show on the desktop). **App rules** (Settings → General → App rules) are for the apps where the island should keep away: add an app (type its name or pick it from the running apps) and choose **Hide the island** (nothing shows while it's in front) or **Only decisions** (only permission requests and questions from coding agents show). If you hide the taskbar, Settings → General → Clock in the resting island puts the time in the island while nothing else is showing.
@@ -28,6 +29,8 @@ The island hides while a game, video or presentation fills the screen (Settings 
 - **Roundness** (square-ish to a capsule), **Gap from the top** (Island only), **Padding** (Compact / Regular / Roomy, the space inside an open card) and **Size** (90–125 %). Inner corners always follow the outer ones.
 
 The island picks up a change within a moment; nothing else restarts.
+
+**Screen sharing** (Settings → General → Hide from screen shares): while your clipboard, a coding agent's request, a notification or the shelf is showing, the island is left out of screen shares, recordings and screenshots. You still see it; the people watching your Teams, Zoom or Meet share, an OBS recording or a Snipping Tool screenshot see what's underneath instead. Choose **Island** to keep the whole island out of them all the time, or **Nothing** to have them show it as you see it. It works for anything that captures through Windows, not for a camera pointed at the screen, and needs Windows 10 version 2004 or later.
 
 **Pause ReUI** (tray, or Settings → General) quiets the island and stops recording the clipboard for an hour. Permission requests from coding agents still show.
 
@@ -86,6 +89,8 @@ Drag files, folders, an image from a web page, a link or some text to the top of
 | The bin at the top of the shelf, or Tray → Shelf → Clear shelf | Lets go of everything |
 
 A file that was moved or deleted since says **Missing**. Settings → Shelf → **Keep held things**: until you remove them (the default), until ReUI restarts, a day or a week. Copies ReUI made itself never take more than 512 MB; the oldest go first.
+
+From Explorer without dragging: select files, right-click → **Send to** → **ReUI shelf** (on Windows 11, under **Show more options**, or Shift+right-click). They're held as one card and the shelf opens to show them. Scripts can do the same with `reui-bridge shelf <files>`.
 
 Windows doesn't allow drag and drop between an app run as administrator and one that isn't, so a drop from (or into) an elevated app does nothing.
 
@@ -170,7 +175,7 @@ Take a screenshot (Win+Shift+S, PrtScn, or Win+PrtScn) and its thumbnail shows i
 
 ## Coding agents
 
-Claude Code, Codex and OpenCode show in the island only when they need you: a permission request you can answer with **Allow** / **Deny** (Claude Code and OpenCode also offer **Always**), a question from Claude Code or OpenCode, a plan or an MCP server's form from Claude Code, a question from Codex to answer in its terminal, or a turn that failed. While they think and run tools, the island stays with your music and timers. Each card starts with a quiet line saying which session it is (the project, what you asked, how long it has been working); a long command or an edit's changed lines show underneath, and the mouse wheel scrolls them. Anything that looks like a password or token shows as dots.
+Claude Code, Codex and OpenCode show in the island only when they need you: a permission request you can answer with **Allow** / **Deny** (Claude Code and OpenCode also offer **Always**), a question from Claude Code or OpenCode, a plan or an MCP server's form from Claude Code, a question from Codex to answer in its terminal, or a turn that failed. While they think and run tools, the island stays with your music and timers. Each card starts with a quiet line saying which session it is (the folder it's working in, with your home folder as `~` and a long path shortened in the middle, then what you asked and how long it has been working); a long command or an edit's changed lines show underneath, and the mouse wheel scrolls them. Anything that looks like a password or token shows as dots.
 
 - **Deny and say why:** Alt+click **Deny** (or Shift+Enter once the card has the keyboard) opens a field, "Tell Claude what to do instead"; Enter sends it with the deny.
 - **Questions:** click an option to answer. With several to pick, tick them and press **Next** (the last step says **Send**); ‹ on the top line goes back with your answers kept. Type in "Type an answer" for something else (OpenCode only offers it when the question allows it). Nothing reaches the agent until the last step. A long list scrolls with the wheel.

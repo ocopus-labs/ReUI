@@ -113,6 +113,7 @@ impl Pill {
             audio: None,
             // The drop target is the island answering a drag, not a moment to quiet.
             quiet: None,
+            private: false,
         })
     }
 

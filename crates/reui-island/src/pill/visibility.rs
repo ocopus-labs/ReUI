@@ -169,6 +169,11 @@ impl Pill {
         self.set_snoozed(settings.snoozed);
         self.set_switcher_enabled(settings.view_switcher);
         self.set_idle_clock(settings.idle_clock);
+        if self.captures != settings.captures {
+            eprintln!("island: in screen captures: {:?}", settings.captures);
+            self.captures = settings.captures;
+            self.update_share();
+        }
         if self.hide_in_fullscreen != settings.hide_in_fullscreen {
             self.hide_in_fullscreen = settings.hide_in_fullscreen;
             self.update_fullscreen(unsafe { GetForegroundWindow() });

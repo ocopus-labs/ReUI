@@ -1,11 +1,12 @@
 //! General: start with Windows, where and when the island shows, and pausing ReUI.
 
+use crate::model::files::Shortcut;
 use serde_json::Value;
 
 use super::{button, flag, footed, group, head, Effect, Page};
 use crate::ui::icons;
 use reui_design::tokens::color::system as palette;
-use crate::model::files::{File, HOVER_DELAYS, MONITOR_CURSOR, MONITOR_PRIMARY, OPEN_ON, REVEAL_ZONE, VISIBILITY};
+use crate::model::files::{File, CAPTURES, HOVER_DELAYS, MONITOR_CURSOR, MONITOR_PRIMARY, OPEN_ON, REVEAL_ZONE, VISIBILITY};
 use crate::state::State;
 use crate::system::{self, Startup};
 use crate::ui::{Act, Block, Part, Role, Row, Target, Tone};
@@ -69,9 +70,20 @@ pub fn build(state: &State) -> Vec<Block> {
     let clock = flag(state, File::Island, "idle_clock", "Clock in the resting island", "The time while nothing else is showing")
         .icon(icons::tile(icons::CLOCK, palette::INDIGO));
     // Hides it until pressed again; the hub registers it (`modules/hide.rs`).
-    let hide = super::shortcut::named(state, File::Island, "Hide the island", "Until you press it again; permission requests still show")
+    let hide = super::shortcut::named(state, Shortcut::HideIsland, "Hide the island", "Until you press it again; permission requests still show")
         .icon(icons::tile(icons::KEYBOARD, palette::GRAY));
-    blocks.push(group("Island", vec![visibility, desktop, reveal, opening, delay, monitor, fullscreen, switcher, clock, hide]));
+    // What's waiting, with the keyboard on it (docs/PRD-keyboard-island.md); the hub registers it.
+    let open = super::shortcut::named(state, Shortcut::OpenIsland, "Open the island", "A request first, else the card in front or the places; Esc goes back")
+        .icon(icons::tile(icons::KEYBOARD, palette::BLUE));
+    blocks.push(group("Island", vec![visibility, desktop, reveal, opening, delay, monitor, fullscreen, switcher, clock, open, hide]));
+    // What others see when you share or record your screen (docs/PRD-share-privacy.md).
+    let captures = state.files.captures();
+    let share = Row::new("captures", "Hide from screen shares")
+        .detail(["Clipboard, agents, notifications and the shelf", "Only you see the island", "Others see the island as you do"][captures])
+        .part(Part::Segmented { options: vec!["Private cards".into(), "Island".into(), "Nothing".into()], selected: captures })
+        .enabled(doc_ok)
+        .icon(icons::tile(icons::SCREEN, palette::PURPLE));
+    blocks.push(footed("Screen sharing", vec![share], "Also screenshots and recordings. You still see everything."));
     blocks.extend(super::quiet::blocks(state, doc_ok));
 
     let left = state.files.paused_until().and_then(|until| until.checked_sub(reui_protocol::unix_ms())).filter(|&ms| ms > 0);
@@ -119,7 +131,8 @@ pub fn act(state: &mut State, target: &Target, act: Act) -> Effect {
         return Effect::None;
     }
     match (target.row.as_str(), act) {
-        ("hotkey", Act::Press) => return Effect::Record(File::Island),
+        ("hotkey", Act::Press) => return Effect::Record(Shortcut::HideIsland),
+        ("open_hotkey", Act::Press) => return Effect::Record(Shortcut::OpenIsland),
         ("monitor", Act::Choose(i)) => {
             if let Some(choice) = monitor_choices(state).get(i).cloned() {
                 state.set(File::Island, "monitor", Value::String(choice));
@@ -135,6 +148,7 @@ pub fn act(state: &mut State, target: &Target, act: Act) -> Effect {
         }
         ("visibility", Act::Choose(i)) if i < VISIBILITY.len() => state.set(File::Island, "visibility", Value::String(VISIBILITY[i].into())),
         ("open_on", Act::Choose(i)) if i < OPEN_ON.len() => state.set(File::Island, "open_on", Value::String(OPEN_ON[i].into())),
+        ("captures", Act::Choose(i)) if i < CAPTURES.len() => state.set(File::Island, "captures", Value::String(CAPTURES[i].into())),
         ("reveal_zone", Act::Choose(i)) if i < REVEAL_ZONE.len() => state.set(File::Island, "reveal_zone", Value::String(REVEAL_ZONE[i].into())),
         ("hover_delay", Act::Choose(i)) if i < HOVER_DELAYS.len() => state.set(File::Island, "hover_delay", Value::from(HOVER_DELAYS[i])),
         // The island sees the file change, hides, and pauses clipboard recording itself.
@@ -193,6 +207,27 @@ mod tests {
         assert_eq!(state.files.doc(File::Island).get("hover_delay").and_then(Value::as_u64), Some(150));
         crate::pages::act(crate::pages::Page::General, &mut state, &Target::new("island:hide_in_fullscreen", 0), Act::Press);
         assert!(!state.files.doc(File::Island).bool("hide_in_fullscreen"));
+        _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn the_island_has_two_shortcuts_each_recorded_on_its_own_row() {
+        let (mut state, dir) = state("general-shortcuts");
+        assert_eq!(act(&mut state, &Target::new("open_hotkey", 0), Act::Press), Effect::Record(Shortcut::OpenIsland));
+        assert_eq!(act(&mut state, &Target::new("hotkey", 0), Act::Press), Effect::Record(Shortcut::HideIsland));
+        let rows: Vec<String> = build(&state).iter().flat_map(|b| match b { crate::ui::Block::Group { rows, .. } => rows.iter().map(|r| r.id.clone()).collect(), _ => Vec::new() }).collect();
+        assert!(rows.contains(&"open_hotkey".to_string()) && rows.contains(&"hotkey".to_string()), "{rows:?}");
+        _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn screen_shares_hide_private_cards_until_chosen_otherwise() {
+        let (mut state, dir) = state("general-captures");
+        assert_eq!(state.files.captures(), 0);
+        act(&mut state, &Target::new("captures", 0), Act::Choose(1));
+        assert_eq!((state.files.captures(), state.files.doc(File::Island).str("captures")), (1, Some("island")));
+        act(&mut state, &Target::new("captures", 0), Act::Choose(2));
+        assert_eq!(state.files.doc(File::Island).str("captures"), Some("everything"));
         _ = std::fs::remove_dir_all(&dir);
     }
 }

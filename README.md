@@ -50,7 +50,7 @@ Whatever plays on your PC shows in the pill: Spotify, a browser, VLC, Media Play
 
 ### Shelf
 
-Drag files, an image, a link or some text to the top of the screen and the island holds them. Collect things from different folders and apps, then drag them back out into a mail, a chat or an upload page, one at a time or all at once. Files never move: the shelf only remembers where they are, and nothing leaves your PC.
+Drag files, an image, a link or some text to the top of the screen and the island holds them. Collect things from different folders and apps, then drag them back out into a mail, a chat or an upload page, one at a time or all at once. Or send them from Explorer's right-click menu: Send to → ReUI shelf. Files never move: the shelf only remembers where they are, and nothing leaves your PC.
 
 ### Volume and brightness
 
@@ -107,7 +107,7 @@ Claude Code, Codex and OpenCode show in the island only when they need you: a pe
 
 ### Out of your way
 
-You decide how the island behaves. Open it with a click, or by resting the pointer on it, and choose how long that rest is. Keep it hidden until something needs you, and choose how much of the top edge brings it back, or none. Give an app its own rule: hide the island while a game or a presentation is in front, or let only permission requests through while you record. Right-click a moment you don't need (a copy, the volume, a device connecting) to turn that kind off or snooze it for an hour. Permission requests always come through.
+You decide how the island behaves. Open it with a click, or by resting the pointer on it, and choose how long that rest is. Keep it hidden until something needs you, and choose how much of the top edge brings it back, or none. Give an app its own rule: hide the island while a game or a presentation is in front, or let only permission requests through while you record. Right-click a moment you don't need (a copy, the volume, a device connecting) to turn that kind off or snooze it for an hour. Permission requests always come through. Share your screen and the people watching don't see your clipboard, an agent's request or a notification on the island; you still do. Win+Alt+N opens whatever is waiting with the keyboard on it, and Esc puts you back where you were typing.
 
 ### Appearance
 

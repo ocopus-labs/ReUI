@@ -124,10 +124,18 @@ fn run_step(layout: &Layout, step: Step, current_exe: &Path, system: &mut dyn Sy
             system.run(&bridge, &["uninstall", agent.arg()]).map_err(|e| format!("Couldn't remove ReUI's hooks for {}: {e}", agent.arg()))?;
         }
         Step::RemoveAutostart => registry::remove_autostart(layout).map_err(|e| format!("Couldn't remove start with Windows: {e}"))?,
-        Step::RemoveShortcut => match std::fs::remove_file(layout.shortcut()) {
-            Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(format!("Couldn't remove the Start menu entry: {e}")),
-            _ => {}
-        },
+        // The Start menu entry and Send to → ReUI shelf.
+        Step::RemoveShortcut => {
+            if let Err(e) = std::fs::remove_file(layout.send_to_shortcut()) {
+                if e.kind() != std::io::ErrorKind::NotFound {
+                    return Err(format!("Couldn't remove Send to → ReUI shelf: {e}"));
+                }
+            }
+            match std::fs::remove_file(layout.shortcut()) {
+                Err(e) if e.kind() != std::io::ErrorKind::NotFound => return Err(format!("Couldn't remove the Start menu entry: {e}")),
+                _ => {}
+            }
+        }
         Step::RemoveUninstallEntry => registry::remove_uninstall_entry(layout).map_err(|e| format!("Couldn't remove the Apps & features entry: {e}"))?,
         Step::RemoveBridgeCopy => remove_dir(&layout.bridge_copy_dir())?,
         Step::DeleteUserData => {

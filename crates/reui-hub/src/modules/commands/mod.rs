@@ -32,6 +32,9 @@ impl Module for TerminalCommands {
     }
 
     fn run(self: Box<Self>, mut ctx: ModuleContext) -> Pin<Box<dyn Future<Output = ()> + Send>> {
+        // A command line can hold a host, a path or a token passed as an argument
+        // (docs/PRD-share-privacy.md).
+        ctx.declare_private();
         Box::pin(async move { supervise("commands", &mut ctx, |ctx| Box::pin(run(ctx))).await })
     }
 }

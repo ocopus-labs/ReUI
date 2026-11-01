@@ -19,6 +19,8 @@
 //! watch temp folders instead of the user's own.
 //!
 //! One hub per user: launching it again (the Start menu entry) opens Settings and exits.
+//! `--shelf <paths…>` (Explorer's Send to) hands files to the running hub's shelf instead,
+//! or holds them in this hub's shelf when it's the first (`send_to.rs`).
 
 // Release builds start from the Start menu / at login: no console window. Dev builds keep
 // theirs for the logs.
@@ -30,6 +32,7 @@ mod ipc;
 mod island;
 mod modules;
 mod paths;
+mod send_to;
 mod single_instance;
 
 use anyhow::Result;
@@ -42,14 +45,24 @@ use crate::modules::Module;
 async fn main() -> Result<()> {
     log_panics();
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let has = |flag: &str| args.iter().any(|a| a == flag);
+    let (flags, sent) = send_to::split(&args);
+    let has = |flag: &str| flags.iter().any(|a| a == flag);
+    let sent = sent.map(|paths| send_to::existing(&paths, std::path::Path::exists));
 
     if has("--restore-flyout") {
         modules::osd::recover_flyout();
         return Ok(());
     }
     let Some(_instance) = single_instance::acquire() else {
-        single_instance::open_settings(&std::env::current_exe()?);
+        match &sent {
+            Some(paths) if !paths.is_empty() => {
+                if !send_to::forward(paths).await {
+                    eprintln!("hub: ReUI didn't take the files sent to its shelf");
+                }
+            }
+            Some(_) => {}
+            None => single_instance::open_settings(&std::env::current_exe()?),
+        }
         return Ok(());
     };
 
@@ -98,7 +111,7 @@ async fn main() -> Result<()> {
         enabled.push(Box::new(modules::stats::SystemStats));
     }
     if !has("--no-shelf") && feature_on("shelf.json") {
-        enabled.push(Box::new(modules::shelf::FileShelf));
+        enabled.push(Box::new(modules::shelf::FileShelf { sent: sent.clone().unwrap_or_default() }));
     }
     if !has("--no-downloads") && feature_on("downloads.json") {
         enabled.push(Box::new(modules::downloads::Downloads));
