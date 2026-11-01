@@ -93,6 +93,9 @@ pub fn build(state: &State) -> Vec<Block> {
         .enabled(doc_ok)
         .icon(icons::tile(icons::SCREEN, palette::PURPLE));
     blocks.push(footed("Screen sharing", vec![share], "Also screenshots and recordings. You still see everything."));
+    // docs/PRD-update-restart.md: off, nothing is said; Windows still restarts as it would.
+    let restart = super::flag(state, File::UpdateRestart, "enabled", "Windows Update restart", "Says when updates are waiting for a restart").icon(icons::tile(icons::UPDATE, palette::BLUE));
+    blocks.push(group("Windows", vec![restart]));
     blocks.extend(super::quiet::blocks(state, doc_ok));
 
     let left = state.files.paused_until().and_then(|until| until.checked_sub(reui_protocol::unix_ms())).filter(|&ms| ms > 0);

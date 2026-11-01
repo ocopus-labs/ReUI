@@ -206,6 +206,10 @@ Connect an agent in Settings → Coding agents (it shows the file that changes; 
 
 ReUI checks GitHub for a new version once a day (Settings → About → Check automatically; nothing personal is sent). When one is out, the island shows it with the first line of what's new: **Install** downloads it (you see how far it is), checks it, installs it and restarts ReUI; **Later** hides it for a day. The same Install is in the tray menu (Install update) and in Settings → About. If something goes wrong, the island says why and offers Try again. After an update, About shows what changed (Settings → About → What's new after updates).
 
+## Windows Update restart
+
+When Windows has installed updates that need a restart, the island says so once: **Restart needed**, and when Windows would restart by itself (outside your active hours). **Restart now** asks once more (press it again within 3 seconds), then restarts and finishes the updates, as Start → Update and restart does. **Schedule** opens Settings → Windows Update, where you can pick the time or pause updates. Turn it off in Settings → General → Windows Update restart, or right-click the note.
+
 ## Help
 
 - **Replay the tour:** Settings → About → Replay the tour.

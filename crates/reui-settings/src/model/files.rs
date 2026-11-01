@@ -30,10 +30,28 @@ pub enum File {
     Screenshots,
     /// `activities.json`: live activities from scripts (`reui-bridge activity`).
     Activities,
+    /// `update-restart.json`: only `enabled`, read on reload (docs/PRD-update-restart.md).
+    UpdateRestart,
 }
 
 impl File {
-    pub const ALL: [File; 14] = [File::Island, File::Media, File::Clipboard, File::Osd, File::Devices, File::Timers, File::Privacy, File::Coding, File::Stats, File::Calendar, File::Shelf, File::Downloads, File::Screenshots, File::Activities];
+    pub const ALL: [File; 15] = [
+        File::Island,
+        File::Media,
+        File::Clipboard,
+        File::Osd,
+        File::Devices,
+        File::Timers,
+        File::Privacy,
+        File::Coding,
+        File::Stats,
+        File::Calendar,
+        File::Shelf,
+        File::Downloads,
+        File::Screenshots,
+        File::Activities,
+        File::UpdateRestart,
+    ];
 
     pub fn name(self) -> &'static str {
         match self {
@@ -51,6 +69,7 @@ impl File {
             File::Downloads => "downloads.json",
             File::Screenshots => "screenshots.json",
             File::Activities => "activities.json",
+            File::UpdateRestart => "update-restart.json",
         }
     }
 
@@ -72,6 +91,7 @@ impl File {
             File::Downloads => &["downloads"],
             File::Screenshots => &["screenshots"],
             File::Activities => &["activities"],
+            File::UpdateRestart => &["update-restart"],
         }
     }
 
@@ -92,6 +112,7 @@ impl File {
             File::Downloads => "downloads",
             File::Screenshots => "screenshots",
             File::Activities => "activities",
+            File::UpdateRestart => "update_restart",
         }
     }
 
@@ -184,6 +205,7 @@ impl File {
             File::Downloads => json!({ "enabled": true, "folders": [] }),
             File::Screenshots => json!({ "enabled": true }),
             File::Activities => json!({ "enabled": true, "stale_min": 10, "per_source": 3, "blocked": [] }),
+            File::UpdateRestart => json!({ "enabled": true }),
         }
     }
 

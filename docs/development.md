@@ -33,7 +33,7 @@ To drive a sandboxed island without touching the real mouse or keyboard, post to
 
 ## The hub's flags
 
-The hub starts the island plus every module. `--no-agents`, `--no-media`, `--no-clipboard`, `--no-osd`, `--no-devices`, `--no-timers`, `--no-privacy`, `--no-stats`, `--no-shelf`, `--no-downloads`, `--no-screenshots`, `--no-activities`, `--no-commands` skip one; `--no-link-previews` keeps clipboard links offline; `--no-updates` never looks for updates or mentions them. `--no-island` runs the hub alone so you can start `reui-island.exe` yourself (under a debugger, say). `--no-onboarding` skips the first run and one-time tips; `--first-run` replays the demo and welcome. `--shelf <files…>` (Explorer's Send to) hands the files to the running hub's shelf and exits, or starts the hub with them held. The full list is the doc comment at the top of `crates/reui-hub/src/main.rs`.
+The hub starts the island plus every module. `--no-agents`, `--no-media`, `--no-clipboard`, `--no-osd`, `--no-devices`, `--no-timers`, `--no-privacy`, `--no-stats`, `--no-shelf`, `--no-downloads`, `--no-screenshots`, `--no-activities`, `--no-commands` skip one; `--no-link-previews` keeps clipboard links offline; `--no-updates` never looks for updates or mentions them; `--no-update-restart` never mentions a restart Windows Update is waiting for. `--no-island` runs the hub alone so you can start `reui-island.exe` yourself (under a debugger, say). `--no-onboarding` skips the first run and one-time tips; `--first-run` replays the demo and welcome. `--shelf <files…>` (Explorer's Send to) hands the files to the running hub's shelf and exits, or starts the hub with them held. The full list is the doc comment at the top of `crates/reui-hub/src/main.rs`.
 
 `--demo` enables a module that shows now-playing, a 5-minute timer and, 25 s after each one is settled, the next agent moment: a permission with a scrolling script, a three-step question (one step multi-select) and a plan to approve. They take over the pill, answer nothing real, and time out and fail open (20 s for the permission, 60 s for the others). Hover to peek, click to expand, right-click the pill to quit ReUI. `--demo-music` runs only its music (no timer, no moments): what `tools/perf-sample.ps1` measures for "music playing".
 
@@ -64,6 +64,7 @@ Setup options: `--no-autostart` (don't start with Windows), `--no-launch`, `--qu
 | `%APPDATA%\ReUI\privacy.json` | The indicator's kinds (`microphone`, `camera`, `screen`, `location`), `calls` and each call app (`call_teams`, `call_zoom`, `call_discord`, `call_slack`, `call_webex`, `call_messengers`, `call_browsers`) |
 | `%APPDATA%\ReUI\osd.json` | The HUDs and states, `scroll_step`, and `mixer` (each app's level in the open volume card; its button there flips it) |
 | `%APPDATA%\ReUI\timer-state.json` | Running timers, a focus session, the stopwatch, and reminders (`reminders`: text, `due_at_unix_ms`, a repeat's `every` and `time`, `ringing`) |
+| `%APPDATA%\ReUI\update-restart.json` | Windows Update restart: `enabled` (read on reload) |
 | `%APPDATA%\ReUI\activities.json` | Script activities: `enabled`, `stale_min` (10), `per_source` (3), `blocked` (sources never shown) |
 | `%LOCALAPPDATA%\ReUI` | Caches and logs |
 | `%LOCALAPPDATA%\ReUI\update.json` | What the last update check found |

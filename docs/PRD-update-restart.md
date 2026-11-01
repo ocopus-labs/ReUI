@@ -1,6 +1,6 @@
 # PRD: Windows Update restart
 
-Status: draft · Owner: Rohit · From [research-features.md](research-features.md) §5d #3 · Nov 1, 2026
+Status: M2 built (the note, Restart now, Schedule); M1's capture and M3's countdown wait for a real pending restart · Owner: Rohit · From [research-features.md](research-features.md) §5d #3 · Nov 1, 2026
 
 **References:**
 - **The ask** (r/SideProject, Oct 31, 2026): "Windows schedules a restart and the warning is easy to miss; open work is lost."
