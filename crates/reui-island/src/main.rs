@@ -2,6 +2,11 @@
 //! sends the user's actions back. Normally launched by `reui-hub`; it reconnects on its
 //! own if the hub restarts. Rest the pointer on it to peek, click to expand; right-click it
 //! (or the tray icon) for the short menu; a left-click on the tray icon opens Settings.
+//!
+//! One island per window: one window in most modes, one per display in "All displays"
+//! (`islands.rs`, docs/PRD-all-displays.md). What there's one of (the hub link, the tray,
+//! settings, Windows' broadcasts) lives on a hidden host window (`host.rs`); this file is
+//! the island windows' own messages and the process-wide hooks.
 
 #![windows_subsystem = "windows"]
 
@@ -12,8 +17,11 @@ mod drag_guard;
 mod dragdrop;
 mod features;
 mod fullscreen;
+mod host;
 mod images;
+mod islands;
 mod menus;
+mod open_cards;
 mod intent;
 mod ipc;
 mod order;
@@ -25,9 +33,9 @@ mod settings;
 mod theme;
 mod tray;
 
-use std::cell::{Cell, RefCell};
+use std::cell::Cell;
 
-use windows::core::{w, Result, BOOL};
+use windows::core::{Result, BOOL};
 use windows::Win32::Foundation::*;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::System::WinRT::*;
@@ -36,16 +44,9 @@ use windows::Win32::UI::HiDpi::*;
 use windows::Win32::UI::Input::KeyboardAndMouse::{GetAsyncKeyState, ReleaseCapture, SetCapture, VK_MENU};
 use windows::Win32::UI::WindowsAndMessaging::*;
 
-
 use crate::features::clipboard_keys;
-use reui_design::look::Look;
+use crate::islands::{each_pill, with_pill};
 
-use crate::pill::Pill;
-use crate::place::{MonitorChoice, Placement};
-use crate::settings::Settings;
-
-/// Re-reads settings.json this long after the folder last changed. Outside the pill's
-/// timer ids (which start at 1).
 /// Debug builds: a test script's pointer position (see the window procedure).
 #[cfg(debug_assertions)]
 const WM_TEST_POINTER: u32 = WM_APP + 20;
@@ -62,22 +63,6 @@ const WM_TEST_FOREGROUND: u32 = WM_APP + 21;
 #[cfg(debug_assertions)]
 const WM_TEST_QUIET: u32 = WM_APP + 22;
 
-const TIMER_SETTINGS: usize = 100;
-const SETTINGS_SETTLE_MS: u32 = 150;
-/// Re-place the island (display, DPI, work area) once things settle after a resume, a
-/// display or DPI change, or an Explorer restart; and once more a little later after a
-/// resume, when displays are often still waking.
-const TIMER_PLACE: usize = 101;
-const TIMER_PLACE_LATE: usize = 102;
-/// Fullscreen is checked again this long after the foreground app moved or changed: the
-/// shell's own fullscreen state can lag the window by a moment.
-const TIMER_FULLSCREEN: usize = 103;
-const FULLSCREEN_SETTLE_MS: u32 = 300;
-const PLACE_SETTLE_MS: u32 = 400;
-const PLACE_LATE_MS: u32 = 3000;
-/// The pill's own timer ids, killed before it's rebuilt.
-const PILL_TIMERS: std::ops::RangeInclusive<usize> = 1..=30;
-
 /// Windows' "Animation effects" setting; when off, every morph uses the reduced spring.
 fn animations_enabled() -> bool {
     let mut enabled = BOOL(1);
@@ -88,126 +73,9 @@ fn animations_enabled() -> bool {
 }
 
 thread_local! {
-    /// One island per window (docs/PRD-all-displays.md): today one; "All displays" adds a
-    /// window per display. The first owns the hub link and the tray icon.
-    static PILLS: RefCell<Vec<Pill>> = const { RefCell::new(Vec::new()) };
-    static TASKBAR_CREATED: Cell<u32> = const { Cell::new(0) };
     /// Location changes of the foreground app's windows (a browser video going fullscreen
     /// keeps its window), re-registered for each new foreground process.
     static LOCATION_HOOK: Cell<Option<HWINEVENTHOOK>> = const { Cell::new(None) };
-    static ISLAND: Cell<isize> = const { Cell::new(0) };
-}
-
-/// Checks fullscreen again once the shell has caught up (see [`TIMER_FULLSCREEN`]).
-fn recheck_fullscreen_soon() {
-    let island = HWND(ISLAND.get() as *mut _);
-    if !island.is_invalid() {
-        unsafe { SetTimer(Some(island), TIMER_FULLSCREEN, FULLSCREEN_SETTLE_MS, None) };
-    }
-}
-
-fn schedule_place(hwnd: HWND, late: bool) {
-    unsafe {
-        SetTimer(Some(hwnd), TIMER_PLACE, PLACE_SETTLE_MS, None);
-        if late {
-            SetTimer(Some(hwnd), TIMER_PLACE_LATE, PLACE_LATE_MS, None);
-        }
-    }
-}
-
-/// The look for `settings` as Windows is now (its app mode for Auto, its accent).
-fn look_for(settings: &Settings) -> Look {
-    Look::new(&settings.appearance, theme::apps_light(), theme::accent())
-}
-
-/// Windows' colours changed: rebuild only if the look comes out different (Auto in another
-/// app mode, the Windows accent changed and is in use).
-fn colors_changed(hwnd: HWND) {
-    let mut current = None;
-    with_pill(hwnd, |pill| current = Some(*pill.look().0));
-    if current.is_some_and(|look| look != look_for(&Settings::load())) {
-        place(hwnd, true);
-    }
-}
-
-/// Puts the island where the `monitor` setting says, at that display's DPI, and back on
-/// top. A display with another scale needs the pill rebuilt for it, and so does a new
-/// look (`relook`).
-fn place(hwnd: HWND, relook: bool) {
-    let mut choice = MonitorChoice::default();
-    let mut look = Look::default();
-    with_pill(hwnd, |pill| {
-        choice = pill.monitor_choice().clone();
-        look = *pill.look().0;
-    });
-    if relook {
-        look = look_for(&Settings::load());
-    }
-    let Some(placement) = place::current(&choice, &look) else { return };
-    let mut moved = !relook;
-    if moved {
-        with_pill(hwnd, |pill| moved = pill.move_to(&placement));
-    }
-    if !moved {
-        rebuild(hwnd, &placement);
-    }
-}
-
-/// In "cursor" mode, the island moves to the pointer's display before what the hub sent
-/// shows up on it (a new activity, a card a hotkey opens).
-fn follow_cursor(hwnd: HWND) {
-    let mut follow = false;
-    with_pill(hwnd, |pill| follow = *pill.monitor_choice() == MonitorChoice::Cursor && pill.can_move());
-    if follow {
-        place(hwnd, false);
-    }
-}
-
-/// A new pill for another scale (per-monitor DPI) or look: the old one hands over its hub
-/// link, snapshot and GPU objects (so a style switch takes milliseconds, not the ~140 ms a
-/// new device and fonts cost), the window is resized, and the new one picks up where it
-/// left off.
-fn rebuild(hwnd: HWND, placement: &Placement) {
-    let taken = PILLS.with(|cell| {
-        let mut pills = cell.try_borrow_mut().ok()?;
-        let at = pills.iter().position(|p| p.hwnd() == hwnd)?;
-        Some((at, pills.remove(at)))
-    });
-    let Some((at, mut old)) = taken else { return };
-    eprintln!("island: rebuilding for scale {}", placement.scale);
-    let reopen = old.reopen_after_move();
-    let (to_hub, events, snapshot) = old.take_link();
-    let places = old.places();
-    let gpu = old.into_gpu();
-    unsafe {
-        for id in PILL_TIMERS {
-            _ = KillTimer(Some(hwnd), id);
-        }
-        let w = placement.window;
-        _ = SetWindowPos(hwnd, Some(HWND_TOPMOST), w.left, w.top, w.right - w.left, w.bottom - w.top, SWP_NOACTIVATE | SWP_NOOWNERZORDER);
-    }
-    let settings = Settings::load();
-    let look = look_for(&settings);
-    match Pill::new(hwnd, placement.scale, placement.window, placement.monitor, !animations_enabled(), settings.visibility, settings.appearance, look, to_hub, events, Some(gpu)) {
-        Ok(mut pill) => {
-            pill.apply_settings(settings);
-            pill.restore(snapshot, places);
-            pill.recheck_fullscreen();
-            if let Some(id) = reopen {
-                pill.reopen(id);
-            }
-            PILLS.with(|cell| {
-                let mut pills = cell.borrow_mut();
-                let at = at.min(pills.len());
-                pills.insert(at, pill);
-            });
-        }
-        Err(e) => {
-            // Without a pill there's nothing to show; the hub starts a fresh island.
-            eprintln!("island: can't rebuild the pill: {e}");
-            unsafe { PostQuitMessage(1) };
-        }
-    }
 }
 
 fn press_drag(hwnd: HWND, lparam: LPARAM) -> bool {
@@ -221,33 +89,15 @@ fn client_point(lparam: LPARAM) -> (f32, f32) {
     ((lparam.0 & 0xffff) as i16 as f32, ((lparam.0 >> 16) & 0xffff) as i16 as f32)
 }
 
-/// Run `f` on the island of window `hwnd` unless the islands are already borrowed
-/// (re-entrant window messages).
-fn with_pill(hwnd: HWND, f: impl FnOnce(&mut Pill)) {
-    PILLS.with(|cell| {
-        if let Ok(mut pills) = cell.try_borrow_mut() {
-            if let Some(pill) = pills.iter_mut().find(|p| p.hwnd() == hwnd) {
-                f(pill);
-            }
-        }
-    });
-}
-
-/// Run `f` on every island (the mouse hook, the foreground app, settings): each decides
-/// for itself what it means on its display.
-fn each_pill(mut f: impl FnMut(&mut Pill)) {
-    PILLS.with(|cell| {
-        if let Ok(mut pills) = cell.try_borrow_mut() {
-            pills.iter_mut().for_each(&mut f);
-        }
-    });
-}
-
 unsafe extern "system" fn mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     if code >= 0 {
         let pt = (*(lparam.0 as *const MSLLHOOKSTRUCT)).pt;
         match wparam.0 as u32 {
-            WM_MOUSEMOVE => each_pill(|pill| pill.on_mouse_move(pt)),
+            WM_MOUSEMOVE => {
+                each_pill(|pill| pill.on_mouse_move(pt));
+                // With an island on each display, the one under the pointer leads.
+                islands::update_lead(pt);
+            }
             WM_LBUTTONDOWN => each_pill(|pill| pill.on_mouse_down(pt, drag_guard::LEFT)),
             WM_RBUTTONDOWN => each_pill(|pill| pill.on_mouse_down(pt, drag_guard::RIGHT)),
             WM_MBUTTONDOWN => each_pill(|pill| pill.on_mouse_down(pt, drag_guard::MIDDLE)),
@@ -263,7 +113,7 @@ unsafe extern "system" fn mouse_hook(code: i32, wparam: WPARAM, lparam: LPARAM) 
 unsafe extern "system" fn foreground_hook(_: HWINEVENTHOOK, _: u32, hwnd: HWND, _: i32, _: i32, _: u32, _: u32) {
     each_pill(|pill| pill.on_foreground(hwnd));
     watch_location(hwnd);
-    recheck_fullscreen_soon();
+    host::recheck_fullscreen_soon();
 }
 
 /// Follows the foreground app's window moves and resizes (only that process's, so it stays
@@ -289,49 +139,26 @@ unsafe extern "system" fn location_hook(_: HWINEVENTHOOK, _: u32, hwnd: HWND, ob
     // The window itself (not its caret or a control), and only the one in front.
     if object == OBJID_WINDOW.0 && child == CHILDID_SELF as i32 && hwnd == GetForegroundWindow() {
         each_pill(|pill| pill.recheck_fullscreen());
-        recheck_fullscreen_soon();
+        host::recheck_fullscreen_soon();
     }
 }
 
+/// An island window's own messages.
 unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: LPARAM) -> LRESULT {
     match msg {
-        ipc::WM_HUB => {
-            follow_cursor(hwnd);
-            with_pill(hwnd, |pill| pill.drain_hub());
-            LRESULT(0)
-        }
+        // The `monitor` setting changed (posted by the island that read it).
         place::WM_PLACE => {
-            place(hwnd, false);
+            islands::sync(false);
             LRESULT(0)
         }
         pill::WM_LOOK => {
-            place(hwnd, true);
+            islands::sync(true);
             LRESULT(0)
         }
-        // Displays added, removed or re-arranged; resolution or scale changed; the taskbar
-        // moved (work area).
-        WM_DISPLAYCHANGE | WM_DPICHANGED => {
-            schedule_place(hwnd, false);
+        // This window's display changed scale.
+        WM_DPICHANGED => {
+            host::schedule_place(false);
             LRESULT(0)
-        }
-        // Light or dark app mode, or the accent: Auto and the Windows accent follow.
-        WM_SETTINGCHANGE if theme::is_color_change(lparam) => {
-            colors_changed(hwnd);
-            LRESULT(0)
-        }
-        WM_DWMCOLORIZATIONCOLORCHANGED => {
-            colors_changed(hwnd);
-            LRESULT(0)
-        }
-        WM_SETTINGCHANGE if wparam.0 as u32 == SPI_SETWORKAREA.0 => {
-            schedule_place(hwnd, false);
-            LRESULT(0)
-        }
-        WM_POWERBROADCAST => {
-            if matches!(wparam.0 as u32, PBT_APMRESUMEAUTOMATIC | PBT_APMRESUMESUSPEND) {
-                schedule_place(hwnd, true);
-            }
-            LRESULT(1)
         }
         WM_MOUSEACTIVATE => LRESULT(MA_NOACTIVATE as isize),
         // Debug builds only: a pointer position (screen pixels, lparam as for WM_MOUSEMOVE)
@@ -357,6 +184,10 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
         WM_TEST_QUIET => {
             let (x, y) = client_point(lparam);
             with_pill(hwnd, |pill| pill.test_quiet(x, y, wparam.0));
+            LRESULT(0)
+        }
+        clipboard_keys::WM_KEYS_TAKEN => {
+            with_pill(hwnd, |pill| pill.keys_taken());
             LRESULT(0)
         }
         clipboard_keys::WM_KEYS => {
@@ -434,55 +265,19 @@ unsafe extern "system" fn wndproc(hwnd: HWND, msg: u32, wparam: WPARAM, lparam: 
             menus::right_click(hwnd, x, y);
             LRESULT(0)
         }
-        tray::WM_TRAY => {
-            match tray::click(lparam) {
-                Some(tray::Click::Open) => tray::open_settings(),
-                Some(tray::Click::Menu) => menus::open_menu(hwnd, Vec::new()),
-                None => {}
-            }
-            LRESULT(0)
-        }
-        // Coalesced: one folder change often arrives as several notifications.
-        settings::WM_SETTINGS_CHANGED => {
-            SetTimer(Some(hwnd), TIMER_SETTINGS, SETTINGS_SETTLE_MS, None);
-            LRESULT(0)
-        }
-        WM_TIMER if wparam.0 == TIMER_FULLSCREEN => {
-            _ = KillTimer(Some(hwnd), TIMER_FULLSCREEN);
-            each_pill(|pill| pill.recheck_fullscreen());
-            LRESULT(0)
-        }
         // The pointer settled on another display ("cursor" mode).
         WM_TIMER if wparam.0 == place::TIMER_FOLLOW => {
             _ = KillTimer(Some(hwnd), wparam.0);
-            place(hwnd, false);
-            LRESULT(0)
-        }
-        WM_TIMER if wparam.0 == TIMER_PLACE || wparam.0 == TIMER_PLACE_LATE => {
-            _ = KillTimer(Some(hwnd), wparam.0);
-            place(hwnd, false);
-            LRESULT(0)
-        }
-        WM_TIMER if wparam.0 == TIMER_SETTINGS => {
-            _ = KillTimer(Some(hwnd), TIMER_SETTINGS);
-            let settings = Settings::load();
-            each_pill(|pill| pill.apply_settings(settings.clone()));
+            islands::sync(false);
             LRESULT(0)
         }
         WM_TIMER => {
             with_pill(hwnd, |pill| pill.on_timer(wparam.0));
             LRESULT(0)
         }
+        // An island's window goes with its display, or with the process.
         WM_DESTROY => {
             dragdrop::unregister(hwnd);
-            tray::remove(hwnd);
-            PostQuitMessage(0);
-            LRESULT(0)
-        }
-        // Explorer restarted: the tray icon is gone and the taskbar may sit elsewhere.
-        _ if msg != 0 && msg == TASKBAR_CREATED.get() => {
-            tray::add(hwnd);
-            schedule_place(hwnd, false);
             LRESULT(0)
         }
         _ => DefWindowProcW(hwnd, msg, wparam, lparam),
@@ -503,50 +298,28 @@ fn main() -> Result<()> {
         })?
     };
 
-    // The chosen display (primary by default), top centre, at its DPI.
-    let settings = Settings::load();
-    let look = look_for(&settings);
-    let Some(Placement { monitor, scale, window }) = place::current(&settings.monitor, &look) else {
-        return Err(windows::core::Error::from_thread());
-    };
-
-    let hwnd = unsafe {
+    unsafe {
         let instance = GetModuleHandleW(None)?;
         let class = WNDCLASSEXW {
             cbSize: size_of::<WNDCLASSEXW>() as u32,
             lpfnWndProc: Some(wndproc),
             hInstance: instance.into(),
             hCursor: LoadCursorW(None, IDC_ARROW)?,
-            lpszClassName: w!("ReUI.Island"),
+            lpszClassName: islands::CLASS,
             ..Default::default()
         };
         if RegisterClassExW(&class) == 0 {
             return Err(windows::core::Error::from_thread());
         }
-        let ex = WS_EX_TOPMOST | WS_EX_TOOLWINDOW | WS_EX_NOACTIVATE | WS_EX_NOREDIRECTIONBITMAP | WS_EX_LAYERED | WS_EX_TRANSPARENT;
-        let (width, height) = (window.right - window.left, window.bottom - window.top);
-        let hwnd = CreateWindowExW(ex, w!("ReUI.Island"), w!("ReUI"), WS_POPUP, window.left, window.top, width, height, None, None, Some(instance.into()), None)?;
-        SetLayeredWindowAttributes(hwnd, COLORREF(0), 255, LWA_ALPHA)?;
-        hwnd
-    };
+    }
 
-    ISLAND.set(hwnd.0 as isize);
-    let link = ipc::spawn(hwnd);
-    let mut pill = Pill::new(hwnd, scale, window, monitor, !animations_enabled(), settings.visibility, settings.appearance, look, link.to_hub, link.events, None)?;
-    pill.apply_settings(settings);
-    settings::watch(hwnd);
-    PILLS.with(|cell| cell.borrow_mut().push(pill));
-    // Things dragged onto the island go to the file shelf (its drop target answers only
-    // near the island, `pill/drop.rs`).
-    dragdrop::register(hwnd, Box::new(move |event| {
-        let mut taken = false;
-        with_pill(hwnd, |pill| taken = pill.on_drop_event(event));
-        taken
-    }));
-    unsafe { _ = ShowWindow(hwnd, SW_SHOWNOACTIVATE) };
+    let host = host::create()?;
+    let link = ipc::spawn(host);
+    islands::set_link(link.to_hub, link.events);
+    // An island on the chosen display (primary by default), or on each display.
+    islands::sync(false);
+    settings::watch(host);
     watch_location(unsafe { GetForegroundWindow() });
-    TASKBAR_CREATED.set(tray::taskbar_created());
-    tray::add(hwnd);
 
     let (mouse, foreground) = unsafe {
         let instance = GetModuleHandleW(None)?;
@@ -573,7 +346,8 @@ fn main() -> Result<()> {
         if let Some(hook) = LOCATION_HOOK.take() {
             _ = UnhookWinEvent(hook);
         }
+        _ = DestroyWindow(host);
     }
-    PILLS.with(|cell| cell.borrow_mut().clear());
+    islands::clear();
     Ok(())
 }

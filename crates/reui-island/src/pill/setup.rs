@@ -1,7 +1,6 @@
 //! Building the pill: the window's composition tree (layers, clips, surfaces, the bars and
 //! the minimal bubble) and the property set its morphs animate.
 
-use std::sync::mpsc::Receiver;
 
 use reui_design::look::{Appearance, Look};
 use reui_design::tokens::{component, island, look as range, motion, notch};
@@ -21,7 +20,6 @@ use crate::features::clipboard::Panel;
 use crate::features::level::Levels;
 use crate::features::music::Swipe;
 use crate::features::visualizer::Visualizer;
-use crate::ipc::Event;
 use crate::drag_guard::DragGuard;
 use crate::place::MonitorChoice;
 use crate::render::{expanded_surface, Renderer, COMPACT_SURFACE, EAR_SURFACE, MINIMAL_SURFACE, SWITCHER_SURFACE};
@@ -48,7 +46,6 @@ impl Pill {
         appearance: Appearance,
         look: Look,
         to_hub: UnboundedSender<ClientMsg>,
-        events: Receiver<Event>,
         gpu: Option<Gpu>,
     ) -> Result<Self> {
         // Size scales the whole pill and its type: it's drawn at that much more than the
@@ -316,12 +313,14 @@ impl Pill {
             monitor,
             screen: crate::place::monitor_rect(monitor).unwrap_or(window),
             follow_pending: false,
+            display: String::new(),
+            lead: true,
             reduced_motion,
             lyric_line: None,
             lyric_change: None,
             levels: Levels::default(),
             level_ticking: false,
-            _keys: KeysRelease,
+            _keys: KeysRelease(hwnd.0 as isize),
             compositor,
             _target: target,
             root,
@@ -400,18 +399,17 @@ impl Pill {
             capture_excluded: None,
             intent: Default::default(),
             to_hub,
-            events,
         })
     }
 }
 
 /// Releases the keyboard hook when the pill goes. A field rather than `Drop` on `Pill`, so a
 /// rebuild can move the compositor and renderer out of the old pill ([`Pill::into_gpu`]).
-pub(super) struct KeysRelease;
+pub(super) struct KeysRelease(pub isize);
 
 impl Drop for KeysRelease {
     fn drop(&mut self) {
-        crate::features::clipboard_keys::release();
+        crate::features::clipboard_keys::release(HWND(self.0 as *mut _));
     }
 }
 

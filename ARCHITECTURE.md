@@ -164,9 +164,15 @@ modules/
 ## `reui-island/src`
 
 ```
-main.rs            window class, message loop, mouse/foreground hooks; the islands, one per
-                   window (`with_pill(hwnd)` for a window's messages, `each_pill` for hooks
-                   and settings; docs/PRD-all-displays.md)
+main.rs            an island window's own messages, the mouse and foreground hooks, start-up
+host.rs            the hidden host window: what there's one of (the hub link's notifications, the
+                   tray, the settings watcher, displays, colours, power, Explorer restarting)
+islands.rs         the islands, one per window (one per display in All displays,
+                   docs/PRD-all-displays.md): the shared hub link drained once and applied to
+                   each, the lead (the pointer's display: opens cards by itself, takes hotkeys,
+                   animates bars; an open card follows it), windows kept in step with displays
+open_cards.rs      open cards counted across islands: a module hears the first open and the last
+                   close (pure, tested)
 ipc.rs             pipe client
 settings.rs        visibility modes, pause, the look's keys, watching settings.json
 menus.rs           the island's menu and a card's menus, opened outside the pill's borrow
@@ -174,7 +180,8 @@ tray.rs            tray icon, short menu (Install update while one is known; a m
                    entries first when it was right-clicked)
 theme.rs           Windows' app mode (Auto) and accent, re-read on "ImmersiveColorSet"
 order.rs           which activity is in the pill and which in the bubble
-place.rs           which display (monitor setting) and the window rect at its DPI
+place.rs           which displays (monitor setting: primary, cursor, all, a named one) and each
+                   window rect at its DPI
 fullscreen.rs      when to hide: D3D, presentation, busy, a window covering the display
 desktop.rs         whether the desktop (not an app) is in front, for "Always show on the desktop"
 intent.rs          reading the pointer: open on click or hover, the hover delay, the reveal

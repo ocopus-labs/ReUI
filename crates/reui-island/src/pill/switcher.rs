@@ -85,7 +85,9 @@ impl Pill {
         let selected = switcher::selected(&self.tabs.places, open);
         let was = self.tabs.selected.is_some();
         self.tabs.selected = selected;
-        clipboard_keys::offer_views(selected.is_some());
+        if clipboard_keys::held_by(self.hwnd) || !clipboard_keys::captured() {
+            clipboard_keys::offer_views(selected.is_some());
+        }
         if selected.is_none() {
             self.tabs.hover = None;
         } else if let Err(e) = self.lay_out_switcher().and_then(|_| self.draw_switcher()) {

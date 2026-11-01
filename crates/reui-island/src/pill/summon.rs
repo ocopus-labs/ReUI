@@ -57,7 +57,7 @@ impl Pill {
         if self.hidden {
             return;
         }
-        if clipboard_keys::captured() && (self.engaged || self.summoned || self.state == State::Places) {
+        if clipboard_keys::held_by(self.hwnd) && (self.engaged || self.summoned || self.state == State::Places) {
             return self.let_go();
         }
         let decision = self.snapshot.activities.iter().find(|a| a.priority == Priority::Decision && a.expanded.as_ref().is_some_and(choices::wants_keys)).map(|a| a.id.clone());
@@ -94,10 +94,37 @@ impl Pill {
         }
     }
 
+    /// Another island took the keyboard (`clipboard_keys::WM_KEYS_TAKEN`): this one lets go
+    /// of it, as Esc would, so it doesn't take the keys back on its next redraw.
+    pub fn keys_taken(&mut self) {
+        match self.state {
+            State::Places => self.set_state(State::Compact),
+            State::Expanded if self.summoned => self.set_state(State::Compact),
+            _ => {
+                self.engaged = false;
+                self.update_capture();
+                if self.state == State::Expanded {
+                    self.redraw_expanded();
+                }
+            }
+        }
+    }
+
     /// Closes a summoned card when the user clearly moved on.
     pub(super) fn dismiss_summoned(&mut self) {
         if self.summoned && self.state == State::Expanded {
             self.set_state(State::Compact);
+        }
+    }
+
+    /// This island goes away with its card open. Rebuilt for another scale (`quietly`), its
+    /// successor opens the card again, so the module hears nothing; its display gone, the
+    /// module hears it closed if no other island shows it.
+    pub fn give_back_open(&mut self, quietly: bool) {
+        if let Some(old) = self.open_id.take() {
+            if crate::open_cards::closed(&old) && !quietly {
+                _ = self.to_hub.send(ClientMsg::Action { id: old, action: ACTION_COLLAPSED.into() });
+            }
         }
     }
 
@@ -108,11 +135,17 @@ impl Pill {
         if now_open == self.open_id {
             return;
         }
+        // Counted across the islands (`open_cards`): the module hears the first open and
+        // the last close.
         if let Some(old) = self.open_id.take() {
-            _ = self.to_hub.send(ClientMsg::Action { id: old, action: ACTION_COLLAPSED.into() });
+            if crate::open_cards::closed(&old) {
+                _ = self.to_hub.send(ClientMsg::Action { id: old, action: ACTION_COLLAPSED.into() });
+            }
         }
         if let Some(new) = &now_open {
-            _ = self.to_hub.send(ClientMsg::Action { id: new.clone(), action: ACTION_EXPANDED.into() });
+            if crate::open_cards::opened(new) {
+                _ = self.to_hub.send(ClientMsg::Action { id: new.clone(), action: ACTION_EXPANDED.into() });
+            }
         }
         self.open_id = now_open;
     }
@@ -128,18 +161,21 @@ impl Pill {
         let open = self.state == State::Expanded && self.shown && (self.summoned || self.engaged);
         let keys = open && self.front_view().is_some_and(choices::wants_keys);
         let escape = places || open && self.summoned && !keys;
-        clipboard_keys::limit(match () {
-            _ if places && self.idle.keyboard => clipboard_keys::Limit::Navigation,
-            _ if escape => clipboard_keys::Limit::Escape,
-            _ => clipboard_keys::Limit::All,
-        });
         let want = escape || keys;
-        if want == clipboard_keys::captured() {
+        if want {
+            // The hook's limit is shared by the islands: only the one holding the keys sets it.
+            clipboard_keys::limit(match () {
+                _ if places && self.idle.keyboard => clipboard_keys::Limit::Navigation,
+                _ if escape => clipboard_keys::Limit::Escape,
+                _ => clipboard_keys::Limit::All,
+            });
+        }
+        if want == clipboard_keys::held_by(self.hwnd) {
             return;
         }
         if want {
             clipboard_keys::capture(self.hwnd);
-            if !clipboard_keys::captured() || !keys {
+            if !clipboard_keys::held_by(self.hwnd) || !keys {
                 return;
             }
             self.panel.query = Some(self.panel.module_query().unwrap_or_default().to_string());
@@ -148,7 +184,7 @@ impl Pill {
                 self.choice_cursor = Some(0);
             }
         } else {
-            clipboard_keys::release();
+            clipboard_keys::release(self.hwnd);
             self.panel.query = None;
             self.search_dirty = false;
             self.awaiting = None;
@@ -167,11 +203,11 @@ impl Pill {
     /// Keys the hook queued (see `clipboard_keys`).
     pub fn on_keys(&mut self) {
         let keys = clipboard_keys::drain();
-        if keys.is_empty() || !clipboard_keys::captured() {
+        if keys.is_empty() || !clipboard_keys::held_by(self.hwnd) {
             return;
         }
         for key in keys {
-            if !clipboard_keys::captured() {
+            if !clipboard_keys::held_by(self.hwnd) {
                 break;
             }
             self.on_key(key);

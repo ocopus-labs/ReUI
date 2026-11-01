@@ -20,6 +20,10 @@ use crate::features::keys::{map_key, Key, Mods};
 
 /// Posted to the island window when keys are queued.
 pub const WM_KEYS: u32 = WM_APP + 3;
+/// Posted to an island whose keyboard another island took (All displays: one owner at a
+/// time, docs/PRD-all-displays.md §5.4). It lets go: a summoned card closes, a card that
+/// was given the keys gives them back.
+pub const WM_KEYS_TAKEN: u32 = WM_APP + 9;
 
 /// "No key": sent to cover an Alt chord we swallowed, so the app doesn't see a bare Alt
 /// press and release (which opens its menu bar).
@@ -70,9 +74,20 @@ pub fn captured() -> bool {
     HOOK.get().is_some()
 }
 
-/// Starts reading keys for `hwnd`'s panel.
+/// Whether `hwnd`'s island is the one reading the keys (several islands share the hook).
+pub fn held_by(hwnd: HWND) -> bool {
+    captured() && WINDOW.get() == hwnd.0 as isize
+}
+
+/// Starts reading keys for `hwnd`'s panel. Another island holding them is told to let go
+/// ([`WM_KEYS_TAKEN`]); the hook stays and the keys go to `hwnd` from now on.
 pub fn capture(hwnd: HWND) {
     if captured() {
+        let old = WINDOW.replace(hwnd.0 as isize);
+        if old != hwnd.0 as isize {
+            QUEUE.with_borrow_mut(VecDeque::clear);
+            unsafe { _ = PostMessageW(Some(HWND(old as *mut _)), WM_KEYS_TAKEN, WPARAM(0), LPARAM(0)) };
+        }
         return;
     }
     WINDOW.set(hwnd.0 as isize);
@@ -83,7 +98,11 @@ pub fn capture(hwnd: HWND) {
     }
 }
 
-pub fn release() {
+/// Stops reading keys, if `hwnd`'s island is the one reading them.
+pub fn release(hwnd: HWND) {
+    if !held_by(hwnd) {
+        return;
+    }
     if let Some(h) = HOOK.take() {
         unsafe { _ = UnhookWindowsHookEx(h) };
     }

@@ -1,11 +1,11 @@
-//! The hub link: what the pipe delivers (snapshots, images, focus requests) applied to the
-//! pill as it arrives, and handing the link over to a pill rebuilt at another scale.
+//! The hub link: what the pipe delivers (snapshots, images, focus requests), drained once
+//! for all the islands ([`drain`]) and applied to each ([`Pill::apply_batch`]), and the
+//! snapshot a pill rebuilt at another scale starts from.
 
 use std::collections::HashSet;
 use std::sync::mpsc::Receiver;
 
-use reui_protocol::{ClientMsg, Destination, Snapshot};
-use tokio::sync::mpsc::UnboundedSender;
+use reui_protocol::{ActivityId, Destination, Snapshot};
 
 use crate::features::clipboard;
 use crate::images;
@@ -13,13 +13,57 @@ use crate::ipc::Event;
 
 use super::Pill;
 
+/// What the link delivered since the last look. Only the newest snapshot matters.
+#[derive(Default)]
+pub struct Batch {
+    pub snapshot: Option<Snapshot>,
+    pub focus: Option<ActivityId>,
+    pub places: Option<Vec<Destination>>,
+    /// The hide shortcut, pressed an odd number of times (twice is back where it was).
+    pub toggle_hidden: bool,
+    /// The open shortcut, likewise.
+    pub open: bool,
+    /// The hub went away: images are gone too.
+    pub disconnected: bool,
+}
+
+/// Takes everything queued. Images are kept encoded in the shared store, and evicted in
+/// stream order, exactly where the hub does, so images that arrived for a later snapshot
+/// survive; each island decodes what it shows.
+pub fn drain(events: &Receiver<Event>) -> Batch {
+    let mut batch = Batch::default();
+    while let Ok(event) = events.try_recv() {
+        match event {
+            Event::Connected => eprintln!("island: connected to hub"),
+            Event::ToggleHidden => batch.toggle_hidden = !batch.toggle_hidden,
+            Event::OpenIsland => batch.open = !batch.open,
+            Event::Focus(id) => batch.focus = Some(id),
+            Event::Destinations(list) => batch.places = Some(list),
+            Event::Image(id, bytes) => images::put(id, bytes),
+            Event::Snapshot(snapshot) => {
+                images::evict(&clipboard::referenced(&snapshot));
+                batch.snapshot = Some(snapshot);
+            }
+            Event::Disconnected => {
+                images::clear();
+                batch.places = Some(Vec::new());
+                batch.snapshot = Some(Snapshot::default());
+                batch.disconnected = true;
+            }
+        }
+    }
+    batch
+}
+
 impl Pill {
-    /// Hands over the hub link and the last snapshot, for a pill rebuilt at another scale
-    /// (see `main::rebuild`). This pill is left without a link.
-    pub fn take_link(&mut self) -> (UnboundedSender<ClientMsg>, Receiver<Event>, Snapshot) {
-        let to_hub = std::mem::replace(&mut self.to_hub, tokio::sync::mpsc::unbounded_channel().0);
-        let events = std::mem::replace(&mut self.events, std::sync::mpsc::channel().1);
-        (to_hub, events, std::mem::take(&mut self.raw))
+    /// The last snapshot, for a pill rebuilt at another scale (see `main::rebuild`).
+    pub fn take_snapshot(&mut self) -> Snapshot {
+        std::mem::take(&mut self.raw)
+    }
+
+    /// The snapshot as received, for an island that's just been added.
+    pub fn received(&self) -> &Snapshot {
+        &self.raw
     }
 
     /// Shows `snapshot` on a freshly built pill: its images are decoded again from the
@@ -27,77 +71,52 @@ impl Pill {
     /// when they change).
     pub fn restore(&mut self, snapshot: Snapshot, places: Vec<Destination>) {
         self.tabs.places = places;
-        for id in clipboard::referenced(&snapshot) {
+        self.decode_images(&snapshot);
+        if let Err(e) = self.apply(snapshot) {
+            eprintln!("island: render failed: {e}");
+        }
+    }
+
+    /// Decodes the images `snapshot` shows that this island hasn't yet, and drops the rest.
+    fn decode_images(&mut self, snapshot: &Snapshot) {
+        let shown = clipboard::referenced(snapshot);
+        for &id in &shown {
+            if self.renderer.has_image(id) {
+                continue;
+            }
             if let Some(bytes) = images::get(id) {
                 if let Err(e) = self.renderer.add_image(id, &bytes) {
                     eprintln!("island: can't decode image: {e}");
                 }
             }
         }
-        if let Err(e) = self.apply(snapshot) {
-            eprintln!("island: render failed: {e}");
-        }
+        self.renderer.retain_images(&shown);
     }
 
-    /// Apply everything the hub link queued; only the newest snapshot matters. Messages for
-    /// module windows are returned, in order, for the caller to deliver outside this borrow.
-    pub fn drain_hub(&mut self) {
-        let mut latest = None;
-        let mut focus = None;
-        let mut places = None;
-        let mut toggles = 0;
-        let mut opens = 0;
-        while let Ok(event) = self.events.try_recv() {
-            match event {
-                Event::Connected => eprintln!("island: connected to hub"),
-                Event::ToggleHidden => toggles += 1,
-                Event::OpenIsland => opens += 1,
-                Event::Focus(id) => focus = Some(id),
-                Event::Destinations(list) => places = Some(list),
-                // Kept encoded; the pill decodes what a snapshot shows (below).
-                Event::Image(id, bytes) => images::put(id, bytes),
-                // Evict in stream order, exactly where the hub does, so images that arrived
-                // for a later snapshot survive.
-                Event::Snapshot(snapshot) => {
-                    let shown = clipboard::referenced(&snapshot);
-                    images::evict(&shown);
-                    for &id in &shown {
-                        if self.renderer.has_image(id) {
-                            continue;
-                        }
-                        if let Some(bytes) = images::get(id) {
-                            if let Err(e) = self.renderer.add_image(id, &bytes) {
-                                eprintln!("island: can't decode image: {e}");
-                            }
-                        }
-                    }
-                    self.renderer.retain_images(&shown);
-                    latest = Some(snapshot);
-                }
-                Event::Disconnected => {
-                    places = Some(Vec::new());
-                    images::clear();
-                    self.renderer.retain_images(&HashSet::new());
-                    latest = Some(Snapshot::default());
-                }
-            }
+    /// Applies what the link delivered. Every island shows the snapshot and the places;
+    /// only the `lead` (the island on the pointer's display, or the only one) opens a card
+    /// asked for by its hotkey or the open shortcut. The hide shortcut is the caller's: it's
+    /// one setting for all of them.
+    pub fn apply_batch(&mut self, batch: &Batch, lead: bool) {
+        if batch.disconnected {
+            self.renderer.retain_images(&HashSet::new());
         }
-        if let Some(snapshot) = latest {
-            if let Err(e) = self.apply(snapshot) {
+        if let Some(snapshot) = &batch.snapshot {
+            self.decode_images(snapshot);
+            if let Err(e) = self.apply(snapshot.clone()) {
                 eprintln!("island: render failed: {e}");
             }
         }
-        if let Some(list) = places {
-            self.set_places(list);
+        if let Some(list) = &batch.places {
+            self.set_places(list.clone());
         }
-        if let Some(id) = focus {
-            self.focus(id);
+        if !lead {
+            return;
         }
-        // Pressed twice before we got to it: back where it was.
-        if toggles % 2 == 1 {
-            self.toggle_hidden();
+        if let Some(id) = &batch.focus {
+            self.focus(id.clone());
         }
-        if opens % 2 == 1 {
+        if batch.open {
             self.open_from_shortcut();
         }
     }

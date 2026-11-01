@@ -4,10 +4,11 @@
 //! Each runs outside the pill's borrow so hooks and timers keep working meanwhile.
 
 use windows::Win32::Foundation::HWND;
-use windows::Win32::UI::WindowsAndMessaging::DestroyWindow;
+use windows::Win32::UI::WindowsAndMessaging::PostQuitMessage;
 
 use crate::pill::MenuEntry;
-use crate::{tray, with_pill};
+use crate::islands::{self, with_pill};
+use crate::tray;
 
 /// The island's menu, led by `moment`'s entries when it was opened on a moment that can be
 /// quieted (`quiet.rs`).
@@ -21,10 +22,18 @@ pub fn open_menu(hwnd: HWND, moment: Vec<MenuEntry>) {
     match picked {
         Some(tray::Command::Moment(i)) => with_pill(hwnd, |pill| pill.quiet_pick(&moment[i].1)),
         Some(tray::Command::Settings) => tray::open_settings(),
-        Some(tray::Command::TogglePause) => with_pill(hwnd, |pill| pill.set_paused(!paused)),
-        Some(tray::Command::ToggleHidden) => with_pill(hwnd, |pill| pill.toggle_hidden()),
+        // One setting for every island: this one saves it, the others read it back.
+        Some(tray::Command::TogglePause) => {
+            with_pill(hwnd, |pill| pill.set_paused(!paused));
+            islands::sync_settings();
+        }
+        Some(tray::Command::ToggleHidden) => {
+            with_pill(hwnd, |pill| pill.toggle_hidden());
+            islands::sync_settings();
+        }
         Some(tray::Command::Module(module, action)) => with_pill(hwnd, |pill| pill.command(module, &action)),
-        Some(tray::Command::Quit) => unsafe { _ = DestroyWindow(hwnd) },
+        // Every island goes, and the hub hears a clean exit (quit by the user).
+        Some(tray::Command::Quit) => unsafe { PostQuitMessage(0) },
         None => {}
     }
 }

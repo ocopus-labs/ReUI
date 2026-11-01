@@ -38,6 +38,8 @@ pub enum MonitorChoice {
     Cursor,
     /// A display by device name (`\\.\DISPLAY2`); the primary one while it's not connected.
     Named(String),
+    /// Every display, an island on each (docs/PRD-all-displays.md).
+    All,
 }
 
 impl MonitorChoice {
@@ -45,6 +47,7 @@ impl MonitorChoice {
         match text.trim() {
             "" | "primary" => MonitorChoice::Primary,
             "cursor" => MonitorChoice::Cursor,
+            "all" => MonitorChoice::All,
             name => MonitorChoice::Named(name.to_string()),
         }
     }
@@ -61,10 +64,13 @@ pub struct Screen {
     pub dpi: u32,
 }
 
-/// Where the island goes: the display, its scale, and the window rectangle.
-#[derive(Clone, Copy, Debug, PartialEq)]
+/// Where an island goes: the display, its scale, and the window rectangle.
+#[derive(Clone, Debug, PartialEq)]
 pub struct Placement {
     pub monitor: HMONITOR,
+    /// The display's device name (`\\.\DISPLAY1`): how an island is matched to its display
+    /// when displays change (handles don't survive that).
+    pub name: String,
     /// The display's scale (its DPI / 96), before the look's size.
     pub scale: f32,
     pub window: RECT,
@@ -82,6 +88,8 @@ pub fn choose(choice: &MonitorChoice, screens: &[Screen], cursor: POINT) -> Opti
         MonitorChoice::Primary => None,
         MonitorChoice::Cursor => screens.iter().position(|s| contains(&s.rect, cursor)),
         MonitorChoice::Named(name) => screens.iter().position(|s| s.name.eq_ignore_ascii_case(name)),
+        // One island per display is `wanted`'s; asked for one, it's the primary's.
+        MonitorChoice::All => None,
     };
     picked.or_else(primary)
 }
@@ -149,15 +157,34 @@ pub fn screens() -> Vec<Screen> {
         .collect()
 }
 
-/// Where the island should be now for `choice` and `look`. `None` only if Windows reports
-/// no display.
-pub fn current(choice: &MonitorChoice, look: &Look) -> Option<Placement> {
+fn placement(screen: &Screen, look: &Look) -> Placement {
+    let scale = screen.dpi.max(1) as f32 / 96.0;
+    Placement { monitor: screen.handle, name: screen.name.clone(), scale, window: window_rect(&screen.rect, &screen.work, scale, look) }
+}
+
+/// Which of `screens` get an island: every one for All displays, else the one the choice
+/// means. Pure.
+pub fn wanted(choice: &MonitorChoice, screens: &[Screen], cursor: POINT) -> Vec<usize> {
+    match choice {
+        MonitorChoice::All => (0..screens.len()).collect(),
+        _ => choose(choice, screens, cursor).into_iter().collect(),
+    }
+}
+
+/// Where each island goes now, primary display first (it holds the hub link's first
+/// window); empty only if Windows reports no display.
+pub fn placements(choice: &MonitorChoice, look: &Look) -> Vec<Placement> {
     let screens = screens();
     let mut cursor = POINT::default();
     unsafe { _ = GetCursorPos(&mut cursor) };
-    let screen = &screens[choose(choice, &screens, cursor)?];
-    let scale = screen.dpi.max(1) as f32 / 96.0;
-    Some(Placement { monitor: screen.handle, scale, window: window_rect(&screen.rect, &screen.work, scale, look) })
+    let mut picked = wanted(choice, &screens, cursor);
+    picked.sort_by_key(|&i| !screens[i].primary);
+    picked.into_iter().map(|i| placement(&screens[i], look)).collect()
+}
+
+/// Which of `screens` (by area) holds `point`; the island there is the lead (§5.4). Pure.
+pub fn holding(rects: &[RECT], point: POINT) -> Option<usize> {
+    rects.iter().position(|r| contains(r, point))
 }
 
 #[cfg(test)]
@@ -179,6 +206,21 @@ mod tests {
         assert!(!should_follow(&MonitorChoice::Cursor, false, &left, on_right), "a bar being dragged, a menu: it stays");
         assert!(!should_follow(&MonitorChoice::Primary, true, &left, on_right));
         assert!(!should_follow(&MonitorChoice::Named(r"\\.\DISPLAY2".into()), true, &left, on_right));
+    }
+
+    #[test]
+    fn all_displays_wants_an_island_on_each() {
+        let screens = [screen(r"\\.\DISPLAY2", -1920, false), screen(r"\\.\DISPLAY1", 0, true)];
+        let pointer = POINT { x: -100, y: 10 };
+        assert_eq!(MonitorChoice::parse("all"), MonitorChoice::All);
+        assert_eq!(wanted(&MonitorChoice::All, &screens, pointer), [0, 1]);
+        assert_eq!(wanted(&MonitorChoice::Cursor, &screens, pointer), [0]);
+        assert_eq!(wanted(&MonitorChoice::Primary, &screens, pointer), [1]);
+        assert_eq!(wanted(&MonitorChoice::All, &[], pointer), Vec::<usize>::new());
+        let rects: Vec<RECT> = screens.iter().map(|s| s.rect).collect();
+        assert_eq!(holding(&rects, pointer), Some(0));
+        assert_eq!(holding(&rects, POINT { x: 500, y: 10 }), Some(1));
+        assert_eq!(holding(&rects, POINT { x: 5000, y: 10 }), None);
     }
 
     #[test]
