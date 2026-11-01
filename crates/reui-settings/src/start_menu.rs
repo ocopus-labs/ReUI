@@ -45,10 +45,19 @@ pub fn state(paths: &Paths) -> StartMenu {
         return StartMenu::Off;
     }
     match target(&lnk) {
-        Some(target) if same_path(&target, &paths.hub_exe().to_string_lossy()) => StartMenu::On,
+        Some(target) if same_file(&target, &paths.hub_exe()) => StartMenu::On,
         Some(target) => StartMenu::Elsewhere(target),
         // There but unreadable: it's ours to replace or remove all the same.
         None => StartMenu::On,
+    }
+}
+
+/// Whether the entry's target is this hub. The shell may store a long path where ours is
+/// a short (8.3) one, or the other way round: the files are compared, then the text.
+fn same_file(target: &str, hub: &Path) -> bool {
+    match (std::fs::canonicalize(target), std::fs::canonicalize(hub)) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => same_path(target, &hub.to_string_lossy()),
     }
 }
 
