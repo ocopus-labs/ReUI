@@ -94,6 +94,7 @@ impl Module for ClipboardHistory {
 
     fn run(self: Box<Self>, mut ctx: ModuleContext) -> Pin<Box<dyn Future<Output = ()> + Send>> {
         ctx.declare_quiet(quiet);
+        ctx.declare_private();
         Box::pin(run(ctx, self.link_previews))
     }
 }

@@ -108,6 +108,7 @@ mod tests {
             minimal: Element::Ring(value),
             audio: None,
             quiet: None,
+            private: false,
             expanded: None,
         }
     }
