@@ -52,7 +52,7 @@ Synced lyrics are off until you turn them on (Settings → Now Playing → Synce
 
 ## Clipboard history
 
-Everything you copy (text with its formatting, images, files) is kept on this PC and comes back as rich cards. Copies from password managers and anything that looks like a secret are never saved. Along the top: the types to show, the search, how many cards match, Clear, and the settings.
+Everything you copy (text with its formatting, images, files) is kept on this PC and comes back as rich cards. Copies from password managers and anything that looks like a secret are never saved. Along the top: the types to show, the search, how many cards match, Clear, and the settings. Files show what Explorer shows for them, and an image copied from a web page keeps its file name, which you can search for.
 
 | Shortcut | It does |
 | --- | --- |

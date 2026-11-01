@@ -47,7 +47,7 @@ use windows::Win32::Foundation::*;
 use windows::Win32::UI::WindowsAndMessaging::*;
 
 pub use crate::modules::hotkey::Hotkey;
-pub(crate) use self::image::{exe_icon, thumbnail};
+pub(crate) use self::image::{exe_icon, file_thumbnail, thumbnail};
 pub(crate) use self::target::app_name;
 pub use self::window::start_with;
 use self::window::WM_STACK;
@@ -57,8 +57,9 @@ pub enum Content {
     /// Plain text, and the rich versions the app offered alongside it (CF_HTML as UTF-8,
     /// RTF bytes) so it pastes back formatted.
     Text { text: String, html: Option<String>, rtf: Option<Vec<u8>> },
-    /// Full image (PNG, alpha kept) and a small thumbnail (PNG).
-    Image { png: Vec<u8>, thumb: Vec<u8> },
+    /// Full image (PNG, alpha kept), a small thumbnail (PNG), and its file name when known
+    /// (a browser's "Copy image" says where it came from).
+    Image { png: Vec<u8>, thumb: Vec<u8>, name: Option<String> },
     /// `cut`: Explorer marked it a move ("Preferred DropEffect"); pasted back as a copy.
     Files { paths: Vec<String>, cut: bool },
 }
@@ -167,9 +168,10 @@ struct Formats {
 enum Raw {
     /// UTF-16LE bytes, and CF_HTML / RTF bytes; all without their NUL terminators.
     Text { utf16: Vec<u8>, html: Option<Vec<u8>>, rtf: Option<Vec<u8>> },
-    Png(Vec<u8>),
-    /// CF_DIBV5 or CF_DIB.
-    Dib(Vec<u8>),
+    /// The image, and its file name when the page it was copied from said (`<img src>`).
+    Png(Vec<u8>, Option<String>),
+    /// CF_DIBV5 or CF_DIB, and the file name as for `Png`.
+    Dib(Vec<u8>, Option<String>),
     Files { paths: Vec<String>, cut: bool },
 }
 

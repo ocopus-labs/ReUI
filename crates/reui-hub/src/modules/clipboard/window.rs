@@ -251,7 +251,7 @@ mod tests {
         assert_eq!(compose(vec![rich.clone()], Mode::Upper), Some((text("HELLO", None), true)));
         assert_eq!(compose(vec![rich.clone()], Mode::Markdown), Some((text("**Hello**", None), true)));
         // Several: joined by newlines; non-text items left out.
-        let image = Content::Image { png: vec![1], thumb: vec![1] };
+        let image = Content::Image { png: vec![1], thumb: vec![1], name: None };
         let files = Content::Files { paths: vec!["a".into()], cut: false };
         assert_eq!(compose(vec![text("a ", None), image.clone(), text(" b", None)], Mode::Trim), Some((text("a\nb", None), true)));
         assert_eq!(compose(vec![text("a", None), text("b", None)], Mode::Normal), Some((text("a\nb", None), true)));

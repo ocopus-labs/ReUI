@@ -285,3 +285,25 @@ fn the_gallery_fits_three_cards_and_the_edge_of_a_fourth() {
     let fourth = row.left(3, 0.0);
     assert!(fourth < Card::Gallery.width() && fourth + cw > Card::Gallery.width());
 }
+
+#[test]
+fn files_fan_out_behind_the_first() {
+    use super::cards::Face;
+    let f = Face::new(0.0, 0.0, 225.0);
+    // One picture: as an image would be, upright.
+    let one = f.fan(&[(100.0, 100.0)]);
+    let (l, t, w, h) = f.contain(100.0, 100.0);
+    assert_eq!(one.len(), 1);
+    assert!((one[0].left - l).abs() < 0.01 && (one[0].top - t).abs() < 0.01 && (one[0].width - w).abs() < 0.01 && (one[0].height - h).abs() < 0.01 && one[0].angle == 0.0);
+    // Three: drawn right, left, then the first in the middle on top; all inside the card.
+    let three = f.fan(&[(100.0, 100.0), (100.0, 100.0), (100.0, 100.0), (100.0, 100.0)]);
+    assert_eq!(three.len(), 3);
+    let (right, left, first) = (three[0], three[1], three[2]);
+    assert_eq!(first.angle, 0.0);
+    assert!(left.angle < 0.0 && right.angle > 0.0);
+    assert!(left.left < first.left && right.left > first.left);
+    for p in three {
+        assert!(p.left >= f.left - 0.01 && p.left + p.width <= f.right + 0.01, "{p:?}");
+        assert!(p.top >= f.top - 0.01 && p.top + p.height <= f.body_bottom + 0.01, "{p:?}");
+    }
+}

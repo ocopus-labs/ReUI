@@ -19,7 +19,8 @@ impl Store {
         let category = category_of(&content);
         let (kind, text, html, rtf, png, thumb, files, cut) = match content {
             Content::Text { text, html, rtf } => ("text", Some(text), html, rtf, None, None, None, false),
-            Content::Image { png, thumb } => ("image", None, None, None, Some(png), Some(thumb), None, false),
+            // The file name, when known, is the image's text: shown on its card, searchable.
+            Content::Image { png, thumb, name } => ("image", name, None, None, Some(png), Some(thumb), None, false),
             Content::Files { paths, cut } => ("files", None, None, None, None, None, Some(paths.join("\n")), cut),
         };
         if text.as_deref().is_some_and(|t| t.trim().is_empty()) || files.as_deref() == Some("") {
@@ -66,7 +67,7 @@ impl Store {
             .query_row("select kind, text, html, rtf, png, thumb, files, cut from items where id = ?1 and deleted_ms is null", [id], |r| {
                 let kind: String = r.get(0)?;
                 Ok(match kind.as_str() {
-                    "image" => Content::Image { png: r.get::<_, Option<Vec<u8>>>(4)?.unwrap_or_default(), thumb: r.get::<_, Option<Vec<u8>>>(5)?.unwrap_or_default() },
+                    "image" => Content::Image { png: r.get::<_, Option<Vec<u8>>>(4)?.unwrap_or_default(), thumb: r.get::<_, Option<Vec<u8>>>(5)?.unwrap_or_default(), name: r.get(1)? },
                     "files" => Content::Files { paths: r.get::<_, Option<String>>(6)?.unwrap_or_default().lines().map(str::to_owned).collect(), cut: r.get(7)? },
                     _ => Content::Text { text: r.get::<_, Option<String>>(1)?.unwrap_or_default(), html: r.get(2)?, rtf: r.get(3)? },
                 })
@@ -403,7 +404,7 @@ mod tests {
         assert_eq!(s.edit(old, "other", 4).unwrap(), Some((other, false)));
         assert_eq!(s.edit(other, "other", 5).unwrap(), Some((other, false)));
         assert_eq!(s.edit(other, "  ", 5).unwrap(), None);
-        let image = s.add(captured(Content::Image { png: vec![1], thumb: vec![1] }), 6).unwrap().unwrap();
+        let image = s.add(captured(Content::Image { png: vec![1], thumb: vec![1], name: None }), 6).unwrap().unwrap();
         assert_eq!(s.edit(image, "x", 7).unwrap(), None);
     }
 
@@ -424,8 +425,8 @@ mod tests {
     #[test]
     fn ocr_bookkeeping() {
         let mut s = Store::in_memory().unwrap();
-        let a = s.add(captured(Content::Image { png: vec![1], thumb: vec![1] }), 1).unwrap().unwrap();
-        let b = s.add(captured(Content::Image { png: vec![2], thumb: vec![2] }), 2).unwrap().unwrap();
+        let a = s.add(captured(Content::Image { png: vec![1], thumb: vec![1], name: None }), 1).unwrap().unwrap();
+        let b = s.add(captured(Content::Image { png: vec![2], thumb: vec![2], name: None }), 2).unwrap().unwrap();
         s.add(text("t"), 3).unwrap();
         assert_eq!(s.ocr_pending(10).unwrap(), [b, a]);
         assert_eq!(s.ocr_text(a).unwrap(), None);

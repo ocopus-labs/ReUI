@@ -152,6 +152,42 @@ impl Face {
         let (cw, ch) = (w * k, h * k);
         (self.left + (bw - cw) / 2.0, self.top + (bh - ch) / 2.0, cw, ch)
     }
+
+    /// A files card's pictures (`sizes`, the first file's first) fanned out in the body:
+    /// the first upright in the middle, the second tilted out to the left behind it, the
+    /// third to the right. In drawing order, back to front.
+    pub fn fan(&self, sizes: &[(f32, f32)]) -> Vec<Fanned> {
+        let share = if sizes.len() > 1 { component::card::FAN_SIZE } else { 1.0 };
+        let mut out: Vec<Fanned> = sizes
+            .iter()
+            .take(3)
+            .enumerate()
+            .map(|(i, &(w, h))| {
+                let (l, t, cw, ch) = self.contain(w, h);
+                let (cw, ch) = (cw * share, ch * share);
+                let (cx, cy) = (l + (cw / share) / 2.0, t + (ch / share) / 2.0);
+                let (side, tilt) = match i {
+                    0 => (0.0, 0.0),
+                    1 => (-1.0, -component::card::FAN_ANGLE),
+                    _ => (1.0, component::card::FAN_ANGLE),
+                };
+                let cx = cx + side * component::card::FAN_OFFSET * cw;
+                Fanned { left: cx - cw / 2.0, top: cy - ch / 2.0, width: cw, height: ch, angle: tilt }
+            })
+            .collect();
+        out.reverse();
+        out
+    }
+}
+
+/// One fanned picture: its box before the tilt, and the tilt in degrees about its centre.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Fanned {
+    pub left: f32,
+    pub top: f32,
+    pub width: f32,
+    pub height: f32,
+    pub angle: f32,
 }
 
 #[cfg(test)]

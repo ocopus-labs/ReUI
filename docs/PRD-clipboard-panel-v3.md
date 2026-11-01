@@ -1,6 +1,6 @@
 # PRD: Clipboard panel v3 (the new design)
 
-Status: **M1 (toolbar) and M2 (cards) built, Nov 1, 2026; M3 (file thumbnails, image names) next.** Decisions are in §7.
+Status: **built (M1–M3), Nov 1, 2026.** Decisions are in §7.
 
 Reference: [`docs/images/design/clipboard-v3.png`](images/design/clipboard-v3.png) (Rohit's design). As built (M2, drawn by the island offscreen): [`clipboard-v3-built.png`](images/design/clipboard-v3-built.png).
 
@@ -63,7 +63,7 @@ Size: about 225 × 156 DIP in an 800 panel. That is three across and the edge of
 | Code | Same, monospaced | `code` | none, as text |
 | Link | `🔗 Site · Kind` (quiet, semibold), the **title** (semibold), the URL (tertiary, one line) | `links · host` (tag bold, host quiet) | none; the age on the tag line |
 | Image | The image **contained** (aspect kept, not cropped), centred, its own small radius | `image` (accent) | file name when known (copied from a file or a page's `<img src>`), else `W × H` |
-| Files | Up to three of the files' **thumbnails, fanned** (shell thumbnails: a PDF's first page, an image, else the type's icon); until M3, the document glyph | `N files` (or `file`) | the first file's name |
+| Files | Up to three of the files' **thumbnails, fanned** (shell thumbnails: a PDF's first page, an image, else the type's icon; the document glyph until they arrive) | `N files` (or `file`) | the first file's name |
 | Color | The swatch fills the card, as today | `color` | the value (`#5E5CE6`) |
 
 What goes: the app icon in the footer (the design has none; the app stays searchable and appears in the card's menu as "From Edge"), the hover pin/delete circles stay as they are, the `★` for pinned stays at the tag line's end.
@@ -103,6 +103,8 @@ The module says what's there; the island decides how it looks.
 | **M1** | Toolbar: type chips, search pill with placeholder, count, Clear + Undo, settings gear, Pinned/collections per *D3* | The panel filters by type from the chips and the keyboard; Clear and Undo work; tests for `to_message` and the layout |
 | **M2** | Cards: new size and width, the tag/name/age footer, link, image (contained), text, code and color faces, grain | A screenshot of the real island next to the design reads the same at 100 % and 150 %, dark and light |
 | **M3** | Files: fanned thumbnails (worker thread, cache); image names | Copying 3 files in Explorer shows their thumbnails in under 300 ms; idle CPU stays 0 |
+
+**M3 as built:** `clipboard/thumbs.rs` asks the shell (`IShellItemImageFactory`, on the blocking pool) for the first three files of the first 12 cards that hold files, at 192 px, and keeps them by path while the hub runs (256 at most); the panel shows what's ready and is sent again as the rest arrive. The island fans them: the first upright in the middle, the second tilted out left behind it, the third right (`cards::Face::fan`, tokens `card.fan-*`). A copied image's name comes from the `<img src>` in the HTML a browser puts beside it (`os/formats.rs::image_name`: the last path part, `%`-decoded; inline `data:` images and names without an extension say nothing), kept in the clip's text column, so it shows on the card and is searchable; images without one are named by their size.
 
 Each milestone is its own PR. The README picture, `docs/guide.md` and `ARCHITECTURE.md` change with M2.
 

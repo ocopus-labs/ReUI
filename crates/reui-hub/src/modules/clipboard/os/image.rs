@@ -36,7 +36,7 @@ pub(super) unsafe fn png_image(wic: &IWICImagingFactory, png: Vec<u8>) -> Result
     }
     let thumb = scaled_png(wic, &frame, THUMB_PX, png_has_alpha(&png))?;
     drop(frame);
-    Ok((Content::Image { png, thumb }, w, h))
+    Ok((Content::Image { png, thumb, name: None }, w, h))
 }
 
 /// CF_DIBV5 / CF_DIB → (PNG and thumbnail, width, height). 32 bpp keeps its alpha (taken as
@@ -50,7 +50,7 @@ pub(super) unsafe fn dib_image(wic: &IWICImagingFactory, dib: &[u8]) -> Result<(
     let format = if px.alpha { GUID_WICPixelFormat32bppBGRA } else { GUID_WICPixelFormat24bppBGR };
     let png = encode_png(wic, &convert(wic, &source, &format)?, format)?;
     let thumb = scaled_png(wic, &source, THUMB_PX, px.alpha)?;
-    Ok((Content::Image { png, thumb }, px.w, px.h))
+    Ok((Content::Image { png, thumb, name: None }, px.w, px.h))
 }
 
 /// Any other DIB (palettes, 16/24 bpp, RLE) through WIC's BMP decoder: a DIB is a BMP
@@ -84,7 +84,7 @@ unsafe fn bmp_image(wic: &IWICImagingFactory, dib: &[u8]) -> Result<(Content, u3
     let source = convert(wic, &frame, &GUID_WICPixelFormat24bppBGR)?;
     let png = encode_png(wic, &source, GUID_WICPixelFormat24bppBGR)?;
     let thumb = scaled_png(wic, &source, THUMB_PX, false)?;
-    Ok((Content::Image { png, thumb }, w, h))
+    Ok((Content::Image { png, thumb, name: None }, w, h))
 }
 
 /// A PNG no larger than `max_px` on its long side; with `alpha`, scaled premultiplied (no
@@ -118,6 +118,42 @@ pub fn exe_icon(exe: &str) -> Option<Vec<u8>> {
         _ = CoInitializeEx(None, COINIT_MULTITHREADED);
         let wic: IWICImagingFactory = CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER).ok()?;
         app_icon(&wic, exe)
+    }
+}
+
+/// What Explorer shows for a file, up to `px` square, as a PNG: its thumbnail (a picture,
+/// a PDF's first page, when a handler draws one) or else its type's icon. Blocking (the
+/// shell may open the file): run it from a blocking-pool thread, which it initialises COM on.
+pub fn file_thumbnail(path: &str, px: u32) -> Option<Vec<u8>> {
+    use windows::Win32::Foundation::SIZE;
+    use windows::Win32::Graphics::Gdi::DeleteObject;
+    use windows::Win32::UI::Shell::{IShellItemImageFactory, SHCreateItemFromParsingName, SIIGBF_BIGGERSIZEOK, SIIGBF_RESIZETOFIT};
+    unsafe {
+        _ = CoInitializeEx(None, COINIT_MULTITHREADED);
+        let wic: IWICImagingFactory = CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER).ok()?;
+        // The shell doesn't parse verbatim paths.
+        let path = path.strip_prefix(r"\\?\").unwrap_or(path);
+        let wide: Vec<u16> = path.encode_utf16().chain([0]).collect();
+        let factory: IShellItemImageFactory = SHCreateItemFromParsingName(PCWSTR(wide.as_ptr()), None).ok()?;
+        let side = px as i32;
+        let bitmap = factory.GetImage(SIZE { cx: side, cy: side }, SIIGBF_RESIZETOFIT | SIIGBF_BIGGERSIZEOK).ok()?;
+        // Icons carry alpha; some thumbnails leave it all zero, and are opaque pictures.
+        let read = |alpha: WICBitmapAlphaChannelOption| -> Option<IWICBitmapSource> {
+            let source: IWICBitmapSource = wic.CreateBitmapFromHBITMAP(bitmap, windows::Win32::Graphics::Gdi::HPALETTE::default(), alpha).ok()?.cast().ok()?;
+            convert(&wic, &source, &GUID_WICPixelFormat32bppBGRA).ok()
+        };
+        let source = read(WICBitmapUseAlpha).and_then(|s| {
+            let (w, h) = source_size(&s).ok()?;
+            let mut pixels = vec![0u8; (w * h * 4) as usize];
+            s.CopyPixels(std::ptr::null(), w * 4, &mut pixels).ok()?;
+            if pixels.chunks_exact(4).all(|p| p[3] == 0) {
+                read(WICBitmapIgnoreAlpha)
+            } else {
+                Some(s)
+            }
+        });
+        _ = DeleteObject(bitmap.into());
+        scaled_png(&wic, &source?, px, true).ok()
     }
 }
 

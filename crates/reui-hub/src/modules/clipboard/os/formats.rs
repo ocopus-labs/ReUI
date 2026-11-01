@@ -150,6 +150,60 @@ pub(super) fn dib_from_bgra(w: u32, h: u32, bgra: &[u8], v5: bool) -> Vec<u8> {
     dib
 }
 
+/// The file name of the first `<img>` in a page fragment (CF_HTML), as a browser's "Copy
+/// image" offers it: the last part of its `src`, without the query, `%`-decoded.
+/// Inline images (`data:`) and names without an extension say nothing, so `None`.
+pub(super) fn image_name(html: &str) -> Option<String> {
+    let lower = html.to_ascii_lowercase();
+    let tag = lower.find("<img")?;
+    let end = lower[tag..].find('>').map_or(lower.len(), |e| tag + e);
+    let attrs = &lower[tag..end];
+    let at = attrs.find("src=")? + 4;
+    let quote = attrs[at..].chars().next()?;
+    let start = tag + at + if quote == '"' || quote == '\'' { 1 } else { 0 };
+    let rest = &html[start..end];
+    let src = match quote {
+        '"' | '\'' => rest.split(quote).next()?,
+        _ => rest.split([' ', '\t', '\n', '>']).next()?,
+    };
+    if src.trim_start().to_ascii_lowercase().starts_with("data:") {
+        return None;
+    }
+    let path = src.split(['?', '#']).next()?;
+    // Not the host: "https://x.org/" names nothing.
+    let path = match path.split_once("://") {
+        Some((_, rest)) => rest.split_once('/').map_or("", |(_, p)| p),
+        None => path,
+    };
+    let last = path.rsplit(['/', '\\']).find(|p| !p.is_empty())?;
+    let name = percent_decode(last).replace("&amp;", "&");
+    let name = name.trim();
+    let (stem, ext) = name.rsplit_once('.')?;
+    if stem.is_empty() || ext.is_empty() || ext.len() > 5 || name.chars().count() > 120 || name.chars().any(char::is_control) {
+        return None;
+    }
+    Some(name.to_string())
+}
+
+/// `%20` → space, and so on; bytes that aren't UTF-8 make it `None` (left as is).
+fn percent_decode(text: &str) -> String {
+    let bytes = text.as_bytes();
+    let mut out = Vec::with_capacity(bytes.len());
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'%' && i + 2 < bytes.len() {
+            if let Ok(b) = u8::from_str_radix(&text[i + 1..i + 3], 16) {
+                out.push(b);
+                i += 3;
+                continue;
+            }
+        }
+        out.push(bytes[i]);
+        i += 1;
+    }
+    String::from_utf8(out).unwrap_or_else(|_| text.to_string())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -244,4 +298,19 @@ mod tests {
         assert!(!flat.alpha);
         assert_eq!(&flat.bgra[..12], &[10, 20, 30, 255, 147, 152, 157, 255, 255, 255, 255, 255]);
     }
+
+    #[test]
+    fn a_copied_images_name_comes_from_its_img_tag() {
+        let page = |src: &str| format!("Version:0.9\r\n<html><body><!--StartFragment--><img alt=\"x\" src={src} width=\"10\"><!--EndFragment--></body></html>");
+        assert_eq!(image_name(&page("\"https://upload.example.org/a/b/Summit.png?w=800#top\"")).as_deref(), Some("Summit.png"));
+        assert_eq!(image_name(&page("'https://x.org/Sea%20of%20clouds.JPG'")).as_deref(), Some("Sea of clouds.JPG"));
+        assert_eq!(image_name(&page("https://x.org/pic.webp")).as_deref(), Some("pic.webp"));
+        // Nothing to name it by.
+        assert_eq!(image_name(&page("\"data:image/png;base64,iVBORw0KGgo=\"")), None);
+        assert_eq!(image_name(&page("\"https://x.org/image\"")), None);
+        assert_eq!(image_name(&page("\"https://x.org/\"")), None);
+        assert_eq!(image_name("<p>no picture</p>"), None);
+        assert_eq!(image_name("<IMG SRC=\"C:\\Pictures\\Trip.png\">").as_deref(), Some("Trip.png"));
+    }
 }
+

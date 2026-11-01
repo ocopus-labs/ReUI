@@ -103,7 +103,7 @@ fn item(it: &cv::Item, view: &cv::View) -> Item {
         "color" => it.color.as_deref().and_then(hex).map_or_else(|| Preview::Text(text.clone()), Preview::Color),
         "files" => {
             let files = it.files.clone().unwrap_or_default();
-            Preview::Files { name: files.first().cloned().unwrap_or_default(), count: files.len() as u32 }
+            Preview::Files { name: files.first().cloned().unwrap_or_default(), count: files.len() as u32, thumbs: it.thumbs.iter().filter_map(|t| t.parse().ok()).map(ImageId).collect() }
         }
         "code" => Preview::Code(text),
         _ => Preview::Text(text),
@@ -130,8 +130,8 @@ fn item(it: &cv::Item, view: &cv::View) -> Item {
 fn footer(it: &cv::Item) -> (String, Option<String>, Option<String>) {
     match it.kind.as_str() {
         "link" => ("links".into(), None, it.url.as_deref().map(|u| host(u).to_string())),
-        // Until a copied image's file name is known (M3), its size names it.
-        "image" => ("image".into(), it.meta.clone(), None),
+        // Its file name when the page it came from said; else its size names it.
+        "image" => ("image".into(), it.title.clone().or_else(|| it.meta.clone()), None),
         "files" => {
             let files = it.files.as_deref().unwrap_or_default();
             let tag = if it.missing {
@@ -322,6 +322,8 @@ mod tests {
         assert_eq!((link.tag.as_deref(), link.name, link.meta.as_deref(), link.age.as_str()), (Some("links"), None, Some("en.wikipedia.org"), "4m ago"));
         let image = card(cv::Item { id: 3, kind: "image".into(), meta: Some("1920 × 1080".into()), age: "2h".into(), ..Default::default() });
         assert_eq!((image.tag.as_deref(), image.tag_tone, image.name.as_deref()), (Some("image"), Tone::Accent, Some("1920 × 1080")));
+        let named = card(cv::Item { id: 5, kind: "image".into(), title: Some("Summit.png".into()), meta: Some("1920 × 1080".into()), ..Default::default() });
+        assert_eq!(named.name.as_deref(), Some("Summit.png"));
         let text = card(cv::Item { id: 4, kind: "text".into(), text: Some("hi".into()), age: "1d".into(), ..Default::default() });
         assert_eq!((text.tag.as_deref(), text.tag_tone, text.name, text.icon), (Some("text"), Tone::Secondary, None, None));
     }
