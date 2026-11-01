@@ -24,6 +24,17 @@ impl Renderer {
     /// Draws the expanded presentation and returns its layout: height, pressable regions,
     /// and where live bars go (the pill draws those).
     pub fn draw_expanded(&self, surface: &CompositionDrawingSurface, view: Option<&ExpandedView>, accent: Color, with: &Interaction) -> Result<ExpandedLayout> {
+        let mut layout = None;
+        self.paint(surface, |rt| {
+            layout = Some(self.expanded_into(rt, view, accent, with)?);
+            Ok(())
+        })?;
+        layout.ok_or_else(|| windows::core::Error::from(windows::Win32::Foundation::E_FAIL))
+    }
+
+    /// Draws the open card's content into `rt` (cleared, transparent: the material behind
+    /// it is the pill's). Separate from the surface so a test can draw it offscreen.
+    pub(crate) fn expanded_into(&self, rt: &ID2D1RenderTarget, view: Option<&ExpandedView>, accent: Color, with: &Interaction) -> Result<ExpandedLayout> {
         let mut height = island::expanded::MIN_HEIGHT;
         let mut hits = Vec::new();
         let mut bars = None;
@@ -31,7 +42,7 @@ impl Renderer {
         let mut block_max = 0.0;
         let mut choice_spans = None;
         let max_height = card(view.map_or(CardSize::Regular, |v| v.size)).max_height(&self.look);
-        self.paint(surface, |rt| {
+        (|| -> Result<()> {
             let Some(view) = view else { return Ok(()) };
             let size = card(view.size);
             let w = size.width();
@@ -343,7 +354,7 @@ impl Renderer {
             }
             bars = bars.map(|(x, mid, live)| (x + dx, mid, live));
             Ok(())
-        })?;
+        })()?;
         let radius = self.card_radius(view.map_or(CardSize::Regular, |v| v.size));
         Ok(ExpandedLayout { width, height, radius, hits, bars, block_max, choices: choice_spans })
     }

@@ -153,7 +153,7 @@ mod tests {
 
     #[test]
     fn the_pill_drags_every_file_held() {
-        let item = |drag| Item { action: String::new(), preview: Preview::Text(String::new()), icon: None, age: String::new(), meta: None, pinned: false, actions: vec![], drag };
+        let item = |drag| Item { action: String::new(), preview: Preview::Text(String::new()), icon: None, age: String::new(), tag: None, tag_tone: reui_protocol::Tone::Secondary, name: None, meta: None, pinned: false, actions: vec![], drag };
         let items = [item(Some(Drag::Files(vec!["a".into()]))), item(Some(Drag::Text("t".into()))), item(None), item(Some(Drag::Files(vec!["b".into(), "c".into()])))];
         assert_eq!(drag_all(&items), Some(Drag::Files(vec!["a".into(), "b".into(), "c".into()])));
         assert_eq!(drag_all(&items[1..3]), None);

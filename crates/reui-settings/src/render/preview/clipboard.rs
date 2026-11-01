@@ -1,12 +1,13 @@
 //! Clipboard: the notch panel as it opens (`reui-hub/src/modules/clipboard/panel.rs`, drawn
 //! by `reui-island/src/render/rows/{search,cards}.rs`): the toolbar (type filters, the
-//! search field, the count, Clear, settings), then the row of cards, four and a half
-//! across, the half card fading out at the edge.
-//! The cards are what a clipboard holds without pictures: notes, a link, a colour, code.
+//! search field, the count, Clear, settings), then the row of cards, three and the
+//! edge of a fourth, fading out at the edge.
+//! The cards are what a clipboard holds without pictures: a link, a note, files, a colour,
+//! code.
 //! On a stage too narrow for the panel at the look's size, the toast a copy shows instead
 //! (`toast.rs`): the copy glyph and the text's first words, side by side.
 
-use reui_design::layout::cards::CardRow;
+use reui_design::layout::cards::{CardRow, Face as CardFace};
 use reui_design::layout::rows::{self, Filters};
 use reui_design::layout::compact;
 use reui_design::look::{concentric, Look};
@@ -23,34 +24,38 @@ use crate::ui::{stage, Moment};
 /// The module's accent.
 const ACCENT: Color = rgb(10, 132, 255);
 const SEARCH: char = '\u{E721}';
-const LINK: char = '\u{E774}';
-const CODE: char = '\u{E943}';
+const LINK: char = '\u{E71B}';
+const FILES: char = '\u{E8A5}';
 const COPY: char = '\u{E8C8}';
 /// What the toast shows of the copied text (`toast.rs` cuts it at 24 characters).
 const GLIMPSE: &str = "Move the review to 3 PM…";
 /// The type filters (`panel.rs`): All (the history clock, chosen), text, links, images,
 /// files, colours.
-const FILTERS: [char; 6] = ['\u{E81C}', '\u{E8D2}', '\u{E71B}', '\u{EB9F}', '\u{E8A5}', '\u{E790}'];
+const FILTERS: [char; 6] = ['\u{E81C}', 'T', '\u{E71B}', '\u{EB9F}', '\u{E8A5}', '\u{E790}'];
 const CLEAR: char = '\u{E74D}';
 const SETTINGS: char = '\u{E713}';
 const COUNT: &str = "24";
 
 enum Face {
-    /// Several lines: the first as a title, the rest quieter.
-    Note(&'static str, &'static str),
     Text(&'static str),
-    Link(&'static str),
-    Color(Color, &'static str),
+    /// Site, title, address.
+    Link(&'static str, &'static str, &'static str),
+    Color(Color),
     Code(&'static str),
+    /// Files: the glyph until thumbnails come.
+    Files,
 }
 
-/// Each card: its face, its age, its one fact.
-const CARDS: [(Face, &str, &str); 5] = [
-    (Face::Note("Thursday", "Move the review to 3 PM and send the agenda before lunch"), "now", "2 lines"),
-    (Face::Link("Keyboard shortcuts in Windows"), "4m", "microsoft.com"),
-    (Face::Color(rgb(94, 92, 230), "#5E5CE6"), "18m", "HEX"),
-    (Face::Code("npm run build"), "1h", ""),
-    (Face::Text("See you at the station at 6"), "2h", ""),
+/// A card as the hub sends it (`panel.rs`): its face, tag, name, the fact after the tag,
+/// and its age.
+type Card = (Face, &'static str, Option<&'static str>, Option<&'static str>, &'static str);
+
+const CARDS: [Card; 5] = [
+    (Face::Link("Wikipedia", "Sea of clouds", "en.wikipedia.org/wiki/Sea_of_clouds"), "links", None, Some("en.wikipedia.org"), "just now"),
+    (Face::Text("Move the review to 3 PM and send the agenda before lunch"), "text", None, None, "4m ago"),
+    (Face::Files, "3 files", Some("Itinerary.pdf"), None, "18m ago"),
+    (Face::Color(rgb(94, 92, 230)), "color", Some("#5E5CE6"), None, "1h ago"),
+    (Face::Code("npm run build"), "code", None, None, "2h ago"),
 ];
 
 pub fn draw(p: &Painter, look: &Look) -> Result<()> {
@@ -74,13 +79,13 @@ pub fn draw(p: &Painter, look: &Look) -> Result<()> {
     let clear_text = p.measure("Clear", Font::Island(IslandFont::Button));
     let clear_w = rows::search_button(Some(icon::BUTTON + space::XS + clear_text));
     right -= clear_w;
-    p.fill(Rect::at(right, y, clear_w, sh), capsule(sh), pal.fill_secondary)?;
+    p.fill(Rect::at(right, y, clear_w, sh), capsule(sh), pal.fill_quaternary)?;
     glyph(p, CLEAR, icon::BUTTON, right + pad, y + (sh - icon::BUTTON) / 2.0, pal.label_primary)?;
     line(p, "Clear", IslandFont::Button, right + pad + icon::BUTTON + space::XS, y + (sh - button_lh) / 2.0, clear_text + 1.0, Align::Start, pal.label_primary)?;
     right -= component::search::BUTTON_GAP;
     let count_w = rows::search_button(Some(p.measure(COUNT, Font::Island(IslandFont::Button))));
     right -= count_w;
-    p.fill(Rect::at(right, y, count_w, sh), capsule(sh), pal.fill_secondary)?;
+    p.fill(Rect::at(right, y, count_w, sh), capsule(sh), pal.fill_quaternary)?;
     line(p, COUNT, IslandFont::Button, right, y + (sh - button_lh) / 2.0, count_w, Align::Center, pal.label_primary)?;
     right -= component::search::BUTTON_GAP;
     let group = Filters::new(inset, FILTERS.len());
@@ -96,88 +101,101 @@ pub fn draw(p: &Painter, look: &Look) -> Result<()> {
         } else {
             pal.label_secondary
         };
-        glyph(p, filter, g, l + (chip - g) / 2.0, chip_top + (chip - g) / 2.0, ink)?;
+        if filter.is_ascii_alphanumeric() {
+            // A letter is set in the text face, as the island does.
+            let lh = typography::FILTER_LETTER.line_height;
+            line(p, &filter.to_string(), IslandFont::FilterLetter, l, chip_top + (chip - lh) / 2.0, chip, Align::Center, ink)?;
+        } else {
+            glyph(p, filter, g, l + (chip - g) / 2.0, chip_top + (chip - g) / 2.0, ink)?;
+        }
     }
     let field = group.field_left();
+    right = right.min(field + component::search::TOOLBAR_WIDTH);
     p.fill(Rect::new(field, y, right, y + sh), capsule(sh), pal.fill_quaternary)?;
     glyph(p, SEARCH, g, field + pad, y + (sh - g) / 2.0, pal.label_secondary)?;
     let lh = typography::DETAIL.line_height;
     let text_left = rows::search_text_after(field);
     line(p, "Search history\u{2026}", IslandFont::Detail, text_left, y + (sh - lh) / 2.0, (right - pad - text_left).max(0.0), Align::Start, pal.label_tertiary)?;
-    // Cards: four and a half across, clipped at the inset, fading out at the right.
+    // Cards: three and the edge of a fourth, clipped at the inset, fading out at the right.
     let y = cards_y;
     let row = CardRow::new(w, CARDS.len(), inset);
     let cw = row.card_width();
     let ch = component::card::HEIGHT;
     let corner = concentric(radius, inset);
     p.clip(Rect::new(inset, y - 2.0, w - inset, y + ch + 2.0), || {
-        for (i, (face, age, fact)) in CARDS.iter().enumerate() {
-            card(p, look, face, age, fact, Rect::at(row.left(i, 0.0), y, cw, ch), corner)?;
+        for (i, card_data) in CARDS.iter().enumerate() {
+            let l = row.left(i, 0.0);
+            card(p, look, card_data, Rect::at(l, y, cw, ch), &CardFace::new(l, y, cw), corner)?;
         }
         let fade = component::card::FADE;
         p.fade_in_right(Rect::new(w - inset - fade, y - 2.0, w - inset, y + ch + 2.0), pal.background)
     })
 }
 
-fn card(p: &Painter, look: &Look, face: &Face, age: &str, fact: &str, r: Rect, corner: f32) -> Result<()> {
+/// One card as the island draws it (`reui-island/src/render/rows/faces.rs`).
+fn card(p: &Painter, look: &Look, (face, tag, name, fact, age): &Card, r: Rect, f: &CardFace, corner: f32) -> Result<()> {
     let pal = &look.palette;
-    let pad = component::card::PADDING;
-    let footer = component::card::FOOTER;
-    let body = Rect::new(r.l + pad, r.t + pad, r.r - pad, r.b - footer - pad);
+    let one_line = name.is_none();
+    let bottom = if one_line { f.tall_body_bottom() } else { f.body_bottom };
     let wrap = |text: &str, font: IslandFont, top: f32, bottom: f32, ink: Color| {
         let line = super::super::fonts::style(Font::Island(font)).line_height;
         let lines = ((bottom - top) / line).floor();
         if lines < 1.0 {
             return Ok(());
         }
-        p.clip(Rect::new(body.l, top, body.r, top + lines * line), || p.paragraph(text, Font::Island(font), Rect::new(body.l, top, body.r, top + lines * line), ink))
+        let area = Rect::new(f.left, top, f.right, top + lines * line);
+        p.clip(area, || p.paragraph(text, Font::Island(font), area, ink))
     };
-    let mut on_media = false;
+    let (mut tag_ink, mut name_ink, mut age_ink) = (pal.label_secondary, pal.label_primary, pal.label_secondary.with_alpha(0.8));
     match face {
-        Face::Note(first, rest) => {
-            p.fill(r, corner, pal.fill_tertiary)?;
-            line(p, first, IslandFont::CardLabel, body.l, body.t, body.w(), Align::Start, pal.label_primary)?;
-            let top = body.t + typography::CARD_LABEL.line_height + space::XS;
-            wrap(rest, IslandFont::CardText, top, body.b, pal.label_secondary)?;
-        }
         Face::Text(text) => {
-            p.fill(r, corner, pal.fill_tertiary)?;
-            wrap(text, IslandFont::CardText, body.t, body.b, pal.label_primary)?;
+            p.fill(r, corner, pal.fill_quaternary)?;
+            wrap(text, IslandFont::CardText, f.top, bottom, pal.label_primary)?;
         }
         Face::Code(text) => {
-            p.fill(r, corner, pal.fill_tertiary)?;
-            let k = component::card::KIND_ICON;
-            glyph(p, CODE, k, r.r - pad - k, body.t, pal.label_tertiary)?;
-            let code = Rect::new(body.l, body.t, body.r - k - space::XS, body.b);
-            let lh = typography::CARD_CODE.line_height;
-            let lines = (code.h() / lh).floor();
-            p.clip(Rect::new(code.l, code.t, code.r, code.t + lines * lh), || p.paragraph(text, Font::Island(IslandFont::CardCode), code, pal.label_primary))?;
+            p.fill(r, corner, pal.fill_quaternary)?;
+            wrap(text, IslandFont::CardCode, f.top, bottom, pal.label_primary)?;
         }
-        Face::Link(title) => {
-            p.fill(r, corner, pal.fill_tertiary)?;
-            // No page image: the link glyph in the accent, then the title.
-            glyph(p, LINK, icon::COMPACT, body.l, body.t, ACCENT)?;
-            let top = body.t + icon::COMPACT + pad * 0.5;
-            wrap(title, IslandFont::CardTitle, top, r.b - footer - pad * 0.5, pal.label_primary)?;
+        Face::Link(site, title, address) => {
+            p.fill(r, corner, pal.fill_quaternary)?;
+            let lh = typography::CARD_LABEL.line_height;
+            let g = icon::STAR + 3.0;
+            glyph(p, LINK, g, f.left, f.top + (lh - g) / 2.0, pal.label_secondary)?;
+            line(p, site, IslandFont::CardLabel, f.left + g + 6.0, f.top, f.width() - g - 6.0, Align::Start, pal.label_secondary)?;
+            let title_top = f.top + lh + 6.0;
+            line(p, title, IslandFont::CardTitle, f.left, title_top, f.width(), Align::Start, pal.label_primary)?;
+            line(p, address, IslandFont::CardLabel, f.left, title_top + typography::CARD_TITLE.line_height + 2.0, f.width(), Align::Start, pal.label_tertiary)?;
         }
-        Face::Color(swatch, hex) => {
+        Face::Color(swatch) => {
             p.fill(r, corner, *swatch)?;
             let light = 0.2126 * swatch.r + 0.7152 * swatch.g + 0.0722 * swatch.b > 0.55;
             let ink = if light { color::label::ON_ACCENT } else { color::label::PRIMARY };
-            line(p, hex, IslandFont::CardLabel, body.l, body.t, body.w(), Align::Start, ink)?;
-            on_media = !light;
+            (tag_ink, name_ink, age_ink) = (ink.with_alpha(0.7), ink, ink.with_alpha(0.55));
+        }
+        Face::Files => {
+            p.fill(r, corner, pal.fill_quaternary)?;
+            let g = icon::TILE;
+            glyph(p, FILES, g, f.left + (f.width() - g) / 2.0, f.top + (bottom - f.top - g) / 2.0, pal.label_tertiary)?;
         }
     }
-    // The footer: the age, and the one fact at the right.
-    let top = r.b - footer - pad * 0.25;
-    let mid = top + footer / 2.0;
-    let (ink, quiet) = if on_media { (color::label::PRIMARY, color::label::PRIMARY.with_alpha(0.75)) } else { (pal.label_secondary, pal.label_tertiary) };
-    let cap = typography::CAPTION.line_height;
-    let age_w = p.measure(age, Font::Island(IslandFont::Caption));
-    line(p, age, IslandFont::Caption, r.l + pad, mid - cap / 2.0, age_w + 1.0, Align::Start, ink)?;
-    let from = r.l + pad + age_w + pad * 0.75;
-    if !fact.is_empty() && r.r - pad > from {
-        line(p, fact, IslandFont::Caption, from, mid - cap / 2.0, r.r - pad - from, Align::End, quiet)?;
+    // The footer: the age at the right; the tag over the name, or the tag and its fact.
+    let name_lh = typography::CARD_NAME.line_height;
+    let age_w = p.measure(age, Font::Island(IslandFont::CardAge));
+    line(p, age, IslandFont::CardAge, f.right - age_w, f.name_top + (name_lh - typography::CARD_AGE.line_height) / 2.0, age_w + 1.0, Align::End, age_ink)?;
+    let room = (f.right - age_w - component::card::PADDING * 0.5 - f.left).max(0.0);
+    match name {
+        Some(name) => {
+            line(p, tag, IslandFont::CardTag, f.left, f.tag_top, room, Align::Start, tag_ink)?;
+            line(p, name, IslandFont::CardName, f.left, f.name_top, room, Align::Start, name_ink)?;
+        }
+        None => {
+            let top = f.name_top + (name_lh - typography::CARD_LABEL.line_height) / 2.0;
+            let tw = p.measure(tag, Font::Island(IslandFont::CardLabel)).min(room);
+            line(p, tag, IslandFont::CardLabel, f.left, top, tw + 1.0, Align::Start, if fact.is_some() { name_ink } else { tag_ink })?;
+            if let Some(fact) = fact {
+                line(p, &format!(" \u{00B7} {fact}"), IslandFont::CardLabel, f.left + tw, top, (room - tw).max(0.0), Align::Start, pal.label_secondary)?;
+            }
+        }
     }
     Ok(())
 }

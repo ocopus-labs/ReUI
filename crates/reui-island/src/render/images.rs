@@ -146,24 +146,6 @@ impl Renderer {
         Ok(())
     }
 
-    /// A dark gradient over the bottom of a card so the footer reads on any image.
-    pub(super) fn scrim(&self, rt: &ID2D1RenderTarget, shape: &D2D1_ROUNDED_RECT, from: f32, to: f32) -> Result<()> {
-        let s = self.scale;
-        unsafe {
-            let stops = [
-                D2D1_GRADIENT_STOP { position: 0.0, color: D2D1_COLOR_F { r: 0.0, g: 0.0, b: 0.0, a: 0.0 } },
-                D2D1_GRADIENT_STOP { position: 1.0, color: D2D1_COLOR_F { r: 0.0, g: 0.0, b: 0.0, a: 0.7 } },
-            ];
-            let collection = rt.CreateGradientStopCollection(&stops, D2D1_GAMMA_2_2, D2D1_EXTEND_MODE_CLAMP)?;
-            let props = D2D1_LINEAR_GRADIENT_BRUSH_PROPERTIES { startPoint: Vector2::new(0.0, from * s), endPoint: Vector2::new(0.0, to * s) };
-            let brush = rt.CreateLinearGradientBrush(&props, None, &collection)?;
-            rt.PushAxisAlignedClip(&D2D_RECT_F { left: shape.rect.left, top: from * s, right: shape.rect.right, bottom: shape.rect.bottom }, D2D1_ANTIALIAS_MODE_ALIASED);
-            rt.FillRoundedRectangle(shape, &brush);
-            rt.PopAxisAlignedClip();
-        }
-        Ok(())
-    }
-
     /// Draws a single-colour SVG mark into a `size` square at (`left`, `top`), in `color`.
     /// The square is snapped to whole pixels (size and corner) so line art drawn on a
     /// whole-unit grid (`design/assets/devices/`) lands its straight edges on pixels.
