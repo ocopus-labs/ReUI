@@ -15,7 +15,9 @@
 //! Layout is in DIPs; `scale` converts to pixels at draw time.
 
 use std::cell::Cell;
+use std::cell::RefCell;
 use std::collections::HashMap;
+use std::rc::Rc;
 
 use reui_design::layout;
 use reui_design::look::{concentric, Look};
@@ -193,7 +195,8 @@ pub struct Renderer {
     factory: ID2D1Factory1,
     dwrite: IDWriteFactory,
     wic: IWICImagingFactory,
-    images: HashMap<ImageId, Decoded>,
+    /// Decoded images, shared by every island's renderer (`Device`).
+    images: Images,
     tabular: IDWriteTypography,
     round: ID2D1StrokeStyle,
     fonts: Fonts,
@@ -211,8 +214,24 @@ pub struct Renderer {
     taken: Cell<f32>,
 }
 
-impl Renderer {
-    pub fn new(compositor: &Compositor, scale: f32, look: Look) -> Result<Self> {
+/// Decoded images by id, one copy for every island.
+type Images = Rc<RefCell<HashMap<ImageId, Decoded>>>;
+
+/// What every island's renderer shares (docs/PRD-all-displays.md §5.3): the D3D/D2D device
+/// behind the composition graphics device, the factories, and the decoded images. Creating
+/// it takes most of the ~140 ms and most of the memory a renderer costs, so an island added
+/// on another display only adds its own surfaces and fonts.
+#[derive(Clone)]
+pub struct Device {
+    graphics: CompositionGraphicsDevice,
+    factory: ID2D1Factory1,
+    dwrite: IDWriteFactory,
+    wic: IWICImagingFactory,
+    images: Images,
+}
+
+impl Device {
+    pub fn new(compositor: &Compositor) -> Result<Self> {
         let d3d = create_d3d_device()?;
         let dxgi: IDXGIDevice = d3d.cast()?;
         let factory: ID2D1Factory1 = unsafe { D2D1CreateFactory(D2D1_FACTORY_TYPE_SINGLE_THREADED, None)? };
@@ -220,6 +239,13 @@ impl Renderer {
         let graphics = unsafe { compositor.cast::<ICompositorInterop>()?.CreateGraphicsDevice(&device)? };
         let dwrite: IDWriteFactory = unsafe { DWriteCreateFactory(DWRITE_FACTORY_TYPE_SHARED)? };
         let wic: IWICImagingFactory = unsafe { CoCreateInstance(&CLSID_WICImagingFactory, None, CLSCTX_INPROC_SERVER)? };
+        Ok(Self { graphics, factory, dwrite, wic, images: Rc::default() })
+    }
+}
+
+impl Renderer {
+    pub fn new(device: &Device, scale: f32, look: Look) -> Result<Self> {
+        let Device { graphics, factory, dwrite, wic, images } = device.clone();
 
         let tabular = unsafe {
             let t = dwrite.CreateTypography()?;
@@ -242,7 +268,7 @@ impl Renderer {
             )?
         };
         let fonts = fonts(&dwrite, scale)?;
-        Ok(Self { graphics, factory, dwrite, wic, images: HashMap::new(), tabular, round, fonts, scale, look, width: Cell::new(island::expanded::WIDTH), size: Cell::new(CardSize::Regular), taken: Cell::new(0.0) })
+        Ok(Self { graphics, factory, dwrite, wic, images, tabular, round, fonts, scale, look, width: Cell::new(island::expanded::WIDTH), size: Cell::new(CardSize::Regular), taken: Cell::new(0.0) })
     }
 
     /// A new look, or the same look at another scale (Size, another display): the device,

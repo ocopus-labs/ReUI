@@ -170,7 +170,8 @@ host.rs            the hidden host window: what there's one of (the hub link's n
 islands.rs         the islands, one per window (one per display in All displays,
                    docs/PRD-all-displays.md): the shared hub link drained once and applied to
                    each, the lead (the pointer's display: opens cards by itself, takes hotkeys,
-                   animates bars; an open card follows it), windows kept in step with displays
+                   animates bars; an open card follows it), windows kept in step with displays;
+                   all islands draw with one compositor and device (`render::Device`)
 open_cards.rs      open cards counted across islands: a module hears the first open and the last
                    close (pure, tested)
 ipc.rs             pipe client

@@ -87,7 +87,7 @@ impl Renderer {
     fn channel_icon(&self, rt: &ID2D1RenderTarget, ch: &Channel, x: f32, y: f32, size: f32) -> Result<()> {
         let corner = size * 0.25;
         let shape = D2D1_ROUNDED_RECT { rect: self.rect(x, y, x + size, y + size), radiusX: corner * self.scale, radiusY: corner * self.scale };
-        match ch.icon.filter(|id| matches!(self.images.get(id), Some(Decoded::Bitmap(_)))) {
+        match ch.icon.filter(|id| matches!(self.image(id), Some(Decoded::Bitmap(_)))) {
             Some(id) => self.cover(rt, id, &shape)?,
             None => unsafe { self.round_rect(rt, x, y, x + size, y + size, corner, self.pal().fill_tertiary)? },
         }

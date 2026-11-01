@@ -18,6 +18,7 @@ use crate::render::{d2d, rgb, Align, Renderer, Slot};
 /// Longest side images are kept at after decoding: enough for a 56 DIP tile at 4x.
 const IMAGE_MAX_PX: u32 = 256;
 
+#[derive(Clone)]
 pub(super) enum Decoded {
     Bitmap(IWICBitmap),
     /// Kept as text: it's re-tinted per draw by setting the root `fill` and `color`.
@@ -30,7 +31,7 @@ impl Renderer {
     pub fn add_image(&mut self, id: ImageId, bytes: &[u8]) -> Result<()> {
         let head = String::from_utf8_lossy(&bytes[..bytes.len().min(512)]);
         if head.contains("<svg") {
-            self.images.insert(id, Decoded::Svg(fit_svg(&String::from_utf8_lossy(bytes))));
+            self.images.borrow_mut().insert(id, Decoded::Svg(fit_svg(&String::from_utf8_lossy(bytes))));
             return Ok(());
         }
         unsafe {
@@ -46,7 +47,7 @@ impl Renderer {
             let converter = self.wic.CreateFormatConverter()?;
             converter.Initialize(&scaler, &GUID_WICPixelFormat32bppPBGRA, WICBitmapDitherTypeNone, None, 0.0, WICBitmapPaletteTypeMedianCut)?;
             let bitmap = self.wic.CreateBitmapFromSource(&converter, WICBitmapCacheOnLoad)?;
-            self.images.insert(id, Decoded::Bitmap(bitmap));
+            self.images.borrow_mut().insert(id, Decoded::Bitmap(bitmap));
         }
         Ok(())
     }
@@ -54,11 +55,16 @@ impl Renderer {
     /// Drops decoded images the latest snapshot no longer shows; the hub forgets having
     /// sent them by the same rule (`clipboard::referenced`), so it sends them again if needed.
     pub fn has_image(&self, id: ImageId) -> bool {
-        self.images.contains_key(&id)
+        self.images.borrow().contains_key(&id)
+    }
+
+    /// A decoded image (a counted reference to the bitmap, or the SVG text).
+    pub(super) fn image(&self, id: &ImageId) -> Option<Decoded> {
+        self.images.borrow().get(id).cloned()
     }
 
     pub fn retain_images(&mut self, keep: &HashSet<ImageId>) {
-        self.images.retain(|id, _| keep.contains(id));
+        self.images.borrow_mut().retain(|id, _| keep.contains(id));
     }
 
     pub(super) fn art(&self, rt: &ID2D1RenderTarget, art: &Art, slot: Slot, left: f32, top: f32, accent: Color) -> Result<()> {
@@ -91,7 +97,7 @@ impl Renderer {
                         self.svg(rt, *image, left + (size - mark) / 2.0, top + (size - mark) / 2.0, mark, self.pal().label_primary)?;
                     }
                 }
-                Art::Image(id) => match self.images.get(id) {
+                Art::Image(id) => match self.image(id) {
                     Some(Decoded::Bitmap(_)) => {
                         self.cover(rt, *id, &shape)?;
                         // A hairline just inside the edge, so a cover on black still reads
@@ -118,10 +124,10 @@ impl Renderer {
 
     /// Fills `shape` with an image, cover-fitted (centre-cropped to the shape's aspect).
     pub(super) fn cover(&self, rt: &ID2D1RenderTarget, id: ImageId, shape: &D2D1_ROUNDED_RECT) -> Result<()> {
-        let Some(Decoded::Bitmap(image)) = self.images.get(&id) else { return Ok(()) };
+        let Some(Decoded::Bitmap(image)) = self.image(&id) else { return Ok(()) };
         let r = shape.rect;
         unsafe {
-            let bitmap = rt.CreateBitmapFromWicBitmap(image, None)?;
+            let bitmap = rt.CreateBitmapFromWicBitmap(&image, None)?;
             let D2D_SIZE_F { width: iw, height: ih } = bitmap.GetSize();
             let (w, h) = (r.right - r.left, r.bottom - r.top);
             let k = (w / iw).max(h / ih);
@@ -163,9 +169,9 @@ impl Renderer {
     /// whole-unit grid (`design/assets/devices/`) lands its straight edges on pixels.
     /// Missing or non-SVG images draw nothing.
     pub(super) fn svg(&self, rt: &ID2D1RenderTarget, image: ImageId, left: f32, top: f32, size: f32, color: Color) -> Result<()> {
-        let Some(Decoded::Svg(text)) = self.images.get(&image) else { return Ok(()) };
+        let Some(Decoded::Svg(text)) = self.image(&image) else { return Ok(()) };
         let s = self.scale;
-        draw_svg(rt, text, (left * s).round(), (top * s).round(), (size * s).round(), color)
+        draw_svg(rt, &text, (left * s).round(), (top * s).round(), (size * s).round(), color)
     }
 }
 
