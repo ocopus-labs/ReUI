@@ -17,6 +17,8 @@ pub struct State {
     pub paths: Paths,
     pub files: Files,
     pub startup: Startup,
+    /// The Start menu entry, to start ReUI again after Quit (`start_menu.rs`).
+    pub start_menu: crate::start_menu::StartMenu,
     pub agents: [Status; 3],
     /// Whether each agent is on this PC.
     pub agent_installed: [bool; 3],
@@ -67,6 +69,7 @@ impl State {
             held_hotkeys: Shortcut::ALL.map(|s| (s, files.shortcut(s))).to_vec(),
             files,
             startup: Startup::Off,
+            start_menu: crate::start_menu::StartMenu::Off,
             agents: [Status::NotConnected; 3],
             agent_installed: [false; 3],
             agent_last: [None; 3],
@@ -97,6 +100,7 @@ impl State {
     pub fn refresh(&mut self) {
         self.files.reload();
         self.startup = system::startup(&self.paths);
+        self.start_menu = crate::start_menu::state(&self.paths);
         self.agents = Agent::ALL.map(|a| a.status(&self.paths));
         self.agent_installed = Agent::ALL.map(|a| a.installed(&self.paths));
         self.agent_last = Agent::ALL.map(|a| a.last_event(&self.paths));

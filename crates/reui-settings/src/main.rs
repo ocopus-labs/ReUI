@@ -35,6 +35,7 @@ mod paths;
 mod perf;
 mod render;
 mod shots;
+mod start_menu;
 mod state;
 mod stats;
 mod system;

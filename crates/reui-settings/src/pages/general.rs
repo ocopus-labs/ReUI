@@ -7,6 +7,7 @@ use super::{button, flag, footed, group, head, Effect, Page};
 use crate::ui::icons;
 use reui_design::tokens::color::system as palette;
 use crate::model::files::{File, CAPTURES, HOVER_DELAYS, MONITOR_CURSOR, MONITOR_PRIMARY, OPEN_ON, REVEAL_ZONE, VISIBILITY};
+use crate::start_menu::{self, StartMenu};
 use crate::state::State;
 use crate::system::{self, Startup};
 use crate::ui::{Act, Block, Part, Role, Row, Target, Tone};
@@ -27,7 +28,15 @@ pub fn build(state: &State) -> Vec<Block> {
             .tone(Tone::Warning)
             .part(super::button("Open Task Manager", Role::Secondary)),
     };
-    blocks.push(group("Startup", vec![startup.icon(icons::startup())]));
+    // Without the installer (the zip, a build folder) nothing else starts ReUI again after Quit.
+    let entry = Row::new("start_menu", "Start menu entry");
+    let entry = match &state.start_menu {
+        _ if !hub.exists() => entry.detail("reui-hub.exe isn't next to Settings").tone(Tone::Warning).part(Part::Toggle { on: false }).enabled(false),
+        StartMenu::Off => entry.detail("Open ReUI from Start after quitting it").part(Part::Toggle { on: false }),
+        StartMenu::On => entry.detail("Open ReUI from Start after quitting it").part(Part::Toggle { on: true }),
+        StartMenu::Elsewhere(path) => entry.detail(format!("Starts {path}")).tone(Tone::Warning).part(Part::Toggle { on: true }),
+    };
+    blocks.push(group("Startup", vec![startup.icon(icons::startup()), entry.icon(icons::tile(icons::GEAR, palette::GRAY))]));
 
     let doc_ok = state.files.doc(File::Island).error().is_none();
     let selected = state.files.visibility();
@@ -137,6 +146,12 @@ pub fn act(state: &mut State, target: &Target, act: Act) -> Effect {
             if let Some(choice) = monitor_choices(state).get(i).cloned() {
                 state.set(File::Island, "monitor", Value::String(choice));
             }
+        }
+        ("start_menu", Act::Press) => {
+            // Off adds it; on (ours or another copy's) removes it.
+            let on = state.start_menu == StartMenu::Off;
+            report(state, start_menu::set(&state.paths, on));
+            state.start_menu = start_menu::state(&state.paths);
         }
         ("startup", Act::Press) => {
             match state.startup {

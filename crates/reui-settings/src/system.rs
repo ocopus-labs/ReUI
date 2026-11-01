@@ -80,7 +80,7 @@ pub fn command_program(command: &str) -> String {
     }
 }
 
-fn same_path(a: &str, b: &str) -> bool {
+pub fn same_path(a: &str, b: &str) -> bool {
     let norm = |p: &str| p.replace('/', "\\").trim_end_matches('\\').to_lowercase();
     norm(a) == norm(b)
 }
