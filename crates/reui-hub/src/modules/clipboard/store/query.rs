@@ -246,7 +246,7 @@ mod tests {
         let code = s.add(text("fn main() {\n    run();\n}"), 2).unwrap().unwrap();
         let color = s.add(text("#0A84FF"), 3).unwrap().unwrap();
         let files = s.add(captured(Content::Files { paths: vec![r"C:\nowhere\Report_2026.pdf".into()], cut: true }), 4).unwrap().unwrap();
-        let image = s.add(captured(Content::Image { png: vec![1, 2, 3], thumb: vec![1] }), 5).unwrap().unwrap();
+        let image = s.add(captured(Content::Image { png: vec![1, 2, 3], thumb: vec![1], name: Some("Summit.png".into()) }), 5).unwrap().unwrap();
         let plain = s.add(text("100% done_now"), 6).unwrap().unwrap();
         s.set_link(link, Some(&LinkMeta { title: Some("Design file".into()), site: Some("Figma".into()), image: None }), 7).unwrap();
         s.set_ocr(image, "Quarterly Revenue chart").unwrap();

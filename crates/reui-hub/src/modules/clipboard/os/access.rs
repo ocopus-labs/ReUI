@@ -10,7 +10,7 @@ use windows::Win32::System::Memory::{GlobalAlloc, GlobalLock, GlobalSize, Global
 use windows::Win32::System::Ole::{CF_DIB, CF_DIBV5, CF_HDROP, CF_UNICODETEXT};
 use windows::Win32::UI::Shell::{DragQueryFileW, HDROP};
 
-use super::formats::{dib_size, png_end, png_size};
+use super::formats::{dib_size, image_name, png_end, png_size};
 use super::{Formats, Raw};
 
 /// Per clipboard format: text, HTML and RTF bigger than this aren't kept (text over it skips
@@ -111,16 +111,21 @@ unsafe fn read_content(formats: Formats) -> Option<Raw> {
             _ => {}
         }
     }
+    // A browser's "Copy image" puts the page's <img> beside the picture: its file name.
+    let name = || match if has(formats.html) { read_capped(formats.html, 1) } else { Capped::Missing } {
+        Capped::Bytes(html) => image_name(&String::from_utf8_lossy(&html)),
+        _ => None,
+    };
     if has(formats.png) {
         if let Some(png) = read_png(formats.png) {
-            return Some(Raw::Png(png));
+            return Some(Raw::Png(png, name()));
         }
     }
     // Windows synthesises CF_DIBV5 from CF_DIB (and back), so CF_DIB is the rare fallback.
     for format in [CF_DIBV5, CF_DIB] {
         if has(u32::from(format.0)) {
             if let Some(dib) = read_dib(u32::from(format.0)) {
-                return Some(Raw::Dib(dib));
+                return Some(Raw::Dib(dib, name()));
             }
         }
     }

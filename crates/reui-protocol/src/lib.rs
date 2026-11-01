@@ -238,7 +238,9 @@ pub enum Preview {
     Color(Rgb),
     /// A web page; `title`, `site` and `image` once its metadata has been fetched.
     Link { host: String, path: String, title: Option<String>, site: Option<String>, image: Option<ImageId> },
-    Files { name: String, count: u32 },
+    /// `thumbs`: up to three of the files' pictures (their thumbnails, or their type's
+    /// icon), the first file's first, as they arrive.
+    Files { name: String, count: u32, thumbs: Vec<ImageId> },
 }
 
 /// A clickable preview card (clipboard history and the like).
@@ -767,9 +769,10 @@ impl Activity {
                 .iter()
                 .flat_map(|i| {
                     let preview = match &i.preview {
-                        Preview::Image(id) => Some(*id),
-                        Preview::Link { image, .. } => *image,
-                        _ => None,
+                        Preview::Image(id) => vec![*id],
+                        Preview::Link { image, .. } => image.iter().copied().collect(),
+                        Preview::Files { thumbs, .. } => thumbs.clone(),
+                        _ => Vec::new(),
                     };
                     preview.into_iter().chain(i.icon)
                 })

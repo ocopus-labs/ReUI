@@ -23,7 +23,7 @@
 //! Files: `os/` (the Windows side), `store/` (the history), `window.rs` (the window's
 //! messages), `view.rs` and `panel.rs` (what it shows), `toast.rs` (the island), `stack.rs`
 //! (the paste stack), `preview.rs` (what text is), `transform.rs` (paste modes), `link.rs`,
-//! `ocr.rs`, `secrets.rs` and `settings.rs`.
+//! `ocr.rs`, `thumbs.rs` (files' pictures), `secrets.rs` and `settings.rs`.
 
 use std::collections::{HashSet, VecDeque};
 use std::future::Future;
@@ -45,6 +45,7 @@ pub(crate) mod secrets;
 mod settings;
 mod stack;
 mod store;
+mod thumbs;
 mod toast;
 mod transform;
 mod view;
@@ -179,6 +180,9 @@ struct App {
     hotkey_taken: bool,
     /// The view the notch panel shows, to turn its actions back into messages.
     last_view: Option<cv::View>,
+    /// Files' pictures for their cards, and where the pool sends new ones.
+    thumbs: thumbs::Thumbs,
+    thumbs_tx: UnboundedSender<thumbs::Made>,
 }
 
 async fn run(ctx: ModuleContext, link_previews: bool) {
@@ -192,6 +196,7 @@ async fn run(ctx: ModuleContext, link_previews: bool) {
     let Some(os) = os::start_with(events_tx, hotkey) else { return };
     let (links_tx, mut links) = tokio::sync::mpsc::unbounded_channel();
     let (ocr_tx, mut ocr_done) = tokio::sync::mpsc::unbounded_channel();
+    let (thumbs_tx, mut thumbs_made) = tokio::sync::mpsc::unbounded_channel();
     let mut app = App {
         ctx,
         db,
@@ -213,6 +218,8 @@ async fn run(ctx: ModuleContext, link_previews: bool) {
         stack: None,
         hotkey_taken: false,
         last_view: None,
+        thumbs: thumbs::Thumbs::default(),
+        thumbs_tx,
     };
     // The first tick is immediate: retention runs at start, then hourly.
     let mut retention = tokio::time::interval(RETENTION_EVERY);
@@ -243,6 +250,10 @@ async fn run(ctx: ModuleContext, link_previews: bool) {
             },
             Some((id, meta)) = links.recv() => app.on_link(id, meta).await,
             Some((id, text)) = ocr_done.recv() => app.on_ocr(id, text).await,
+            Some(made) = thumbs_made.recv() => {
+                app.thumbs.made(made);
+                app.send_state().await;
+            }
             _ = sleep_until(app.hide_at.unwrap_or_else(Instant::now)), if app.hide_at.is_some() => {
                 app.hide_at = None;
                 app.ctx.retract(KEY);
@@ -480,7 +491,13 @@ impl App {
             .filter(|s| needs_lookup(s, now))
             .filter_map(|s| Some((s.id, s.text.as_deref()?.trim().to_string())))
             .collect();
-        let ui = Ui { query: self.query.clone(), layout: self.settings.layout.clone(), paused: self.paused(), undo: self.undo.is_some(), stack: self.stack_view() };
+        // Files' pictures: what's made so far now, the rest from the pool (then sent again).
+        let wanted = self.thumbs.wanted(&page.items);
+        if !wanted.is_empty() {
+            let tx = self.thumbs_tx.clone();
+            tokio::spawn(async move { _ = tx.send(thumbs::make(wanted).await) });
+        }
+        let ui = Ui { query: self.query.clone(), layout: self.settings.layout.clone(), paused: self.paused(), undo: self.undo.is_some(), stack: self.stack_view(), thumbs: self.thumbs.for_items(&page.items) };
         let ctx = &self.ctx;
         let add = |bytes: Vec<u8>| ctx.image(bytes);
         let mut images = Images::new(&add);

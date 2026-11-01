@@ -68,7 +68,7 @@ fn card(held: &Held, facts: &Facts, now_ms: i64) -> Item {
             let name = file_name(paths.first().map_or("", String::as_str)).to_string();
             let preview = match facts.thumbs.get(&id) {
                 Some(image) if paths.len() == 1 && !there.is_empty() => Preview::Image(*image),
-                _ => Preview::Files { name, count: paths.len() as u32 },
+                _ => Preview::Files { name, count: paths.len() as u32, thumbs: Vec::new() },
             };
             let meta = if there.is_empty() {
                 Some("Missing".into())
@@ -179,7 +179,7 @@ mod tests {
         let mut facts = Facts::default();
         let one = view(&[held(1, files(&[r"C:\docs\Report.pdf"]))], &facts, 120_000);
         let card = &items(&one)[0];
-        assert_eq!(card.preview, Preview::Files { name: "Report.pdf".into(), count: 1 });
+        assert_eq!(card.preview, Preview::Files { name: "Report.pdf".into(), count: 1, thumbs: Vec::new() });
         assert_eq!((card.age.as_str(), card.meta.as_deref()), ("2m", None));
         assert_eq!(card.drag, Some(Drag::Files(vec![r"C:\docs\Report.pdf".into()])));
         let labels: Vec<&str> = card.actions.iter().map(|a| a.label.as_str()).collect();

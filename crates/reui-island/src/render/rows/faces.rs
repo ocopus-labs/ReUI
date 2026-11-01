@@ -5,9 +5,9 @@
 
 
 use reui_design::layout::cards::Face;
-use reui_design::tokens::{color, component, icon};
+use reui_design::tokens::{color, component, icon, opacity};
 use reui_design::Color;
-use reui_protocol::{Item, Preview, Rgb, Tone};
+use reui_protocol::{ImageId, Item, Preview, Rgb, Tone};
 use windows::core::Result;
 use windows::Win32::Graphics::Direct2D::Common::*;
 use windows::Win32::Graphics::Direct2D::*;
@@ -90,10 +90,12 @@ impl Renderer {
                     inks.tag = accent;
                 }
             }
-            Preview::Files { .. } => {
+            Preview::Files { thumbs, .. } => {
                 well(fill)?;
                 grained();
-                self.body_glyph(rt, face, body_bottom, '\u{E8A5}')?;
+                if !self.fan(rt, face, thumbs)? {
+                    self.body_glyph(rt, face, body_bottom, '\u{E8A5}')?;
+                }
             }
         }
         self.footer(rt, item, face, &inks)
@@ -126,6 +128,41 @@ impl Renderer {
             None => self.text_block(rt, &address, &self.fonts.card_title, face.left, title_top, face.width(), title_h, p.label_primary)?,
         }
         Ok(())
+    }
+
+    /// The files' pictures fanned out in the body (`Face::fan`), each with a hairline so
+    /// overlapping ones keep their edges; `false` when none has arrived yet.
+    fn fan(&self, rt: &ID2D1RenderTarget, face: &Face, thumbs: &[ImageId]) -> Result<bool> {
+        let mut shown = Vec::new();
+        for id in thumbs {
+            if let Some(Decoded::Bitmap(image)) = self.image(id) {
+                let (mut w, mut h) = (0u32, 0u32);
+                unsafe { image.GetSize(&mut w, &mut h)? };
+                shown.push((*id, (w as f32 / self.scale, h as f32 / self.scale)));
+            }
+        }
+        if shown.is_empty() {
+            return Ok(false);
+        }
+        let sizes: Vec<(f32, f32)> = shown.iter().map(|s| s.1).collect();
+        let placed = face.fan(&sizes);
+        let ids: Vec<ImageId> = shown.iter().rev().map(|s| s.0).collect();
+        let s = self.scale;
+        let r = component::card::THUMB_RADIUS * 0.75 * s;
+        let mut before = Matrix3x2::default();
+        unsafe { rt.GetTransform(&mut before) };
+        let edge = self.brush(rt, self.pal().label_primary.with_alpha(opacity::ART_STROKE))?;
+        for (p, id) in placed.iter().zip(ids) {
+            let (cx, cy) = ((p.left + p.width / 2.0) * s, (p.top + p.height / 2.0) * s);
+            unsafe { rt.SetTransform(&(Matrix3x2::rotation_around(p.angle, windows_numerics::Vector2::new(cx, cy)) * before)) };
+            let shape = D2D1_ROUNDED_RECT { rect: self.rect(p.left, p.top, p.left + p.width, p.top + p.height), radiusX: r, radiusY: r };
+            // Behind a picture with transparency (a type's icon), so it reads as a sheet.
+            unsafe { rt.FillRoundedRectangle(&shape, &self.brush(rt, self.pal().background)?) };
+            self.cover(rt, id, &shape)?;
+            unsafe { rt.DrawRoundedRectangle(&shape, &edge, 1.0, None) };
+        }
+        unsafe { rt.SetTransform(&before) };
+        Ok(true)
     }
 
     /// A quiet glyph in the middle of the body, standing in for media not shown.

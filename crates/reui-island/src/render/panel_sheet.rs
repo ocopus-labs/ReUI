@@ -22,6 +22,10 @@ use windows::UI::Composition::Compositor;
 use super::{d2d, rgb, Device, Interaction, Renderer};
 
 const IMAGE: ImageId = ImageId(7);
+/// Three files' pictures: the repo's own images stand in for shell thumbnails.
+const FILE_A: ImageId = ImageId(8);
+const FILE_B: ImageId = ImageId(9);
+const FILE_C: ImageId = ImageId(10);
 
 /// The design's four clips (and a colour after them), as the hub sends them.
 fn view() -> ExpandedView {
@@ -46,7 +50,7 @@ fn view() -> ExpandedView {
         drag: None,
     };
     let items = vec![
-        item(Preview::Files { name: "Itinerary.pdf".into(), count: 3 }, "3 files", Tone::Secondary, Some("Itinerary.pdf"), None, "just now"),
+        item(Preview::Files { name: "Itinerary.pdf".into(), count: 3, thumbs: vec![FILE_A, FILE_B, FILE_C] }, "3 files", Tone::Secondary, Some("Itinerary.pdf"), None, "just now"),
         item(
             Preview::Link { host: "en.wikipedia.org".into(), path: "/wiki/Sea_of_clouds".into(), title: Some("Sea of clouds".into()), site: Some("Wikipedia".into()), image: None },
             "links",
@@ -89,6 +93,9 @@ fn clipboard_panel_sheet() {
             let look = Look::new(&Appearance { theme, ..Appearance::default() }, false, None);
             let mut renderer = Renderer::new(&device, scale, look).unwrap();
             renderer.add_image(IMAGE, &image).unwrap();
+            for (id, file) in [(FILE_A, "now-playing.png"), (FILE_B, "timers.png"), (FILE_C, "devices.png")] {
+                renderer.add_image(id, &std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/images").join(file)).unwrap()).unwrap();
+            }
             let path = dir.join(format!("{name}-{}.png", (scale * 100.0) as u32));
             draw(&device, &renderer, &path).unwrap();
             println!("{}", path.display());

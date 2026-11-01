@@ -81,16 +81,19 @@ impl Worker {
                 Content::Text { text: String::from_utf16_lossy(&units), html: html.as_deref().and_then(html_from_clipboard), rtf }
             }
             Raw::Files { paths, cut } => Content::Files { paths, cut },
-            Raw::Png(_) | Raw::Dib(_) => {
+            Raw::Png(..) | Raw::Dib(..) => {
                 let wic = self.wic.as_ref()?;
-                let image = match raw {
-                    Raw::Png(png) => unsafe { png_image(wic, png) },
-                    Raw::Dib(dib) => unsafe { dib_image(wic, &dib) },
+                let (image, name) = match raw {
+                    Raw::Png(png, name) => (unsafe { png_image(wic, png) }, name),
+                    Raw::Dib(dib, name) => (unsafe { dib_image(wic, &dib) }, name),
                     _ => unreachable!(),
                 };
                 match image {
-                    Ok((content, w, h)) => {
+                    Ok((mut content, w, h)) => {
                         size = Some((w, h));
+                        if let Content::Image { name: n, .. } = &mut content {
+                            *n = name;
+                        }
                         content
                     }
                     Err(e) => {

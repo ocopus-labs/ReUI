@@ -6,6 +6,8 @@
 //! image store on the way out, and every message lists the ids it refers to so the host
 //! has them before the page asks.
 
+use std::collections::HashMap;
+
 use reui_protocol::{ImageId, Preview, Rgb};
 use serde::{Deserialize, Serialize};
 
@@ -91,6 +93,8 @@ pub struct Item {
     pub missing: bool,
     pub lines: u32,
     pub ocr: bool,
+    /// Files: up to three of their pictures (image ids), the first file's first.
+    pub thumbs: Vec<String>,
 }
 
 /// Window state that isn't in the database.
@@ -101,6 +105,8 @@ pub struct Ui {
     pub paused: bool,
     pub undo: bool,
     pub stack: Stack,
+    /// Files' pictures made so far, by path (`thumbs.rs`).
+    pub thumbs: HashMap<String, Vec<u8>>,
 }
 
 /// Registers image bytes and remembers the ids a message refers to.
@@ -145,7 +151,7 @@ pub fn view(page: &Page, ui: &Ui, now_ms: i64, images: &mut Images) -> View {
             .collect(),
         types: page.kinds.iter().map(|&(k, count)| TypeChip { id: k.name().into(), label: k.label().into(), count }).collect(),
         apps: page.apps.iter().map(|a| AppChip { id: a.id.clone(), name: a.name.clone(), icon: a.icon.clone().map(|i| images.add(i)), count: a.count }).collect(),
-        items: page.items.iter().map(|s| item(s, now_ms, images)).collect(),
+        items: page.items.iter().map(|s| item(s, now_ms, &ui.thumbs, images)).collect(),
         total: page.total,
         paused: ui.paused,
         undo: ui.undo,
@@ -154,7 +160,7 @@ pub fn view(page: &Page, ui: &Ui, now_ms: i64, images: &mut Images) -> View {
     }
 }
 
-pub fn item(saved: &Saved, now_ms: i64, images: &mut Images) -> Item {
+pub fn item(saved: &Saved, now_ms: i64, thumbs: &HashMap<String, Vec<u8>>, images: &mut Images) -> Item {
     let kind = Kind::parse(&saved.category).unwrap_or(Kind::Text);
     let text = saved.text.as_deref().unwrap_or_default();
     let lines = (saved.lines > 1).then(|| format!("{} lines", saved.lines));
@@ -176,9 +182,12 @@ pub fn item(saved: &Saved, now_ms: i64, images: &mut Images) -> Item {
         Kind::Images => {
             it.image = saved.thumb.clone().map(|png| images.add(png));
             it.meta = saved.size.map(|(w, h)| format!("{w} × {h}"));
+            // Its file name, when the page it came from said.
+            it.title = saved.text.clone().filter(|t| !t.trim().is_empty());
         }
         Kind::Files => {
             it.files = Some(saved.files.iter().map(|f| file_name(f).to_string()).collect());
+            it.thumbs = saved.files.iter().take(super::thumbs::PER_CARD).filter_map(|f| thumbs.get(f)).map(|png| images.add(png.clone())).collect();
             it.cut = saved.cut;
             it.missing = saved.missing;
             it.meta = if saved.missing {
@@ -258,7 +267,7 @@ mod tests {
     }
 
     fn one(s: Saved) -> Item {
-        item(&s, 0, &mut Images::new(&fake))
+        item(&s, 0, &HashMap::new(), &mut Images::new(&fake))
     }
 
     #[test]
@@ -279,7 +288,7 @@ mod tests {
         let long = one(Saved { text: Some("€".repeat(5000)), ..saved("code") });
         assert_eq!((long.kind.as_str(), long.text.unwrap().chars().count()), ("code", ITEM_CHARS));
 
-        let image = item(&Saved { thumb: Some(vec![0; 5]), size: Some((640, 400)), ocr: true, icon: Some(vec![0; 2]), ..saved("images") }, 0, &mut Images::new(&fake));
+        let image = item(&Saved { thumb: Some(vec![0; 5]), size: Some((640, 400)), ocr: true, icon: Some(vec![0; 2]), ..saved("images") }, 0, &HashMap::new(), &mut Images::new(&fake));
         assert_eq!((image.kind.as_str(), image.image, image.icon, image.meta.as_deref(), image.ocr, image.text), ("image", Some("1005".to_string()), Some("1002".to_string()), Some("640 × 400"), true, None));
 
         let files = |paths: &[&str]| paths.iter().map(|p| p.to_string()).collect::<Vec<_>>();
@@ -331,7 +340,7 @@ mod tests {
     /// The exact JSON of a view: every contract field, with its name and type.
     #[test]
     fn contract_shape() {
-        let ui = Ui { query: Query { text: "fig".into(), scope: Scope::Collection(7), kind: Some(Kind::Text), app: None }, layout: "grid".into(), paused: false, undo: true, stack: Stack { active: true, remaining: 2 } };
+        let ui = Ui { query: Query { text: "fig".into(), scope: Scope::Collection(7), kind: Some(Kind::Text), app: None }, layout: "grid".into(), paused: false, undo: true, stack: Stack { active: true, remaining: 2 }, thumbs: HashMap::new() };
         let v = view(&page(), &ui, 120_000, &mut Images::new(&fake));
         let json = serde_json::to_value(&v).unwrap();
         let view = &json;
@@ -352,7 +361,7 @@ mod tests {
         let item = &view["items"][0];
         assert_eq!(
             keys(item),
-            ["age", "app", "collections", "color", "cut", "files", "icon", "id", "image", "kind", "lines", "meta", "missing", "ocr", "pinned", "rich", "site", "text", "title", "url"]
+            ["age", "app", "collections", "color", "cut", "files", "icon", "id", "image", "kind", "lines", "meta", "missing", "ocr", "pinned", "rich", "site", "text", "thumbs", "title", "url"]
         );
         assert_eq!((item["id"].as_i64(), item["kind"].as_str(), item["text"].as_str(), item["age"].as_str(), item["icon"].as_str()), (Some(7), Some("text"), Some("hi"), Some("2m"), Some("1003")));
         // Round trip.

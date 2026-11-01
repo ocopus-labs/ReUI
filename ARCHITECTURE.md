@@ -79,7 +79,8 @@ modules/
                    tool request: hero, facts, body; secrets masked), settings
                    (coding.json), token usage, status (agents.json, the test event)
   clipboard/       history: module loop, notch panel, toast, paste stack, view model,
-                   settings, secrets, link previews, paste-as transforms, OCR
+                   settings, secrets, link previews, paste-as transforms, OCR, thumbs
+                   (files' pictures for their cards, made on the blocking pool)
     os/            the OS side: window thread, hotkeys, target/caret, capture, formats,
                    worker, paste-back
     store/         SQLite: schema/migrations, items, queries (FTS), collections, db thread
