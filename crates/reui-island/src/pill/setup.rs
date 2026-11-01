@@ -314,6 +314,8 @@ impl Pill {
             appearance,
             window,
             monitor,
+            screen: crate::place::monitor_rect(monitor).unwrap_or(window),
+            follow_pending: false,
             reduced_motion,
             lyric_line: None,
             lyric_change: None,

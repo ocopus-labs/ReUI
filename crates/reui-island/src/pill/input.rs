@@ -71,6 +71,7 @@ impl Pill {
     pub fn on_mouse_move(&mut self, pt: POINT) {
         self.pointer_moved(pt);
         self.drop_near(pt);
+        self.follow_pointer(pt);
     }
 
     fn pointer_moved(&mut self, pt: POINT) {

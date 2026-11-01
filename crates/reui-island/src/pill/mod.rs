@@ -91,6 +91,10 @@ pub struct Pill {
     appearance: Appearance,
     window: RECT,
     monitor: HMONITOR,
+    /// The display's area, to notice the pointer leaving it ("cursor" mode).
+    screen: RECT,
+    /// A move to the pointer's display was asked for and hasn't happened yet.
+    follow_pending: bool,
     reduced_motion: bool,
     /// The lyric line last drawn, and the one before it with when it changed (while the
     /// column slides up).
@@ -241,6 +245,35 @@ pub struct Pill {
 }
 
 impl Pill {
+    /// Whether the island may move to another display now. In every state (an open card,
+    /// a waiting request, a summoned panel go along with the pointer), except while a bar in
+    /// the card is being dragged or a menu is up: both belong to where they were opened.
+    pub fn can_move(&self) -> bool {
+        self.drag.is_none() && !self.menu_open
+    }
+
+    /// In "cursor" mode, asks for a move to the pointer's display when it's on another one
+    /// (`place::should_follow`). The move waits for the pointer to stay there a moment
+    /// (`place::FOLLOW_DWELL_MS`), so sweeping across a display on the way somewhere else
+    /// doesn't drag the island along; `main.rs` moves it then.
+    pub(super) fn follow_pointer(&mut self, pointer: POINT) {
+        if !self.follow_pending && crate::place::should_follow(&self.monitor_choice, self.can_move(), &self.screen, pointer) {
+            self.follow_pending = true;
+            unsafe { SetTimer(Some(self.hwnd), crate::place::TIMER_FOLLOW, crate::place::FOLLOW_DWELL_MS, None) };
+        }
+    }
+
+    /// The summoned card to open again after a move rebuilt the pill (a display at
+    /// another scale), so a panel in use goes along instead of closing.
+    pub fn reopen_after_move(&self) -> Option<ActivityId> {
+        (self.summoned && self.state == State::Expanded).then(|| self.pinned.clone()).flatten()
+    }
+
+    /// Opens that card again on the rebuilt pill.
+    pub fn reopen(&mut self, id: ActivityId) {
+        self.focus(id);
+    }
+
     fn front(&self) -> Option<&Activity> {
         self.snapshot.activities.first()
     }
@@ -483,6 +516,14 @@ impl Pill {
         self.sync_open();
         self.update_capture();
         self.sync_switcher();
+        // A menu or a drag held the island while the pointer went to another display: it
+        // goes there now ("cursor" mode).
+        if matches!(state, State::Idle | State::Compact) {
+            let mut pointer = POINT::default();
+            if unsafe { GetCursorPos(&mut pointer) }.is_ok() {
+                self.follow_pointer(pointer);
+            }
+        }
     }
 
     /// Moves the keyboard cursor to choice `i`, scrolling the list to show it.
