@@ -45,6 +45,7 @@ mod answer;
 mod card;
 mod describe;
 mod events;
+mod folder;
 mod form;
 mod link;
 mod moments;
@@ -171,6 +172,9 @@ enum Phase {
 
 struct Session {
     project: String,
+    /// Where the agent is working, as the strip shows it (`~\code\api`): the last `cwd`
+    /// it reported, since a command runs wherever the session is now.
+    folder: Option<String>,
     prompt: Option<String>,
     transcript: Option<PathBuf>,
     phase: Option<Phase>,
