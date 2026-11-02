@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.2.0 (unreleased)
+## 0.2.0 (2 November 2026)
 
 An island on every display, a new clipboard, and a card when a long command finishes.
 
@@ -11,10 +11,11 @@ An island on every display, a new clipboard, and a card when a long command fini
   - An image copied from a web page keeps its file name, and you can search for it.
   - **Clear** can be undone for 5 seconds.
   - Pinned and your collections: click the clock once it's chosen.
+  - Cards are solid colours, so they look the same on every screen as in a screenshot.
 - **Long terminal commands:** connect PowerShell or Git Bash in Settings → Coding agents. A command that ran 10 seconds or more tells you when it's done or failed, with its exit code and how long it took, if you've moved to another window. **Open terminal** takes you back.
 - **Win+Alt+N** opens whatever is waiting with the keyboard on it; Esc puts you back where you were typing.
 - **Hidden from screen shares:** people watching your shared screen or a recording don't see your clipboard, an agent's request or a notification on the island. You still do. Settings → General → Screen sharing.
-- **Send to → ReUI shelf** in Explorer's right-click menu holds files on the shelf without dragging them.
+- **Send to → ReUI shelf** in Explorer's right-click menu holds files on the shelf without dragging them. The installer adds it; a copy you didn't install gets it from Settings → Shelf.
 - Coding agents' cards show the full working folder (your home folder as `~`), so two sessions of projects with the same name can be told apart.
 - Settings → General → **Start menu entry**, to start ReUI again after quitting it.
 
