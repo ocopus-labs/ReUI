@@ -1,0 +1,47 @@
+---
+// The guide's front page: docs/guide.md's introduction, then one row per feature, each to
+// its own page (guide/[slug].astro).
+import Base from '../../layouts/Base.astro';
+import DocBar from '../../components/DocBar.astro';
+import Footer from '../../sections/Footer.astro';
+import { guide } from '../../lib/docs';
+import '../../styles/prose.css';
+
+const { intro, sections } = guide();
+---
+<Base title="Guide · ReUI" description="What each ReUI feature does, and every shortcut and gesture.">
+  <DocBar current="guide" />
+  <main class="page">
+    <p class="eyebrow">Guide</p>
+    <h1>Using ReUI</h1>
+    <div class="prose lead" set:html={intro} />
+    <ul class="list">
+      {sections.map((s) => (
+        <li>
+          <a href={`/guide/${s.slug}`}>
+            <h2>{s.title}</h2>
+            {s.lead && <p>{s.lead}</p>}
+          </a>
+        </li>
+      ))}
+    </ul>
+  </main>
+  <Footer />
+</Base>
+
+<style>
+  .page { max-width: 860px; margin: 0 auto; padding: clamp(56px, 9vh, 104px) var(--gutter) clamp(96px, 14vh, 160px); }
+  .eyebrow { color: var(--ink-3); font: 500 13px/1 var(--mono); letter-spacing: 0.04em; }
+  h1 { margin-top: 14px; font-size: clamp(48px, 7vw, 96px); font-weight: 600; line-height: 0.95; letter-spacing: -0.055em; }
+  .lead { margin-top: 24px; max-width: 680px; }
+  .lead :global(p) { color: var(--ink); font-size: clamp(17px, 1.4vw, 20px); line-height: 1.5; }
+
+  .list { margin: 48px 0 0; padding: 0; list-style: none; border-top: 1px solid var(--line); }
+  .list a { display: grid; grid-template-columns: minmax(180px, 240px) 1fr; gap: 6px 32px; padding: 22px 0; border-bottom: 1px solid var(--line); transition: background 0.2s; }
+  .list a:hover h2 { text-decoration: underline; text-underline-offset: 4px; }
+  .list h2 { font-size: 19px; font-weight: 600; letter-spacing: -0.02em; }
+  .list p { display: -webkit-box; overflow: hidden; color: var(--ink-2); font-size: 15px; line-height: 1.55; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  @media (max-width: 640px) {
+    .list a { grid-template-columns: 1fr; }
+  }
+</style>

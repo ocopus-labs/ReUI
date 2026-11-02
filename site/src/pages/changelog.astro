@@ -1,0 +1,56 @@
+---
+// What's new: every release from CHANGELOG.md, newest first, each linkable (#v0.2.0). The
+// same text the GitHub release and Settings → About → What's new show.
+import Base from '../layouts/Base.astro';
+import DocBar from '../components/DocBar.astro';
+import Footer from '../sections/Footer.astro';
+import { Image } from 'astro:assets';
+import { releases } from '../lib/docs';
+import { forRelease } from '../lib/pictures';
+import '../styles/prose.css';
+
+const list = releases();
+const repo = 'https://github.com/ocopus-labs/ReUI';
+---
+<Base title="What’s new · ReUI" description="Every ReUI release: what changed, what was fixed. The same notes the app shows after an update.">
+  <DocBar current="changelog" />
+  <main class="page">
+    <p class="eyebrow">Changelog</p>
+    <h1>What’s new</h1>
+    <p class="lead">Every release of ReUI, newest first. ReUI checks for the next one once a day and shows these notes after it updates.</p>
+
+    {list.map((r) => (
+      <section id={`v${r.version}`} class="release">
+        <header>
+          <h2><a href={`#v${r.version}`}>{r.version}</a></h2>
+          <p class="when">{r.when.toLowerCase() === 'unreleased' ? 'Coming next' : r.when}</p>
+        </header>
+        {forRelease(r.version).map((p) => (
+          <figure class="picture">
+            <Image src={p.src} alt={p.alt} width={Math.min(p.width, 760)} densities={[1, 2]} />
+          </figure>
+        ))}
+        <div class="prose" set:html={r.html} />
+        {r.when.toLowerCase() !== 'unreleased' && <p class="get"><a href={`${repo}/releases/tag/v${r.version}`}>Download {r.version}</a></p>}
+      </section>
+    ))}
+  </main>
+  <Footer />
+</Base>
+
+<style>
+  .page { max-width: 760px; margin: 0 auto; padding: clamp(56px, 9vh, 104px) var(--gutter) clamp(96px, 14vh, 160px); }
+  .eyebrow { color: var(--ink-3); font: 500 13px/1 var(--mono); letter-spacing: 0.04em; }
+  h1 { margin-top: 14px; font-size: clamp(48px, 7vw, 96px); font-weight: 600; line-height: 0.95; letter-spacing: -0.055em; }
+  .lead { margin-top: 24px; color: var(--ink); font-size: clamp(18px, 1.6vw, 22px); line-height: 1.45; letter-spacing: -0.01em; }
+
+  .release { margin-top: 64px; padding-top: 28px; border-top: 1px solid var(--line); scroll-margin-top: 24px; }
+  .release header { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; margin-bottom: 18px; }
+  .release h2 { font-size: 32px; font-weight: 600; letter-spacing: -0.04em; }
+  .when { color: var(--ink-3); font: 500 13px/1 var(--mono); letter-spacing: 0.04em; }
+  .release :global(.prose > p:first-child) { color: var(--ink); font-size: 18px; }
+  .picture { margin: 0 0 24px; }
+  .picture :global(img) { display: block; max-width: 100%; height: auto; border-radius: 16px; }
+  .get { margin-top: 22px; font-size: 15px; }
+  .get a { text-decoration: underline; text-underline-offset: 3px; }
+</style>

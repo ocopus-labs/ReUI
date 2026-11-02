@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.2.0 (unreleased)
+
+An island on every display, a new clipboard, and a card when a long command finishes.
+
+- **An island on every display:** Settings → General → Display → **All displays**. A card that opens by itself opens on the display your pointer is on; a fullscreen game or video hides only the island on its own display. An extra display costs no CPU at rest.
+- **Where the pointer is** now follows the pointer whatever the island is doing (with music playing, a timer running, a card open), and the island emerges on the display it arrives on instead of popping up.
+- **A new clipboard:** one toolbar with the types to show (text, links, images, files, colours), the search, how many cards match, **Clear** and the settings; wider cards that say what each clip is, its name and when you copied it.
+  - Files show what Explorer shows for them, fanned out on the card.
+  - An image copied from a web page keeps its file name, and you can search for it.
+  - **Clear** can be undone for 5 seconds.
+  - Pinned and your collections: click the clock once it's chosen.
+- **Long terminal commands:** connect PowerShell or Git Bash in Settings → Coding agents. A command that ran 10 seconds or more tells you when it's done or failed, with its exit code and how long it took, if you've moved to another window. **Open terminal** takes you back.
+- **Win+Alt+N** opens whatever is waiting with the keyboard on it; Esc puts you back where you were typing.
+- **Hidden from screen shares:** people watching your shared screen or a recording don't see your clipboard, an agent's request or a notification on the island. You still do. Settings → General → Screen sharing.
+- **Send to → ReUI shelf** in Explorer's right-click menu holds files on the shelf without dragging them.
+- Coding agents' cards show the full working folder (your home folder as `~`), so two sessions of projects with the same name can be told apart.
+- Settings → General → **Start menu entry**, to start ReUI again after quitting it.
+
+Fixes:
+
+- With two displays and "Where the pointer is", the island sometimes stayed on one display or didn't show at all.
+
 ## 0.1.0 (30 October 2026)
 
 First public build.
