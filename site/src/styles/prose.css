@@ -1,0 +1,34 @@
+/* Rendered Markdown (the guide, the changelog): set from HTML, so global, under .prose.
+   The privacy page's reading measure and ink, with tables for the guide's shortcuts. */
+.prose { color: var(--ink-2); font-size: 16px; line-height: 1.65; }
+.prose > * + * { margin-top: 14px; }
+.prose h2 { margin-top: 44px; color: var(--ink); font-size: 22px; font-weight: 600; letter-spacing: -0.02em; line-height: 1.25; }
+.prose h3 { margin-top: 32px; color: var(--ink); font-size: 18px; font-weight: 600; letter-spacing: -0.01em; }
+.prose h2 + *, .prose h3 + * { margin-top: 10px; }
+.prose strong { color: var(--ink); font-weight: 600; }
+.prose a { color: var(--ink); text-decoration: underline; text-decoration-color: rgb(14 14 16 / 0.3); text-underline-offset: 3px; transition: text-decoration-color 0.2s; }
+.prose a:hover { text-decoration-color: currentColor; }
+.prose code { padding: 1px 6px; border-radius: 6px; background: rgb(14 14 16 / 0.06); color: var(--ink); font: 500 0.88em var(--mono); white-space: nowrap; }
+.prose ul, .prose ol { padding-left: 1.2em; }
+.prose li + li { margin-top: 8px; }
+.prose li > ul { margin-top: 8px; }
+.prose li::marker { color: var(--ink-3); }
+.prose img { max-width: 100%; height: auto; border-radius: 12px; }
+.prose blockquote { margin: 0; padding-left: 16px; border-left: 2px solid var(--line); }
+
+/* Shortcut tables: what you do, what it does (on a phone, one under the other). */
+.prose table { display: block; overflow-x: auto; width: 100%; border-collapse: collapse; font-size: 15px; line-height: 1.5; }
+.prose th { color: var(--ink-3); font: 500 12px/1.4 var(--mono); letter-spacing: 0.04em; text-align: left; text-transform: uppercase; }
+.prose th, .prose td { padding: 11px 16px 11px 0; border-bottom: 1px solid var(--line); vertical-align: top; }
+.prose td:first-child { min-width: 200px; color: var(--ink); }
+.prose tr:last-child td { border-bottom: 0; }
+
+/* On a phone each row stacks: what you do, then what it does under it. */
+@media (max-width: 640px) {
+  .prose table, .prose tbody, .prose tr, .prose td { display: block; }
+  .prose thead { display: none; }
+  .prose tr { padding: 12px 0; border-bottom: 1px solid var(--line); }
+  .prose tr:last-child { border-bottom: 0; }
+  .prose td { padding: 0; border: 0; }
+  .prose td:first-child { min-width: 0; margin-bottom: 4px; font-weight: 500; }
+}

@@ -227,9 +227,10 @@ render/            drawing only (no behaviour state); where things go is reui_de
   sheet.rs         test-only: the device-drawing contact sheet (target/devices-art/)
   panel_sheet.rs   test-only: the clipboard panel drawn offscreen, dark and light, 100 and
                    150 % (target/clipboard-panel/), to compare with the design reference
+  update_sheet.rs  test-only: every moment of a ReUI update, pill and card (target/update-sheet/)
   switcher.rs      the view switcher's tabs and the waiting decision's dot
   rows/            timeline, controls, slider, lyrics, cards (the scrolling row) and faces
-                   (one card: body, tag, name, age, grain), search (with icon filters), tabs, note,
+                   (one card: body, tag, name, age), search (with icon filters), tabs, note,
                    context (session strip), choices, block (scrolling text), gauges
                    (gauges with sparklines, facts: System stats), agenda (the calendar's
                    rest of the day), mixer (each app's level, scrolling inside the card)
@@ -297,7 +298,8 @@ wallpaper/         the previews' stage: mod.rs reads the wallpaper (IDesktopWall
                    each fit mode puts the image and what lands in the strip (pure, tested)
 state.rs           what the pages show and change      hub.rs     pipe client (reload, clear)
 keys.rs            hotkey recorder (low-level hook)     system.rs  startup entry, folders, apps
-start_menu.rs      the Start menu entry (ReUI.lnk, as the installer makes it) for copies run without the installer
+shortcuts.rs       ReUI's own shortcuts, as the installer makes them, for copies run without it: the
+                   Start menu entry (ReUI.lnk) and Send to → ReUI shelf (--shelf)
 stats.rs           idle cost: CPU and private memory of ReUI's processes
 ../perf/           harness.ps1 / live.ps1: scripted scroll/hover runs against --perf
 ```

@@ -58,6 +58,8 @@ mod rows;
 mod panel_sheet;
 #[cfg(test)]
 mod sheet;
+#[cfg(test)]
+mod update_sheet;
 mod switcher;
 mod text;
 
@@ -339,6 +341,11 @@ impl Renderer {
     /// The theme's colours.
     fn pal(&self) -> &Palette {
         &self.look.palette
+    }
+
+    /// A fill as one solid colour over the island's material (`Color::over`).
+    fn solid(&self, fill: Color) -> Color {
+        fill.over(self.pal().background)
     }
 
     pub fn look(&self) -> &Look {

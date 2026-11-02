@@ -28,8 +28,6 @@ impl Renderer {
         let ring = component::card::RING_GAP + component::card::RING_WIDTH;
         // Cut at the content inset, not the surface edge: the pill's corners curve in there.
         let inset = self.look.inset();
-        // Made once per row, shared by every card that holds media.
-        let grain = self.grain(rt)?;
         unsafe { rt.PushAxisAlignedClip(&self.rect(inset - ring, y - ring, w - inset + ring, y + ch + ring), D2D1_ANTIALIAS_MODE_ALIASED) };
         let result = (|| -> Result<()> {
             for i in row.visible(scroll) {
@@ -39,7 +37,7 @@ impl Renderer {
                 let radius = self.concentric() * s;
                 let shape = D2D1_ROUNDED_RECT { rect: self.rect(l, y, r, b), radiusX: radius, radiusY: radius };
                 let selected = with.keyboard && i == with.selected;
-                self.face(rt, item, &shape, &Face::new(l, y, cw), selected, accent, grain.as_ref())?;
+                self.face(rt, item, &shape, &Face::new(l, y, cw), selected, accent)?;
                 if selected {
                     // Concentric with the card: its radius grows by exactly the ring's offset.
                     let out = component::card::RING_GAP + component::card::RING_WIDTH / 2.0;
