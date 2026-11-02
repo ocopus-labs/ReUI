@@ -297,7 +297,8 @@ wallpaper/         the previews' stage: mod.rs reads the wallpaper (IDesktopWall
                    each fit mode puts the image and what lands in the strip (pure, tested)
 state.rs           what the pages show and change      hub.rs     pipe client (reload, clear)
 keys.rs            hotkey recorder (low-level hook)     system.rs  startup entry, folders, apps
-start_menu.rs      the Start menu entry (ReUI.lnk, as the installer makes it) for copies run without the installer
+shortcuts.rs       ReUI's own shortcuts, as the installer makes them, for copies run without it: the
+                   Start menu entry (ReUI.lnk) and Send to → ReUI shelf (--shelf)
 stats.rs           idle cost: CPU and private memory of ReUI's processes
 ../perf/           harness.ps1 / live.ps1: scripted scroll/hover runs against --perf
 ```
