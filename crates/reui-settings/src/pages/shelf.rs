@@ -5,9 +5,10 @@ use serde_json::Value;
 
 use super::{button, enable, group, head, Effect, Page};
 use crate::model::files::{File, KEEP};
+use crate::shortcuts::{self, StartMenu, Which};
 use crate::state::State;
 use crate::ui::icons;
-use crate::ui::{Act, Block, Part, Role, Row, Target};
+use crate::ui::{Act, Block, Part, Role, Row, Target, Tone};
 
 /// What each `keep` reads as, in [`KEEP`]'s order.
 const KEEP_LABELS: [&str; 4] = ["Until removed", "Until ReUI restarts", "A day", "A week"];
@@ -18,7 +19,16 @@ pub fn build(state: &State) -> Vec<Block> {
     let ok = state.files.doc(File::Shelf).error().is_none();
     let keep = Row::new("keep", "Keep held things").detail("Images and text are saved in ReUI's folder; files are only referred to").part(Part::Dropdown { label: KEEP_LABELS[state.files.keep()].into() }).enabled(ok);
     let open = Row::new("open", "Shelf").detail("What's held now").icon(icons::shelf()).part(button("Show", Role::Secondary)).enabled(ok);
-    blocks.push(group("", vec![keep, open]));
+    // Explorer's right-click → Send to (an installed ReUI has it already).
+    let hub = state.paths.hub_exe();
+    let send = Row::new("send_to", "Send to → ReUI shelf");
+    let send = match &state.send_to {
+        _ if !hub.exists() => send.detail("reui-hub.exe isn't next to Settings").tone(Tone::Warning).part(Part::Toggle { on: false }).enabled(false),
+        StartMenu::Off => send.detail("In Explorer's right-click menu, under Show more options").part(Part::Toggle { on: false }),
+        StartMenu::On => send.detail("In Explorer's right-click menu, under Show more options").part(Part::Toggle { on: true }),
+        StartMenu::Elsewhere(path) => send.detail(format!("Starts {path}")).tone(Tone::Warning).part(Part::Toggle { on: true }),
+    };
+    blocks.push(group("", vec![keep, open, send.icon(icons::tile(icons::FOLDER, reui_design::tokens::color::system::BLUE))]));
     let armed = state.is_armed("clear", 0);
     let clear = Row::new("clear", "Clear the shelf").detail("Lets go of everything; your files stay where they are").icon(icons::danger(icons::DELETE)).part(Part::Button { label: if armed { "Clear now".into() } else { "Clear".into() }, role: Role::Destructive, armed });
     blocks.push(group("", vec![clear]));
@@ -37,6 +47,12 @@ pub fn act(state: &mut State, target: &Target, act: Act) -> Effect {
             }
         }
         ("open", Act::Press) => state.tell_hub("shelf", "open"),
+        ("send_to", Act::Press) => {
+            // Off adds it; on (ours or another copy's) removes it.
+            let on = state.send_to == StartMenu::Off;
+            state.write_error = shortcuts::set(&state.paths, Which::SendTo, on).err();
+            state.send_to = shortcuts::state(&state.paths, Which::SendTo);
+        }
         ("clear", Act::Press) => state.tell_hub("shelf", "clear"),
         _ => {}
     }

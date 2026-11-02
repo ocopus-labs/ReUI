@@ -44,7 +44,7 @@ Whatever plays on your PC shows in the pill: Spotify, a browser, VLC, Media Play
 
 ### Clipboard history
 
-<img src="docs/images/clipboard.png" width="656" alt="Clipboard history open: a search field and a row of cards for a note, a link, a colour and a command, with the view switcher under it">
+<img src="docs/images/clipboard.png" width="656" alt="Clipboard history open: type filters, a search field, the count, Clear and settings, over a row of cards for three files, a Wikipedia link, a photo and a note">
 
 **Win+Alt+V** brings back everything you copied: text with its formatting, images, files, links with their page's title, colours, code. Type to search, press Enter to paste into the app you were in, or Alt+1 to Alt+9 to paste one of the first nine. Pin what you want to keep. Copies from password managers and anything that looks like a password, key or token are never saved, and the history is kept only on your PC.
 

@@ -913,7 +913,7 @@ dependencies = [
 
 [[package]]
 name = "reui-bridge"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "reui-design",
  "reui-protocol",
@@ -924,14 +924,14 @@ dependencies = [
 
 [[package]]
 name = "reui-design"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "serde_json",
 ]
 
 [[package]]
 name = "reui-hub"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "anyhow",
  "blake3",
@@ -952,7 +952,7 @@ dependencies = [
 
 [[package]]
 name = "reui-island"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "realfft",
  "reui-design",
@@ -967,7 +967,7 @@ dependencies = [
 
 [[package]]
 name = "reui-protocol"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "postcard",
  "serde",
@@ -976,7 +976,7 @@ dependencies = [
 
 [[package]]
 name = "reui-settings"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "postcard",
  "reui-design",
@@ -988,7 +988,7 @@ dependencies = [
 
 [[package]]
 name = "reui-setup"
-version = "0.1.0"
+version = "0.2.0"
 dependencies = [
  "reui-design",
  "windows",
