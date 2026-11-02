@@ -27,6 +27,11 @@ const FILE_A: ImageId = ImageId(8);
 const FILE_B: ImageId = ImageId(9);
 const FILE_C: ImageId = ImageId(10);
 
+/// The view, for the GPU probe (`gpu_probe.rs`).
+pub(super) fn view_for_probe() -> ExpandedView {
+    view()
+}
+
 /// The design's four clips (and a colour after them), as the hub sends them.
 fn view() -> ExpandedView {
     let tab = |action: &str, glyph: char, selected: bool| Tab { label: action.into(), count: 0, selected, action: action.into(), glyph: Some(glyph), menu: vec![] };
@@ -130,7 +135,7 @@ fn draw(device: &Device, renderer: &Renderer, path: &Path) -> Result<()> {
     }
 }
 
-unsafe fn canvas(device: &Device, w: u32, h: u32) -> Result<(IWICBitmap, ID2D1RenderTarget)> {
+pub(super) unsafe fn canvas(device: &Device, w: u32, h: u32) -> Result<(IWICBitmap, ID2D1RenderTarget)> {
     let bitmap = device.wic.CreateBitmap(w, h, &GUID_WICPixelFormat32bppPBGRA, WICBitmapCacheOnLoad)?;
     let props = D2D1_RENDER_TARGET_PROPERTIES {
         pixelFormat: D2D1_PIXEL_FORMAT { format: windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM, alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED },

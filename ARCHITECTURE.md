@@ -225,6 +225,8 @@ render/            drawing only (no behaviour state); where things go is reui_de
   notch.rs         the Notch style's ears
   idle.rs          the idle pill's faces: the time, the date and time, the row of places
   sheet.rs         test-only: the device-drawing contact sheet (target/devices-art/)
+  gpu_probe.rs     test-only: the clipboard panel drawn on the GPU (as the island draws) and in
+                   software (as the sheets do); a card's colour must match
   panel_sheet.rs   test-only: the clipboard panel drawn offscreen, dark and light, 100 and
                    150 % (target/clipboard-panel/), to compare with the design reference
   switcher.rs      the view switcher's tabs and the waiting decision's dot

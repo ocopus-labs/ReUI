@@ -227,10 +227,11 @@ impl Renderer {
         Ok(())
     }
 
-    /// The grain tile as a brush repeating at the screen's pixels, faint; `None` where the
-    /// tile can't be made (the cards are simply flat).
+    /// The grain tile as a brush repeating at the screen's pixels; `None` where the tile
+    /// can't be made (the cards are simply flat). Its faintness is in the tile's own pixels,
+    /// not the brush's opacity, so nothing on the way to the screen can make it louder.
     pub(in crate::render) fn grain(&self, rt: &ID2D1RenderTarget) -> Result<Option<ID2D1BitmapBrush>> {
-        let pixels = noise(GRAIN);
+        let pixels = noise(GRAIN, component::card::GRAIN);
         let props = D2D1_BITMAP_PROPERTIES { pixelFormat: D2D1_PIXEL_FORMAT { format: DXGI_FORMAT_B8G8R8A8_UNORM, alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED }, dpiX: 96.0, dpiY: 96.0 };
         unsafe {
             let Ok(bitmap) = rt.CreateBitmap(D2D_SIZE_U { width: GRAIN, height: GRAIN }, Some(pixels.as_ptr().cast()), GRAIN * 4, &props) else { return Ok(None) };
@@ -239,7 +240,6 @@ impl Renderer {
                 Some(&D2D1_BITMAP_BRUSH_PROPERTIES { extendModeX: D2D1_EXTEND_MODE_WRAP, extendModeY: D2D1_EXTEND_MODE_WRAP, interpolationMode: D2D1_BITMAP_INTERPOLATION_MODE_NEAREST_NEIGHBOR }),
                 None,
             )?;
-            brush.SetOpacity(component::card::GRAIN);
             brush.SetTransform(&Matrix3x2::identity());
             Ok(Some(brush))
         }
@@ -252,17 +252,19 @@ impl Renderer {
     }
 }
 
-/// A `side` × `side` tile of grey noise, opaque, premultiplied BGRA: the same every time
-/// (a fixed seed), so cards don't shimmer between redraws.
-fn noise(side: u32) -> Vec<u8> {
+/// A `side` × `side` tile of grey noise at `opacity`, premultiplied BGRA (each pixel's
+/// grey already scaled by its alpha): the same every time (a fixed seed), so cards don't
+/// shimmer between redraws.
+fn noise(side: u32, opacity: f32) -> Vec<u8> {
+    let alpha = (opacity.clamp(0.0, 1.0) * 255.0).round() as u32;
     let mut state: u32 = 0x9E37_79B9;
     let mut out = Vec::with_capacity((side * side * 4) as usize);
     for _ in 0..side * side {
         state ^= state << 13;
         state ^= state >> 17;
         state ^= state << 5;
-        let v = (state >> 24) as u8;
-        out.extend_from_slice(&[v, v, v, 255]);
+        let v = ((state >> 24) * alpha / 255) as u8;
+        out.extend_from_slice(&[v, v, v, alpha as u8]);
     }
     out
 }
@@ -272,13 +274,15 @@ mod tests {
     use super::*;
 
     #[test]
-    fn the_grain_is_opaque_grey_and_the_same_every_time() {
-        let a = noise(8);
+    fn the_grain_is_faint_grey_and_the_same_every_time() {
+        let a = noise(8, 0.05);
         assert_eq!(a.len(), 8 * 8 * 4);
-        assert_eq!(a, noise(8));
-        assert!(a.chunks(4).all(|p| p[0] == p[1] && p[1] == p[2] && p[3] == 255));
+        assert_eq!(a, noise(8, 0.05));
+        // Faint in its own pixels: alpha 13 of 255, and premultiplied (grey never above it).
+        assert!(a.chunks(4).all(|p| p[0] == p[1] && p[1] == p[2] && p[3] == 13 && p[0] <= p[3]));
         // Noise, not a flat colour.
         let distinct: std::collections::HashSet<u8> = a.chunks(4).map(|p| p[0]).collect();
-        assert!(distinct.len() > 16);
+        assert!(distinct.len() > 4);
+        assert!(noise(4, 1.0).chunks(4).all(|p| p[3] == 255));
     }
 }
