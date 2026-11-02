@@ -20,8 +20,19 @@ impl Renderer {
     /// text label or a bare glyph, which sits beside its mark.
     /// `level` is the activity's level as shown right now (eased), over the view's own.
     pub fn draw_compact(&self, surface: &CompositionDrawingSurface, view: Option<&CompactView>, accent: Color, level: Option<f32>) -> Result<CompactLayout> {
-        let mut layout = CompactLayout { width: island::idle::WIDTH, bars: None, logo: None };
+        let mut out = None;
         self.paint(surface, |rt| {
+            out = Some(self.compact_into(rt, view, accent, level)?);
+            Ok(())
+        })?;
+        out.ok_or_else(|| windows::core::Error::from(windows::Win32::Foundation::E_FAIL))
+    }
+
+    /// Draws the compact presentation into `rt` (cleared, transparent), centred in the
+    /// compact surface. Separate from the surface so a test can draw it offscreen.
+    pub(crate) fn compact_into(&self, rt: &ID2D1RenderTarget, view: Option<&CompactView>, accent: Color, level: Option<f32>) -> Result<CompactLayout> {
+        let mut layout = CompactLayout { width: island::idle::WIDTH, bars: None, logo: None };
+        (|| -> Result<()> {
             let Some(view) = view else { return Ok(()) };
             let (leading, trailing) = (shown_level(&view.leading, level), shown_level(&view.trailing, level));
             if let Element::Level { value, dim } = trailing.as_ref() {
@@ -84,7 +95,7 @@ impl Renderer {
                 _ => None,
             };
             Ok(())
-        })?;
+        })()?;
         Ok(layout)
     }
 

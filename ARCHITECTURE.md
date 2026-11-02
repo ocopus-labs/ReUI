@@ -227,6 +227,7 @@ render/            drawing only (no behaviour state); where things go is reui_de
   sheet.rs         test-only: the device-drawing contact sheet (target/devices-art/)
   panel_sheet.rs   test-only: the clipboard panel drawn offscreen, dark and light, 100 and
                    150 % (target/clipboard-panel/), to compare with the design reference
+  update_sheet.rs  test-only: every moment of a ReUI update, pill and card (target/update-sheet/)
   switcher.rs      the view switcher's tabs and the waiting decision's dot
   rows/            timeline, controls, slider, lyrics, cards (the scrolling row) and faces
                    (one card: body, tag, name, age), search (with icon filters), tabs, note,

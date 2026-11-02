@@ -157,7 +157,7 @@ pub(super) unsafe fn canvas(device: &Device, w: u32, h: u32) -> Result<(IWICBitm
     Ok((bitmap, rt))
 }
 
-unsafe fn save(device: &Device, bitmap: &IWICBitmap, path: &Path) -> Result<()> {
+pub(super) unsafe fn save(device: &Device, bitmap: &IWICBitmap, path: &Path) -> Result<()> {
     let stream = device.wic.CreateStream()?;
     let wide: Vec<u16> = path.to_string_lossy().encode_utf16().chain(Some(0)).collect();
     stream.InitializeFromFilename(PCWSTR(wide.as_ptr()), 0x4000_0000)?;
