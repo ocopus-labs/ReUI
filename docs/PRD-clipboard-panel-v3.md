@@ -13,7 +13,7 @@ The clipboard stays in the notch (see [PRD-clipboard-window](PRD-clipboard-windo
 | Header | Full-width search, then a row of tabs (History 24, Pinned 3, collections) | **One toolbar:** a group of type icons, a search pill, a count, Clear, settings |
 | Type filters | None in the notch (the window had them) | Icon chips: All · Text · Links · Images · Files · Colors |
 | Cards | About 116 × 116, 4.5 across, the footer shows app icon · age · fact | **Landscape, about 1.45 : 1, three across and the edge of a fourth.** Content on top; at the bottom a quiet tag line, then a name and the age |
-| Card surface | Flat fill | Flat fill with a **fine grain** |
+| Card surface | Flat fill | Flat fill (the design's grain was dropped, §3) |
 | Panel width | 560 DIP | 800 DIP (*D4*) |
 
 ```
@@ -68,7 +68,7 @@ Size: about 225 × 156 DIP in an 800 panel. That is three across and the edge of
 
 What goes: the app icon in the footer (the design has none; the app stays searchable and appears in the card's menu as "From Edge"), the hover pin/delete circles stay as they are, the `★` for pinned stays at the tag line's end.
 
-**Grain:** a 64 × 64 noise tile drawn over the fill of a card holding media (an image, files) as a tiled bitmap brush at 5 % opacity (`card.grain`), at the screen's pixels, the same tile every time. The text and link cards are flat, as in the design. It costs no idle work: it's part of the card's drawing, not an animation.
+**Grain: dropped (Nov 2, 2026).** The design's fine grain under images and files was built (a 64 px noise tile at 5 %) and taken out. On Rohit's Acer monitor the cards read light grey and speckled while every screen capture showed them dark (about RGB 24): the monitor's sharpening turned the pixel-level noise into a bright speckle. A flat fill looks the same everywhere.
 
 **Colours, from the reference:** cards, the field, the count and Clear all sit on the quietest well (`fill.quaternary`, about RGB 20 on black, as sampled from the picture); the chosen chip is a primary fill. **Ages** say "just now", "4m ago", "2h ago": minutes at the finest, since the panel isn't redrawn every second (the design's "6s ago" would go stale while it's open). **Size:** 800 DIP wide (`expanded.gallery-width`), cards 156 tall, three across and the edge of a fourth. Settings' Clipboard page shows the panel when its stage is wide enough, else the copy toast (the island is never shrunk to fit).
 
@@ -101,7 +101,7 @@ The module says what's there; the island decides how it looks.
 | | What | Done when |
 |---|---|---|
 | **M1** | Toolbar: type chips, search pill with placeholder, count, Clear + Undo, settings gear, Pinned/collections per *D3* | The panel filters by type from the chips and the keyboard; Clear and Undo work; tests for `to_message` and the layout |
-| **M2** | Cards: new size and width, the tag/name/age footer, link, image (contained), text, code and color faces, grain | A screenshot of the real island next to the design reads the same at 100 % and 150 %, dark and light |
+| **M2** | Cards: new size and width, the tag/name/age footer, link, image (contained), text, code and color faces | A screenshot of the real island next to the design reads the same at 100 % and 150 %, dark and light |
 | **M3** | Files: fanned thumbnails (worker thread, cache); image names | Copying 3 files in Explorer shows their thumbnails in under 300 ms; idle CPU stays 0 |
 
 **M3 as built:** `clipboard/thumbs.rs` asks the shell (`IShellItemImageFactory`, on the blocking pool) for the first three files of the first 12 cards that hold files, at 192 px, and keeps them by path while the hub runs (256 at most); the panel shows what's ready and is sent again as the rest arrive. The island fans them: the first upright in the middle, the second tilted out left behind it, the third right (`cards::Face::fan`, tokens `card.fan-*`). A copied image's name comes from the `<img src>` in the HTML a browser puts beside it (`os/formats.rs::image_name`: the last path part, `%`-decoded; inline `data:` images and names without an extension say nothing), kept in the clip's text column, so it shows on the card and is searchable; images without one are named by their size.

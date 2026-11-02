@@ -55,8 +55,6 @@ mod minimal;
 mod notch;
 mod rows;
 #[cfg(test)]
-mod gpu_probe;
-#[cfg(test)]
 mod panel_sheet;
 #[cfg(test)]
 mod sheet;

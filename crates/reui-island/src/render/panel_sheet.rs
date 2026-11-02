@@ -27,11 +27,6 @@ const FILE_A: ImageId = ImageId(8);
 const FILE_B: ImageId = ImageId(9);
 const FILE_C: ImageId = ImageId(10);
 
-/// The view, for the GPU probe (`gpu_probe.rs`).
-pub(super) fn view_for_probe() -> ExpandedView {
-    view()
-}
-
 /// The design's four clips (and a colour after them), as the hub sends them.
 fn view() -> ExpandedView {
     let tab = |action: &str, glyph: char, selected: bool| Tab { label: action.into(), count: 0, selected, action: action.into(), glyph: Some(glyph), menu: vec![] };
