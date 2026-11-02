@@ -12,6 +12,7 @@
     "astro": "astro",
     "images": "node scripts/island-images.mjs",
     "readme-images": "node scripts/readme-images.mjs",
+    "clipboard-image": "node scripts/clipboard-image.mjs",
     "badges": "node scripts/badges.mjs"
   },
   "dependencies": {

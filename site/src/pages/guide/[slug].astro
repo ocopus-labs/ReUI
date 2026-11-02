@@ -4,7 +4,9 @@
 import Base from '../../layouts/Base.astro';
 import DocBar from '../../components/DocBar.astro';
 import Footer from '../../sections/Footer.astro';
+import { Image } from 'astro:assets';
 import { guide, type Section } from '../../lib/docs';
+import { forGuide } from '../../lib/pictures';
 import '../../styles/prose.css';
 
 export function getStaticPaths() {
@@ -20,6 +22,7 @@ interface Props {
 const { section, prev, next } = Astro.props;
 const { sections } = guide();
 const repo = 'https://github.com/ocopus-labs/ReUI';
+const picture = forGuide(section.slug);
 ---
 <Base title={`${section.title} · ReUI guide`} description={section.lead || `${section.title} in ReUI: what it does and its shortcuts.`}>
   <DocBar current="guide" />
@@ -34,6 +37,11 @@ const repo = 'https://github.com/ocopus-labs/ReUI';
     </nav>
     <main class="page">
       <h1>{section.title}</h1>
+      {picture && (
+        <figure class="picture">
+          <Image src={picture.src} alt={picture.alt} width={picture.width} densities={[1, 2]} loading="eager" />
+        </figure>
+      )}
       <div class="prose" set:html={section.html} />
       <footer class="steps">
         {prev ? <a class="prev" href={`/guide/${prev.slug}`}><span>Previous</span>{prev.title}</a> : <span />}
@@ -55,6 +63,8 @@ const repo = 'https://github.com/ocopus-labs/ReUI';
   .side li a[aria-current='page'] { background: rgb(14 14 16 / 0.06); color: var(--ink); font-weight: 500; }
 
   h1 { margin-bottom: 24px; font-size: clamp(40px, 5.5vw, 72px); font-weight: 600; line-height: 1; letter-spacing: -0.05em; }
+  .picture { margin: 0 0 32px; }
+  .picture :global(img) { display: block; max-width: 100%; height: auto; border-radius: 16px; }
   .steps { display: flex; justify-content: space-between; gap: 16px; margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line); }
   .steps a { display: flex; flex-direction: column; gap: 4px; color: var(--ink); font-size: 17px; font-weight: 500; }
   .steps a:hover { text-decoration: underline; text-underline-offset: 3px; }

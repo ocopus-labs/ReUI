@@ -4,7 +4,9 @@
 import Base from '../layouts/Base.astro';
 import DocBar from '../components/DocBar.astro';
 import Footer from '../sections/Footer.astro';
+import { Image } from 'astro:assets';
 import { releases } from '../lib/docs';
+import { forRelease } from '../lib/pictures';
 import '../styles/prose.css';
 
 const list = releases();
@@ -23,6 +25,11 @@ const repo = 'https://github.com/ocopus-labs/ReUI';
           <h2><a href={`#v${r.version}`}>{r.version}</a></h2>
           <p class="when">{r.when.toLowerCase() === 'unreleased' ? 'Coming next' : r.when}</p>
         </header>
+        {forRelease(r.version).map((p) => (
+          <figure class="picture">
+            <Image src={p.src} alt={p.alt} width={Math.min(p.width, 760)} densities={[1, 2]} />
+          </figure>
+        ))}
         <div class="prose" set:html={r.html} />
         {r.when.toLowerCase() !== 'unreleased' && <p class="get"><a href={`${repo}/releases/tag/v${r.version}`}>Download {r.version}</a></p>}
       </section>
@@ -42,6 +49,8 @@ const repo = 'https://github.com/ocopus-labs/ReUI';
   .release h2 { font-size: 32px; font-weight: 600; letter-spacing: -0.04em; }
   .when { color: var(--ink-3); font: 500 13px/1 var(--mono); letter-spacing: 0.04em; }
   .release :global(.prose > p:first-child) { color: var(--ink); font-size: 18px; }
+  .picture { margin: 0 0 24px; }
+  .picture :global(img) { display: block; max-width: 100%; height: auto; border-radius: 16px; }
   .get { margin-top: 22px; font-size: 15px; }
   .get a { text-decoration: underline; text-underline-offset: 3px; }
 </style>
