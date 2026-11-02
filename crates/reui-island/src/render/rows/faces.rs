@@ -30,7 +30,7 @@ impl Renderer {
     pub(in crate::render) fn face(&self, rt: &ID2D1RenderTarget, item: &Item, shape: &D2D1_ROUNDED_RECT, face: &Face, selected: bool, accent: Color) -> Result<()> {
         let p = self.pal();
         // The quietest well: a card is a mat on the island, the content does the talking.
-        let fill = if selected { p.fill_tertiary } else { p.fill_quaternary };
+        let fill = self.solid(if selected { p.fill_tertiary } else { p.fill_quaternary });
         let mut inks = Inks { tag: p.label_secondary, name: p.label_primary, fact: p.label_secondary, age: p.label_secondary.with_alpha(0.8) };
         let well = |c: Color| unsafe {
             rt.FillRoundedRectangle(shape, &self.brush(rt, c)?);
