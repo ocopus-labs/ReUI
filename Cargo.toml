@@ -3,7 +3,7 @@ resolver = "2"
 members = ["crates/reui-design", "crates/reui-protocol", "crates/reui-hub", "crates/reui-island", "crates/reui-bridge", "crates/reui-setup", "crates/reui-settings"]
 
 [workspace.package]
-version = "0.1.0"
+version = "0.2.0"
 edition = "2021"
 publish = false
 license = "MIT OR Apache-2.0"
