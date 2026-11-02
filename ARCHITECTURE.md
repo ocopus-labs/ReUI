@@ -151,6 +151,11 @@ modules/
                    only what's new), schedule (debounce, safety list, polling fallback with
                    backoff; tested), diff (new and gone ids; tested), view, settings
                    (notifications.json); examples/notifications_probe.rs measures it all
+  update_restart/  Windows Update waiting for a restart (docs/PRD-update-restart.md): watch
+                   (HKLM keys on their own thread, RegNotifyChangeKeyValue), plan (said once
+                   per set of updates, the confirm; pure, tested), view, restart
+                   (InitiateShutdownW, install updates; Windows Update settings), settings
+                   (update-restart.json)
   updates/         daily update check, the update card (an Alert: Later / Install, then
                    download progress, installing or why it failed), "Updated" brief:
                    update.json + offer/snooze rules, card phases (pure, tested), views,

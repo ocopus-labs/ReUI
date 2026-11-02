@@ -25,6 +25,7 @@ pub mod screenshots;
 pub mod stats;
 mod system_events;
 pub mod timers;
+pub mod update_restart;
 pub mod updates;
 
 use std::future::Future;

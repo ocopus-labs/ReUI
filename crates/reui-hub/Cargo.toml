@@ -74,6 +74,8 @@ features = [
     "Win32_System_Wmi",
     "Win32_System_SystemServices",
     "Win32_System_Registry",
+    # Windows Update restart: Update and restart (InitiateShutdownW)
+    "Win32_System_Shutdown",
     "Win32_UI_Input",
     # Shared system-events window: session unlocks, device-interface arrivals
     "Win32_System_RemoteDesktop",

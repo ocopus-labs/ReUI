@@ -7,7 +7,8 @@
 //! indicator / System stats / Calendar / file shelf / script activity / terminal command modules, `--no-link-previews` keeps clipboard links offline,
 //! `--no-island` doesn't launch the island (run `reui-island` yourself, e.g. under a
 //! debugger). `--no-downloads` / `--no-screenshots` disable the downloads and screenshot
-//! moments. `--no-updates` never looks for updates or mentions them. `--notifications` turns
+//! moments. `--no-updates` never looks for updates or mentions them; `--no-update-restart`
+//! never mentions a restart Windows Update is waiting for. `--notifications` turns
 //! on the (opt-in, off by default) notifications module for this run. Clipboard, Now
 //! Playing, Devices, Timers, the privacy indicators, System stats, Calendar, the shelf, downloads and screenshots
 //! also stay off when their file says `"enabled": false` (Settings, the welcome).
@@ -135,6 +136,11 @@ async fn main() -> Result<()> {
     }
     if !has("--no-updates") {
         enabled.push(Box::new(modules::updates::Updates));
+    }
+    // Windows Update restarts: one thread asleep on two registry keys until Windows
+    // Update writes; `enabled` in its file is read on reload.
+    if !has("--no-update-restart") {
+        enabled.push(Box::new(modules::update_restart::UpdateRestart));
     }
     // The island's hide shortcut: the island is always there to hide.
     enabled.push(Box::new(modules::hide::HideIsland));
