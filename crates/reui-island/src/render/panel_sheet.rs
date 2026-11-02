@@ -143,7 +143,7 @@ fn draw(device: &Device, renderer: &Renderer, path: &Path, backdrop: Option<reui
     }
 }
 
-unsafe fn canvas(device: &Device, w: u32, h: u32) -> Result<(IWICBitmap, ID2D1RenderTarget)> {
+pub(super) unsafe fn canvas(device: &Device, w: u32, h: u32) -> Result<(IWICBitmap, ID2D1RenderTarget)> {
     let bitmap = device.wic.CreateBitmap(w, h, &GUID_WICPixelFormat32bppPBGRA, WICBitmapCacheOnLoad)?;
     let props = D2D1_RENDER_TARGET_PROPERTIES {
         pixelFormat: D2D1_PIXEL_FORMAT { format: windows::Win32::Graphics::Dxgi::Common::DXGI_FORMAT_B8G8R8A8_UNORM, alphaMode: D2D1_ALPHA_MODE_PREMULTIPLIED },

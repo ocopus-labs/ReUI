@@ -29,7 +29,7 @@ impl Renderer {
             right -= bw;
             if button.role == ButtonRole::Secondary {
                 // In the toolbar, a button sits on the same quiet well as the field.
-                unsafe { self.round_rect(rt, right, y, right + bw, y + h, self.capsule(h, inset), self.pal().fill_quaternary)? };
+                unsafe { self.round_rect(rt, right, y, right + bw, y + h, self.capsule(h, inset), self.solid(self.pal().fill_quaternary))? };
                 self.button(rt, &Button { role: ButtonRole::Plain, ..button.clone() }, right, y, bw, h, accent, hits)?;
             } else {
                 self.button(rt, button, right, y, bw, h, accent, hits)?;
@@ -42,7 +42,7 @@ impl Renderer {
         if !filters.is_empty() {
             right = right.min(field + component::search::TOOLBAR_WIDTH);
         }
-        unsafe { self.round_rect(rt, field, y, right, y + h, self.capsule(h, inset), self.pal().fill_quaternary)? };
+        unsafe { self.round_rect(rt, field, y, right, y + h, self.capsule(h, inset), self.solid(self.pal().fill_quaternary))? };
         let glyph = icon::SEARCH;
         self.text(rt, &glyph_char.unwrap_or('\u{E721}').to_string(), &self.fonts.icon_search, field + pad, y + (h - glyph) / 2.0, glyph, Align::Center, self.pal().label_secondary)?;
         let left = rows::search_text_after(field);
@@ -78,7 +78,7 @@ impl Renderer {
         }
         let h = component::search::HEIGHT;
         let inset = self.look.inset();
-        unsafe { self.round_rect(rt, group.left, y, group.left + group.width(), y + h, self.capsule(h, inset), self.pal().fill_quaternary)? };
+        unsafe { self.round_rect(rt, group.left, y, group.left + group.width(), y + h, self.capsule(h, inset), self.solid(self.pal().fill_quaternary))? };
         let chip = Filters::chip();
         let top = y + component::search::FILTER_INSET;
         let (chosen_fill, chosen_ink) = self.button_colors(ButtonRole::Primary, accent);
