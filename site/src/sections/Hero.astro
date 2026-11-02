@@ -4,6 +4,7 @@
 import { Image } from 'astro:assets';
 import wallpaper from '../assets/hero.jpg';
 import { icons } from '../scripts/icons';
+import Announce from '../components/Announce.astro';
 
 const repo = 'https://github.com/ocopus-labs/ReUI';
 const download = `${repo}/releases/latest`;
@@ -14,6 +15,8 @@ const download = `${repo}/releases/latest`;
     <span>ReUI</span>
   </a>
   <nav aria-label="Main">
+    <a href="/guide">Guide</a>
+    <a href="/changelog">What’s new</a>
     <a class="github" href={repo} aria-label="ReUI on GitHub"><i class="ico" set:html={icons.github}></i></a>
     <a class="pill-link" href={download}>Download</a>
   </nav>
@@ -22,10 +25,13 @@ const download = `${repo}/releases/latest`;
 <section class="hero" aria-labelledby="hero-title">
   <Image class="wallpaper" src={wallpaper} alt="" widths={[1280, 1920, 2560, 3840]} sizes="100vw" loading="eager" fetchpriority="high" />
   <span class="scrim" aria-hidden="true"></span>
-  <h1 id="hero-title">
-    <span class="line"><span>The Dynamic Island</span></span>
-    <span class="line"><span>for <em class="serif">Windows</em></span></span>
-  </h1>
+  <div class="head">
+    <Announce />
+    <h1 id="hero-title">
+      <span class="line"><span>The Dynamic Island</span></span>
+      <span class="line"><span>for <em class="serif">Windows</em></span></span>
+    </h1>
+  </div>
   <div class="foot">
     <p class="lede">A small island at the top of your screen for the music that's playing, what you copied, your timers and devices, and the coding agents waiting on you. Deal with them there, without switching windows.</p>
     <div class="cta">
@@ -85,8 +91,11 @@ const download = `${repo}/releases/latest`;
   /* Only so the white text holds on the stones. */
   .scrim { position: absolute; inset: 62% 0 0; z-index: -1; background: linear-gradient(transparent, rgb(20 18 10 / 0.5)); }
 
+  /* The announcement over the headline, together at the top (the hero spreads its
+     children apart). */
+  .head { display: flex; flex-direction: column; align-items: center; }
   h1 {
-    margin-top: clamp(140px, 22vh, 240px);
+    margin-top: clamp(28px, 5vh, 52px);
     text-align: center;
     font-size: clamp(52px, 8.2vw, 144px);
     font-weight: 600;

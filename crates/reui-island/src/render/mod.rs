@@ -343,6 +343,11 @@ impl Renderer {
         &self.look.palette
     }
 
+    /// A fill as one solid colour over the island's material (`Color::over`).
+    fn solid(&self, fill: Color) -> Color {
+        fill.over(self.pal().background)
+    }
+
     pub fn look(&self) -> &Look {
         &self.look
     }

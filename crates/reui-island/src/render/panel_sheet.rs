@@ -32,7 +32,7 @@ fn view() -> ExpandedView {
     let tab = |action: &str, glyph: char, selected: bool| Tab { label: action.into(), count: 0, selected, action: action.into(), glyph: Some(glyph), menu: vec![] };
     let filters = vec![tab("all", '\u{E81C}', true), tab("text", 'T', false), tab("links", '\u{E71B}', false), tab("images", '\u{EB9F}', false), tab("files", '\u{E8A5}', false), tab("colors", '\u{E790}', false)];
     let buttons = vec![
-        Button { action: String::new(), content: ButtonContent::Count(4), role: ButtonRole::Secondary },
+        Button { action: String::new(), content: ButtonContent::Count(5), role: ButtonRole::Secondary },
         Button { action: "clear".into(), content: ButtonContent::Labelled('\u{E74D}', "Clear".into()), role: ButtonRole::Secondary },
         Button { action: "settings".into(), content: ButtonContent::Glyph('\u{E713}'), role: ButtonRole::Plain },
     ];
@@ -50,7 +50,7 @@ fn view() -> ExpandedView {
         drag: None,
     };
     let items = vec![
-        item(Preview::Files { name: "Itinerary.pdf".into(), count: 3, thumbs: vec![FILE_A, FILE_B, FILE_C] }, "3 files", Tone::Secondary, Some("Itinerary.pdf"), None, "just now"),
+        item(Preview::Files { name: "now-playing.png".into(), count: 3, thumbs: vec![FILE_A, FILE_B, FILE_C] }, "3 files", Tone::Secondary, Some("now-playing.png"), None, "just now"),
         item(
             Preview::Link { host: "en.wikipedia.org".into(), path: "/wiki/Sea_of_clouds".into(), title: Some("Sea of clouds".into()), site: Some("Wikipedia".into()), image: None },
             "links",
@@ -59,7 +59,7 @@ fn view() -> ExpandedView {
             Some("en.wikipedia.org"),
             "1m ago",
         ),
-        item(Preview::Image(IMAGE), "image", Tone::Accent, Some("Summit.png"), None, "2m ago"),
+        item(Preview::Image(IMAGE), "image", Tone::Accent, Some("moss.jpg"), None, "2m ago"),
         item(Preview::Text("A sea of clouds forms when a cloud fills the valleys below a summit, and those above it look down on a white ocean.".into()), "text", Tone::Secondary, None, None, "4m ago"),
         item(Preview::Color(reui_protocol::Rgb(94, 92, 230)), "color", Tone::Secondary, Some("#5E5CE6"), None, "1h ago"),
     ];
@@ -87,7 +87,9 @@ fn clipboard_panel_sheet() {
     let device = Device::new(&compositor).expect("a device");
     let dir = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../target/clipboard-panel");
     std::fs::create_dir_all(&dir).unwrap();
-    let image = std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/images/hero.png")).unwrap();
+    // A photo for the image card (the website's wallpaper), and three of the repo's own
+    // pictures as the files: the clips are real things, named for what they are.
+    let image = std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../site/src/assets/hero.jpg")).unwrap();
     for (theme, name) in [(Theme::Dark, "dark"), (Theme::Light, "light")] {
         for scale in [1.0f32, 1.5] {
             let look = Look::new(&Appearance { theme, ..Appearance::default() }, false, None);
@@ -97,17 +99,28 @@ fn clipboard_panel_sheet() {
                 renderer.add_image(id, &std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/images").join(file)).unwrap()).unwrap();
             }
             let path = dir.join(format!("{name}-{}.png", (scale * 100.0) as u32));
-            draw(&device, &renderer, &path).unwrap();
+            draw(&device, &renderer, &path, Some(reui_protocol::Rgb(16, 48, 208)), 40.0).unwrap();
             println!("{}", path.display());
         }
     }
+    // The panel alone on a transparent canvas at 200 %, for the README and the website
+    // (`site/scripts/clipboard-image.mjs` sets it on the wallpaper).
+    let look = Look::new(&Appearance::default(), false, None);
+    let mut renderer = Renderer::new(&device, 2.0, look).unwrap();
+    renderer.add_image(IMAGE, &image).unwrap();
+    for (id, file) in [(FILE_A, "now-playing.png"), (FILE_B, "timers.png"), (FILE_C, "devices.png")] {
+        renderer.add_image(id, &std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/images").join(file)).unwrap()).unwrap();
+    }
+    let path = dir.join("panel-200.png");
+    draw(&device, &renderer, &path, None, 0.0).unwrap();
+    println!("{}", path.display());
 }
 
-/// The panel on a blue backdrop (the reference's), its material behind the content.
-fn draw(device: &Device, renderer: &Renderer, path: &Path) -> Result<()> {
+/// The panel on `backdrop` (the reference's blue), or alone on a transparent canvas, its
+/// material behind the content, `margin` DIPs around it.
+fn draw(device: &Device, renderer: &Renderer, path: &Path, backdrop: Option<reui_protocol::Rgb>, margin: f32) -> Result<()> {
     let s = renderer.scale;
     let (sw, _) = expanded_surface(renderer.look());
-    let margin = 40.0;
     let view = view();
     unsafe {
         let probe = canvas(device, 1, 1)?;
@@ -115,7 +128,7 @@ fn draw(device: &Device, renderer: &Renderer, path: &Path) -> Result<()> {
         let (w, h) = (((sw + 2.0 * margin) * s).ceil() as u32, ((layout.height + 2.0 * margin) * s).ceil() as u32);
         let (bitmap, rt) = canvas(device, w, h)?;
         rt.BeginDraw();
-        rt.Clear(Some(&d2d(rgb(reui_protocol::Rgb(16, 48, 208)))));
+        rt.Clear(Some(&backdrop.map_or(D2D1_COLOR_F { r: 0.0, g: 0.0, b: 0.0, a: 0.0 }, |c| d2d(rgb(c)))));
         let dx = (sw - layout.width) / 2.0;
         let shape = D2D1_ROUNDED_RECT {
             rect: D2D_RECT_F { left: (margin + dx) * s, top: margin * s, right: (margin + dx + layout.width) * s, bottom: (margin + layout.height) * s },
