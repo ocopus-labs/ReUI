@@ -1,0 +1,73 @@
+---
+// One feature of docs/guide.md per page, with every feature beside it and the next one at
+// the end, so the guide reads in order or by jumping.
+import Base from '../../layouts/Base.astro';
+import DocBar from '../../components/DocBar.astro';
+import Footer from '../../sections/Footer.astro';
+import { guide, type Section } from '../../lib/docs';
+import '../../styles/prose.css';
+
+export function getStaticPaths() {
+  const { sections } = guide();
+  return sections.map((section, i) => ({ params: { slug: section.slug }, props: { section, prev: sections[i - 1], next: sections[i + 1] } }));
+}
+
+interface Props {
+  section: Section;
+  prev?: Section;
+  next?: Section;
+}
+const { section, prev, next } = Astro.props;
+const { sections } = guide();
+const repo = 'https://github.com/ocopus-labs/ReUI';
+---
+<Base title={`${section.title} · ReUI guide`} description={section.lead || `${section.title} in ReUI: what it does and its shortcuts.`}>
+  <DocBar current="guide" />
+  <div class="layout">
+    <nav class="side" aria-label="Guide">
+      <a class="all" href="/guide">Guide</a>
+      <ul>
+        {sections.map((s) => (
+          <li><a href={`/guide/${s.slug}`} aria-current={s.slug === section.slug ? 'page' : undefined}>{s.title}</a></li>
+        ))}
+      </ul>
+    </nav>
+    <main class="page">
+      <h1>{section.title}</h1>
+      <div class="prose" set:html={section.html} />
+      <footer class="steps">
+        {prev ? <a class="prev" href={`/guide/${prev.slug}`}><span>Previous</span>{prev.title}</a> : <span />}
+        {next && <a class="next" href={`/guide/${next.slug}`}><span>Next</span>{next.title}</a>}
+      </footer>
+      <p class="edit"><a href={`${repo}/blob/main/docs/guide.md`}>This page on GitHub</a></p>
+    </main>
+  </div>
+  <Footer />
+</Base>
+
+<style>
+  .layout { display: grid; grid-template-columns: 240px minmax(0, 760px); gap: clamp(32px, 6vw, 96px); justify-content: center; padding: clamp(40px, 7vh, 80px) var(--gutter) clamp(96px, 14vh, 160px); }
+  .side { position: sticky; top: 24px; align-self: start; font-size: 14.5px; }
+  .all { color: var(--ink-3); font: 500 13px/1 var(--mono); letter-spacing: 0.04em; }
+  .side ul { margin: 16px 0 0; padding: 0; list-style: none; }
+  .side li a { display: block; padding: 6px 10px; margin-left: -10px; border-radius: 8px; color: var(--ink-2); transition: background 0.2s, color 0.2s; }
+  .side li a:hover { color: var(--ink); }
+  .side li a[aria-current='page'] { background: rgb(14 14 16 / 0.06); color: var(--ink); font-weight: 500; }
+
+  h1 { margin-bottom: 24px; font-size: clamp(40px, 5.5vw, 72px); font-weight: 600; line-height: 1; letter-spacing: -0.05em; }
+  .steps { display: flex; justify-content: space-between; gap: 16px; margin-top: 64px; padding-top: 24px; border-top: 1px solid var(--line); }
+  .steps a { display: flex; flex-direction: column; gap: 4px; color: var(--ink); font-size: 17px; font-weight: 500; }
+  .steps a:hover { text-decoration: underline; text-underline-offset: 3px; }
+  .steps span { color: var(--ink-3); font: 500 12px/1 var(--mono); letter-spacing: 0.04em; text-transform: uppercase; }
+  .next { margin-left: auto; text-align: right; }
+  .edit { margin-top: 28px; font-size: 14px; }
+  .edit a { color: var(--ink-3); text-decoration: underline; text-underline-offset: 3px; }
+
+  @media (max-width: 900px) {
+    .layout { grid-template-columns: minmax(0, 1fr); }
+    /* The page first; the other topics after it. */
+    .side { position: static; order: 2; padding-top: 32px; border-top: 1px solid var(--line); }
+    .side ul { display: flex; flex-wrap: wrap; gap: 4px 8px; }
+    .side li a { margin-left: 0; padding: 5px 10px; background: rgb(14 14 16 / 0.04); }
+  }
+</style>

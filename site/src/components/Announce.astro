@@ -1,0 +1,48 @@
+---
+// The newest CHANGELOG entry as a pill at the top of the first screen, linking to it on
+// the changelog page. An entry not released yet says "Coming", so the site never claims
+// what the download doesn't have.
+import { releases } from '../lib/docs';
+
+const [latest] = releases();
+const coming = latest?.when.toLowerCase() === 'unreleased';
+// The entry's first line, short enough for one line: its list up to the last item, and more.
+const short = latest?.summary.replace(/\.$/, '').replace(/,? and [^,]*$/, ', and more') ?? '';
+---
+{latest && (
+  <a class="announce" href={`/changelog#v${latest.version}`}>
+    <span class="tag">{coming ? 'Coming' : 'New'} in {latest.version}</span>
+    {short && <span class="text">{short}</span>}
+    <span class="more">What’s new<svg viewBox="0 0 16 16" aria-hidden="true"><path d="M6 3.5 10.5 8 6 12.5" /></svg></span>
+  </a>
+)}
+
+<style>
+  .announce {
+    align-self: center;
+    display: inline-flex;
+    align-items: center;
+    gap: 12px;
+    max-width: min(100%, 760px);
+    margin-top: clamp(110px, 17vh, 190px);
+    padding: 6px 8px 6px 6px;
+    border-radius: 999px;
+    background: rgb(255 255 255 / 0.62);
+    box-shadow: inset 0 0 0 1px rgb(14 14 16 / 0.08);
+    -webkit-backdrop-filter: blur(12px);
+    backdrop-filter: blur(12px);
+    color: var(--ink);
+    font-size: 14px;
+    animation: fade 1s ease 0.2s both;
+    transition: background 0.2s;
+  }
+  .announce:hover { background: rgb(255 255 255 / 0.8); }
+  .tag { flex: none; padding: 4px 10px; border-radius: 999px; background: var(--ink); color: #fff; font: 500 12px/1.4 var(--mono); letter-spacing: 0.02em; }
+  .text { overflow: hidden; color: var(--ink-2); white-space: nowrap; text-overflow: ellipsis; }
+  .more { display: inline-flex; flex: none; align-items: center; gap: 2px; font-weight: 500; }
+  .more svg { width: 16px; height: 16px; fill: none; stroke: currentColor; stroke-width: 1.6; stroke-linecap: round; stroke-linejoin: round; }
+  @keyframes fade { from { opacity: 0; transform: translateY(6px); } }
+  @media (max-width: 720px) {
+    .text { display: none; }
+  }
+</style>
