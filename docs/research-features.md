@@ -401,6 +401,25 @@ Rohit's list of what Windows exposes to Rust through `windows-rs`, checked again
 - **Key-press visualizer:** a keyboard hook that shows every key reads as a keylogger, for a niche use.
 - **Virtual desktop indicator, Explorer copy progress:** undocumented (only `IVirtualDesktopManager` is official) or not exposed.
 
+### 5f. Upcoming, asked for after 0.2.0 (Nov 3, 2026)
+
+From replies to the 0.2.0 posts. Planned for 0.3.0 unless a PRD finds a reason not to.
+
+1. **Universal search in the island**
+   - **Ask:** "implement this quick search tool like Heimdall … or Takeoff, which I think is much more lightweight": press a shortcut, type a few letters, Enter opens the app, file or setting.
+   - **References (both MIT):** [Heimdall](https://github.com/Kryzern/Heimdall) (Rust, ~9.5k lines): apps through `shell:AppsFolder` (Store apps too), a fast name scorer, a calculator, usage history; its file search reads the NTFS master file table from a SYSTEM service, which a per-user, no-admin ReUI can't install. [Takeoff](https://github.com/akiraeng/takeoff-launcher) (C++, ~16k lines): Start menu and a few user folders walked, acronym matching (`vsc` → Visual Studio Code), system tools and power commands, ~10 MB.
+   - **Approach:** a search panel in the island, not a window of its own ([island-vs-windows](PRD-clipboard-window.md)). Heimdall's app list, scorer, calculator and history reused with credit; files through the Windows Search index Windows already keeps (no admin, nothing to index ourselves). Plan in [PRD-universal-search.md](PRD-universal-search.md).
+   - **Effort:** L.
+2. **Choose where ReUI keeps its data**
+   - **Ask:** "add the option to choose the folder where app data is stored."
+   - **Today:** `%APPDATA%\ReUI` (settings, clipboard history) and `%LOCALAPPDATA%\ReUI` (caches, logs, the shelf's saved items); `REUI_CONFIG_DIR` moves everything, but only for test sandboxes.
+   - **Approach:** Settings → Privacy & data → Location: move the data to a folder you pick (copied while ReUI pauses, then the old copy removed), remembered in a one-line pointer file where ReUI always looks first.
+   - **Effort:** S–M.
+3. **Lyrics, word by word, and a full-screen player**
+   - **Ask:** synced lyrics are liked; word-by-word timing and a bigger view were promised in the reply.
+   - **Approach:** word timings where lrclib has them (enhanced LRC), falling back to lines; a full-screen Now Playing view on demand (artwork, lyrics, controls), never by itself.
+   - **Effort:** M.
+
 ---
 
 ## Sources
